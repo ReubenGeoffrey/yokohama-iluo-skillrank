@@ -1,130 +1,176 @@
-# 🏢 Yokohama ILUO Skill Assessment & QA Exam Portal
+<div align="center">
 
-> **Enterprise Employee Certification & Anti-Cheating Assessment System**  
-> Built for Yokohama Off-Highway Tires (OHT) Quality Assurance Department.
+  <h1>⚡ YOKOHAMA ILUO PORTAL | NO CAP CERTIFICATION SYSTEM 💅</h1>
 
----
+  <p>
+    <strong>The Most Aesthetic, Anti-Cheating, Auto-Excel Generating QA Exam Platform. Fr Fr. 🗣️🔥</strong><br>
+    <em>Engineered for Yokohama Off-Highway Tires (OHT) Quality Assurance Legends.</em>
+  </p>
 
-## 🌟 Key Features
+  <p>
+    <a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node.js-v18%2B-5FA052?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" /></a>
+    <a href="https://expressjs.com"><img src="https://img.shields.io/badge/Express.js-5.x-000000?style=for-the-badge&logo=express&logoColor=white" alt="Express.js" /></a>
+    <a href="https://upstash.com"><img src="https://img.shields.io/badge/Upstash-Redis%20Cloud-00E599?style=for-the-badge&logo=redis&logoColor=white" alt="Upstash Redis" /></a>
+    <a href="https://vercel.com"><img src="https://img.shields.io/badge/Vercel-Serverless-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Vercel" /></a>
+    <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript"><img src="https://img.shields.io/badge/Vibe-100%25%20No%20Cap-FFD700?style=for-the-badge" alt="No Cap Vibe" /></a>
+  </p>
 
-### 1. 🎯 Multi-Level Skill Assessment
-- **L Level Certification** (20 Questions - Basic Skill Verification)
-- **U Level Certification** (30 Questions - Independent Operational Mastery)
-- **O Level Certification** (40 Questions - Advanced Trainer & Expert Standard)
-- **Balanced Category Engine**: Automatically balances questions proportionally across **Safety & Environment**, **CI & TPM**, and **QA & Process Technical** topics.
-- **Strict Section Isolation**: Candidates receive questions mapped strictly to their assigned Quality Control section (e.g. *Final Finish QA*, *Tire Building QA*, *Tire Curing QA*, *Preparatory QA*, *Solid Tire QA*, *Warehouse QA*, *FID Inspector QA*, *Final Finish RRO & ALT QA*).
-
-### 2. 🛡️ Tab-Switch Anti-Cheating & Proctoring System
-- **Real-Time Window Focus Monitoring**: Detects whenever a candidate leaves the exam window or switches tabs.
-- **Progressive Security Warnings**: Displays warning modals on Warning 1 & 2.
-- **Automated Termination**: Automatically terminates and submits the exam upon the **3rd tab switch** with status set to `Terminated (Tab Switch Violations)`.
-
-### 3. 📁 Automated Word (.docx) Question Importer & Bank Manager
-- **Bulk .docx Importer**: Drag-and-drop Word documents (`.docx`) directly in the browser to extract MCQs, options (A, B, C, D), section headers, and category tags.
-- **Interactive Question Manager**: Add, edit, delete, or filter questions by Level (`L`, `U`, `O`) and QC Section.
-- **Master Question Bank**: Pre-loaded with 712+ verified MCQs parsed from 24 official Yokohama QA Word documents.
-
-### 4. 📊 Real-Time Admin Dashboard & Analytics
-- **Live Metric Cards**: Total registered employees, completed assessments, in-progress tests, pass rate %, average score %, and tab-switch security alerts.
-- **Visual Analytics**: Dynamic Chart.js breakdown of score distributions and section compliance.
-- **Employee Directory & Results Table**: Search candidate records by Employee ID, Name, or Department with instant reset options.
-
-### 5. 📥 Single-Click Excel Report Export
-- **Audit-Ready Excel Download**: Generates ISO 45001 & TPM compliant Excel reports containing employee IDs, names, DOJ, section, skill level, U mark, L mark, O mark, total score, percentage, tab switch warnings, and attempt timestamps.
-
-### 6. ✉️ OTP-Based Admin Security
-- **Email OTP Authentication**: Secure 6-digit one-time password delivered via Gmail SMTP STARTTLS.
-- **30-Second Expiry Window**: Single-use token expiry to protect administrative functions.
-
-### 7. ☁️ Dual-Sync Cloud Database Persistence
-- **Local Storage Speed**: Instant zero-lag browser storage for candidates taking exams.
-- **Upstash Redis Cloud DB Integration**: Asynchronous dual-sync ensures candidate scores, custom question edits, and admin resets persist permanently across all factory computers and Vercel serverless deployments.
+  <br />
+</div>
 
 ---
 
-## 🛠️ Technology Stack
+## 🍵 What's the Tea? (Executive Summary)
 
-| Layer | Technologies Used |
-| :--- | :--- |
-| **Frontend** | HTML5, Vanilla JavaScript (ES6+), Vanilla CSS3 (Custom Design System, Glassmorphism) |
-| **Libraries** | [Chart.js](https://www.chartjs.org/) (Data Visualization), [SheetJS XLSX](https://sheetjs.com/) (Excel Export), [Mammoth.js](https://github.com/margvb/mammoth.js) (DOCX Parsing) |
-| **Backend** | Node.js, Express.js, Nodemailer (Gmail SMTP STARTTLS) |
-| **Database** | Upstash Cloud Redis (Serverless Key-Value Store) |
-| **Deployment** | Vercel Serverless Platform |
+The **Yokohama ILUO Skill Assessment Portal** is an absolute game-changer. We took legacy paper tests, threw them out the window, and built a lightning-fast, proctored, anti-cheating digital assessment hub that automatically turns candidate answers into formatted **Excel reports (`.xlsx`)**.
+
+> [!IMPORTANT]
+> - 🧠 **712+ Verified MCQs**: Pre-loaded directly from 24 official Yokohama QA `.docx` files. Zero fake questions.
+> - 🗿 **Zero Malpractice**: Built-in tab-switch detector that terminates exams on the 3rd strike.
+> - 📊 **Instant Excel Export**: Audit-ready spreadsheet downloads with one click. Period.
 
 ---
 
-## 📁 Project Structure
+## 🚀 Features That Go Hard
 
+### 🎯 1. ILUO Skill Levels (Main Character Progression)
+- 🟢 **I Level (Trainee Era)**: Basic onboarding & safety vibe checks.
+- 🟡 **L Level (Basic Skill)**: 20 Questions – Process & quality verification.
+- 🟠 **U Level (Skilled Operator)**: 30 Questions – Independent operational mastery.
+- 🔴 **O Level (God Tier Expert)**: 40 Questions – Master auditor & defect specialist standard.
+- ⚖️ **Balanced Category Engine**: Automatically balances questions proportionally across **Safety & Environment**, **CI & TPM**, and **QA Technical**.
+- 🔒 **Section Isolation**: Questions mapped strictly to candidate sections:  
+  `Final Finish QA` | `Tire Building QA` | `Tire Curing QA` | `Preparatory QA` | `Solid Tire QA` | `Warehouse QA` | `FID Inspector QA` | `Final Finish RRO & ALT QA`
+
+### 🛡️ 2. Tab-Switch Anti-Cheating System (3 Strikes & You're Out 🚨)
+- 👁️ **Real-Time Focus Monitor**: Tracks window blurs, tab switching, or external screen jumps.
+- ⚠️ **Progressive Security Alerts**: Warning modals pop up on Warning 1 & 2.
+- 🛑 **Automated Auto-Termination**: 3rd tab switch instantly locks answers and sets candidate status to `Terminated (Tab Switch Violations)`. No cap.
+
+### 📁 3. Bulk Word (.docx) Importer (Work Smarter, Not Harder 🧠)
+- 📦 **Drag-and-Drop Parsing**: Upload official Word `.docx` assessment files directly in browser.
+- ⚡ **Auto-Extraction**: Automatically extracts question titles, options (A, B, C, D), section headers, and category tags.
+
+### 📊 4. Real-Time Admin Dashboard (Data Visualization Flex 📈)
+- 📉 **Live Metric Cards**: Track active candidates, overall pass rate %, average score, and security flags.
+- 🎨 **Chart.js Analytics**: Visual histograms for score distribution and department compliance.
+- 🔍 **Instant Search**: Search employee attempt records by Employee ID, Name, or Department.
+
+### 📥 5. Single-Click Excel Report Export 🪄
+- 📄 **Audit-Ready Spreadsheets**: Download formatted `.xlsx` files complete with Employee Name, ID, DOJ, Skill Level, Section, Marks, Percentage, Tab Switch Violations, and Timestamps.
+
+### ✉️ 6. Gmail SMTP OTP (Lock & Key Security 🔐)
+- 🔑 **6-Digit One-Time Password**: Secure email OTP delivered via Gmail STARTTLS for admin actions.
+
+### ⚡ 7. Dual-Sync Cloud Database (Zero Lag Vibe ☁️)
+- ⚡ **Offline-First Speed**: Zero-lag local storage for smooth exam taking.
+- ☁️ **Upstash Cloud Redis**: Permanent cloud sync keeping candidate attempts and custom questions synced everywhere.
+
+---
+
+## 🏗️ Architecture (How It Actually Works Fr)
+
+```mermaid
+flowchart TD
+    subgraph Client ["Client Side (Candidate & Admin)"]
+        A[Candidate Exam Portal 📝]
+        B[Admin Dashboard 📊]
+        C[Anti-Cheating Proctor 👁️]
+    end
+
+    subgraph Server ["Express.js Backend (Port 8080) 🚀"]
+        D[Auth & OTP Handler 🔐]
+        E[Exam Scoring Engine 💯]
+        F[DOCX Parser Service 📄]
+    end
+
+    subgraph Storage ["Database & Cloud ☁️"]
+        G[(Local Browser Storage 💾)]
+        H[(Upstash Redis Cloud ⚡)]
+    end
+
+    subgraph Email ["Email Dispatch ✉️"]
+        I[Gmail SMTP Service 🚀]
+    end
+
+    A -->|Live State| G
+    A -->|Submit Exam / Tab Violations| E
+    B -->|Fetch Reports & Analytics| E
+    E <-->|Dual Cloud Sync| H
+    D -->|Send 6-Digit OTP| I
+    F -->|Load Questions| H
 ```
+
+---
+
+## 🛠️ The Flex Tech Stack (No Mid Frameworks Here)
+
+| Layer | Component | Vibe Check |
+| :--- | :--- | :--- |
+| **Frontend** | HTML5 + Modern Vanilla JS | Ultra fast, zero bloated bundle size |
+| **Styling** | Custom CSS3 (Glassmorphism) | Dark corporate theme with main character aesthetic |
+| **Charts** | [Chart.js](https://www.chartjs.org/) | Clean visual analytics & score distribution graphs |
+| **Excel Export** | [SheetJS (XLSX)](https://sheetjs.com/) | Instant `.xlsx` spreadsheet generator |
+| **Docx Parser** | [Mammoth.js](https://github.com/margvb/mammoth.js) | Native Word document parsing in-browser |
+| **Backend** | Express.js 5.x (Node.js) | High-performance RESTful API |
+| **Email OTP** | Nodemailer (Gmail SMTP) | 6-digit admin authentication codes |
+| **Database** | Upstash Redis Cloud | Serverless key-value cloud database |
+
+---
+
+## 📂 File Directory (The Blueprint 🗺️)
+
+```ascii
 ILUO MCQ TO Excel sheet/
-├── index.html                   # Single-Page Application (SPA) Layout & Router Views
-├── app.js                       # Core Portal Engine, Router, Exam Logic & Cloud Sync
-├── data.js                      # Compiled Master Employee Directory & Question Bank
-├── server.js                    # Express Node.js Server, Gmail SMTP OTP & Cloud API
-├── styles.css                   # Premium Responsive CSS Design System
-├── vercel.json                  # Production Vercel Deployment Configuration
-├── package.json                 # Node.js Dependencies & Run Scripts
-├── parse_true_qc_master.py      # Python Parser for 24 Official Word (.docx) Question Files
-├── build_data.py                # Data Compiler Script (generates data.js)
+├── index.html                   # Single-Page Application (SPA) Master Layout
+├── app.js                       # Core Portal Router, Exam Logic & Proctoring
+├── data.js                      # 236 Employee Master Directory & Question Dataset
+├── server.js                    # Express Server, Gmail SMTP OTP & Cloud Sync
+├── styles.css                   # Premium Glassmorphism Styling
+├── ILUO SKILL.xlsx              # Official Master Employee ILUO Matrix Spreadsheet
+├── package.json                 # Node.js Dependencies & Scripts
+├── vercel.json                  # Production Vercel Serverless Configuration
+├── .env                         # Environment Variables Configuration
+├── parse_true_qc_master.py      # Python Parser for Official 24 Docx Papers
 ├── parsed_true_qc_master.json   # Parsed Master Question Dataset
-└── QC question/                 # Folder containing all 24 Official Word Documents (.docx)
+└── QC question/                 # Archive of 24 Official Word (.docx) Papers
 ```
 
 ---
 
-## 🚀 Quick Start (Local Development)
+## ⚡ Quick Start (Get It Running in 30 Seconds)
 
-### 1. Prerequisites
-- Node.js (v16 or higher)
-- Python 3.8+ (for re-parsing Word documents)
-
-### 2. Installation
-Clone the repository and install dependencies:
+### 1. Clone & Install
 ```bash
 git clone https://github.com/ReubenGeoffrey/yokohama-iluo-portal.git
 cd yokohama-iluo-portal
 npm install
 ```
 
-### 3. Environment Variables Setup
-Create a `.env` file in the root directory:
+### 2. Configure Environment (`.env`)
 ```env
 PORT=8080
 SESSION_SECRET=yokohama_iluo_qa_secret_2026
-ADMIN_EMAIL=
+ADMIN_EMAIL=admin@company.com
 
-# SMTP Configuration (Gmail)
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
-SMTP_USER=
-SMTP_PASS=
+SMTP_USER=your_email@gmail.com
+SMTP_PASS=your_app_password
 
-# Upstash Redis Cloud Database Credentials
-UPSTASH_REDIS_REST_URL=
-UPSTASH_REDIS_REST_TOKEN=
+UPSTASH_REDIS_REST_URL=https://your-redis-instance.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your_upstash_rest_token
 ```
 
-### 4. Run Server Locally
-Start the Node.js development server:
+### 3. Launch Server
 ```bash
 npm start
 ```
-Open **[http://localhost:8080](http://localhost:8080)** in your browser.
+Go to **`http://localhost:8080`** and enjoy the vibe! 🚀
 
 ---
 
-## 🌐 Deploying to Vercel
+## 📄 License & Ownership
 
-1. Push your repository to **GitHub**.
-2. Connect your repository on **[Vercel](https://vercel.com/new)**.
-3. Select **Other** as the Framework Preset.
-4. Add the **Environment Variables** in Vercel Project Settings (`SMTP_USER`, `SMTP_PASS`, `ADMIN_EMAIL`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`).
-5. Click **Deploy**.
-
----
-
-## 📄 License & Commercial Rights
-
-Copyright © 2026 Yokohama Off-Highway Tires (OHT) / Reuben Geoffrey.  
-All Rights Reserved. Enterprise License & Source Code.
+Copyright © 2026 **Yokohama Off-Highway Tires (OHT)** / **Reuben Geoffrey**.  
+*All Rights Reserved. Enterprise Grade Proprietary Code.*
