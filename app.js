@@ -145,7 +145,8 @@ function handleRoute() {
     document.getElementById('navbarSystemTitle').innerText = 'Admin Control Center';
     updateUserBadge(session.name || 'Administrator');
     
-    const sub = hash.replace('/control-center/', '').replace('/secure-control/', '') || 'dashboard';
+    let sub = hash.replace(/^\/(control-center|secure-control)\/?/, '').trim();
+    if (!sub) sub = 'dashboard';
     showControlCenterSubView(sub);
     return;
   }
@@ -1085,6 +1086,9 @@ function downloadCurrentEmployeePDF() {
 function showControlCenterSubView(subName) {
   showView('viewControlCenterWrapper');
 
+  // Normalize alias
+  if (subName === 'export') subName = 'reports';
+
   // Highlight active sidebar link
   document.querySelectorAll('.sidebar-link').forEach(link => link.classList.remove('active'));
   document.querySelectorAll('.control-subview').forEach(sub => sub.style.display = 'none');
@@ -1101,6 +1105,7 @@ function showControlCenterSubView(subName) {
   else if (subName === 'sections') renderSectionsExplorer();
   else if (subName === 'employees') renderEmployeeDirectory();
   else if (subName === 'results') renderAdminTable('');
+  else if (subName === 'reports') renderReportsCenter();
 }
 
 function capitalize(str) {
@@ -1627,20 +1632,16 @@ function renderAdminTable(query) {
 // Download PDF Evaluation Report for Employee Assessment
 function downloadEmployeePDF(empNo) {
   const records = getStoredRecords();
-  const rec = records[empNo];
+  const rec = records[empNo] || {};
   const emp = EMPLOYEES.find(e => e.empNo === empNo);
 
-  if (!rec || (!rec.isCompleted && !rec.inProgress)) {
-    alert('No assessment records found for this employee.');
-    return;
-  }
-
   const empName = emp ? emp.name : (rec.name || empNo);
-  const empDept = emp ? emp.dept : (rec.dept || '-');
+  const empDept = emp ? emp.dept : (rec.dept || 'QUALITY CONTROL');
   const empSection = emp ? (emp.section || rec.section || '-') : (rec.section || '-');
   const empDoj = emp ? (emp.doj || rec.doj || '-') : (rec.doj || '-');
-  const level = rec.targetLevel || emp.currentLevel || 'O';
-  const status = rec.status || (rec.isCompleted ? 'Completed' : 'In Progress');
+  const level = rec.targetLevel || (emp ? emp.currentLevel : 'O') || 'O';
+  const isAttempted = !!(rec.isCompleted || rec.inProgress);
+  const status = isAttempted ? (rec.status || (rec.isCompleted ? 'Completed' : 'In Progress')) : 'Not Attempted';
   const isPass = status === 'Passed';
 
   // Build question list for PDF
@@ -1676,15 +1677,18 @@ function downloadEmployeePDF(empNo) {
   reportDiv.style.maxWidth = '800px';
   reportDiv.style.margin = '0 auto';
 
+  const badgeBg = isPass ? '#DCFCE7' : (!isAttempted ? '#F1F5F9' : '#FEE2E2');
+  const badgeColor = isPass ? '#166534' : (!isAttempted ? '#475569' : '#991B1B');
+
   reportDiv.innerHTML = `
     <!-- Header -->
     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #005B9E; padding-bottom: 12px; margin-bottom: 20px;">
       <div>
         <div style="font-size: 22px; font-weight: 800; color: #005B9E; letter-spacing: 0.5px;">YOKOHAMA OFF-HIGHWAY TIRES</div>
-        <div style="font-size: 13px; font-weight: 600; color: #64748B;">QUALITY ASSURANCE DEPARTMENT — ILUO ASSESSMENT REPORT</div>
+        <div style="font-size: 13px; font-weight: 600; color: #64748B;">QUALITY ASSURANCE DEPARTMENT &mdash; ILUO ASSESSMENT REPORT</div>
       </div>
       <div style="text-align: right;">
-        <span style="background: ${isPass ? '#DCFCE7' : '#FEE2E2'}; color: ${isPass ? '#166534' : '#991B1B'}; padding: 6px 16px; border-radius: 20px; font-weight: 800; font-size: 14px; text-transform: uppercase;">
+        <span style="background: ${badgeBg}; color: ${badgeColor}; padding: 6px 16px; border-radius: 20px; font-weight: 800; font-size: 14px; text-transform: uppercase;">
           ${status}
         </span>
       </div>
@@ -1700,7 +1704,7 @@ function downloadEmployeePDF(empNo) {
         <div><strong>Date of Joining (DOJ):</strong> ${empDoj}</div>
         <div><strong>Assessment Date:</strong> ${rec.attemptDate || new Date().toLocaleDateString('en-GB')}</div>
         <div><strong>Target Skill Level:</strong> ${level} Level Assessment</div>
-        <div><strong>Tab Switch Alerts:</strong> <span style="color: ${rec.tabSwitchCount > 0 ? '#E31B23' : '#166534'}; font-weight: 700;">${rec.tabSwitchCount || 0} Warnings</span></div>
+        <div><strong>Tab Switch Alerts:</strong> <span style="color: ${(rec.tabSwitchCount || 0) > 0 ? '#E31B23' : '#166534'}; font-weight: 700;">${rec.tabSwitchCount || 0} Warnings</span></div>
       </div>
     </div>
 
@@ -1708,11 +1712,11 @@ function downloadEmployeePDF(empNo) {
     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 24px; text-align: center;">
       <div style="background: #EFF6FF; border: 1px solid #BFDBFE; padding: 14px; border-radius: 8px;">
         <div style="font-size: 11px; color: #1E40AF; text-transform: uppercase; font-weight: 700;">Total Score</div>
-        <div style="font-size: 24px; font-weight: 800; color: #1E3A8A; margin-top: 4px;">${rec.totalMark !== undefined ? rec.totalMark : '-'} / ${qList.length}</div>
+        <div style="font-size: 24px; font-weight: 800; color: #1E3A8A; margin-top: 4px;">${rec.totalMark !== undefined ? rec.totalMark : (isAttempted ? 0 : '-')} / ${qList.length > 0 ? qList.length : 30}</div>
       </div>
       <div style="background: #F0FDF4; border: 1px solid #BBF7D0; padding: 14px; border-radius: 8px;">
         <div style="font-size: 11px; color: #166534; text-transform: uppercase; font-weight: 700;">Percentage Mark</div>
-        <div style="font-size: 24px; font-weight: 800; color: #14532D; margin-top: 4px;">${rec.markPct !== undefined ? rec.markPct + '%' : '-'}</div>
+        <div style="font-size: 24px; font-weight: 800; color: #14532D; margin-top: 4px;">${rec.markPct !== undefined ? rec.markPct + '%' : (isAttempted ? '0%' : '-')}</div>
       </div>
       <div style="background: #FFFBEB; border: 1px solid #FDE68A; padding: 14px; border-radius: 8px;">
         <div style="font-size: 11px; color: #92400E; text-transform: uppercase; font-weight: 700;">Passing Criteria</div>
@@ -1723,15 +1727,15 @@ function downloadEmployeePDF(empNo) {
     <!-- Question & Answer Audit Sheet -->
     <div style="margin-bottom: 24px;">
       <h3 style="font-size: 15px; border-bottom: 2px solid #E2E8F0; padding-bottom: 6px; margin-bottom: 14px; color: #0F172A;">
-        📋 Complete Question &amp; Answer Breakdown
+        Assessment Audit Breakdown
       </h3>
 
-      ${qList.map((q, idx) => `
+      ${qList.length > 0 ? qList.map((q, idx) => `
         <div style="margin-bottom: 14px; padding: 12px; border: 1px solid ${q.isCorrect ? '#CBD5E1' : '#FCA5A5'}; border-radius: 6px; background: ${q.isCorrect ? '#FFFFFF' : '#FFF5F5'}; font-size: 12px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
             <span style="font-weight: 700; color: #334155;">Q${idx + 1}. [${q.category}]</span>
             <span style="font-weight: 700; padding: 2px 8px; border-radius: 4px; font-size: 11px; background: ${q.isCorrect ? '#DCFCE7' : '#FEE2E2'}; color: ${q.isCorrect ? '#15803D' : '#B91C1C'};">
-              ${q.isCorrect ? '✔ Correct' : '✖ Incorrect'}
+              ${q.isCorrect ? 'Correct' : 'Incorrect'}
             </span>
           </div>
           <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #0F172A;">${q.question}</div>
@@ -1745,7 +1749,11 @@ function downloadEmployeePDF(empNo) {
             </div>
           </div>
         </div>
-      `).join('')}
+      `).join('') : `
+        <div style="padding: 16px; border: 1px dashed #CBD5E1; border-radius: 6px; background: #F8FAFC; text-align: center; color: #64748B; font-size: 13px;">
+          Assessment has not been completed by the candidate yet. Question and response audit will appear once submitted.
+        </div>
+      `}
     </div>
 
     <!-- Signatures -->
@@ -1763,7 +1771,7 @@ function downloadEmployeePDF(empNo) {
 
   document.body.appendChild(reportDiv);
 
-  showToast(`Generating PDF report for ${empNo}... 📄`);
+  showToast(`Generating PDF report for ${empNo}...`);
 
   if (typeof html2pdf !== 'undefined') {
     const opt = {
@@ -1775,16 +1783,16 @@ function downloadEmployeePDF(empNo) {
     };
 
     html2pdf().set(opt).from(reportDiv).save().then(() => {
-      document.body.removeChild(reportDiv);
-      showToast('PDF Report downloaded successfully! 📄');
+      if (document.body.contains(reportDiv)) document.body.removeChild(reportDiv);
+      showToast('PDF Report downloaded successfully!');
     }).catch(err => {
       console.error('PDF export error:', err);
-      document.body.removeChild(reportDiv);
+      if (document.body.contains(reportDiv)) document.body.removeChild(reportDiv);
       window.print();
     });
   } else {
     window.print();
-    document.body.removeChild(reportDiv);
+    if (document.body.contains(reportDiv)) document.body.removeChild(reportDiv);
   }
 }
 
@@ -1808,11 +1816,82 @@ function filterAdminTable() {
   renderAdminTable(val);
 }
 
-// Export Excel Report for Admin Only
-function exportAdminExcel() {
+// ---------------------------------------------------------------------
+// REPORTS & EXCEL OPERATIONS CENTER
+// ---------------------------------------------------------------------
+function renderReportsCenter() {
   const records = getStoredRecords();
+  const allEmps = EMPLOYEES;
 
-  const exportData = EMPLOYEES.map((emp, index) => {
+  let completedCount = 0;
+  let passCount = 0;
+
+  allEmps.forEach(emp => {
+    const rec = records[emp.empNo];
+    if (rec && rec.isCompleted) {
+      completedCount++;
+      if (rec.status === 'Passed' || (rec.markPct !== undefined && rec.markPct >= 70)) {
+        passCount++;
+      }
+    }
+  });
+
+  const passRate = completedCount > 0 ? Math.round((passCount / completedCount) * 100) : 0;
+
+  const elTotalEmps = document.getElementById('reportMetricTotalEmps');
+  if (elTotalEmps) elTotalEmps.innerText = allEmps.length;
+
+  const elCompleted = document.getElementById('reportMetricCompleted');
+  if (elCompleted) elCompleted.innerText = completedCount;
+
+  const elPassRate = document.getElementById('reportMetricPassRate');
+  if (elPassRate) elPassRate.innerText = `Pass Rate: ${passRate}% (${passCount} Passed)`;
+
+  // Populate Employee Select Dropdown
+  const empSelect = document.getElementById('reportEmpSelect');
+  if (empSelect) {
+    const currentVal = empSelect.value;
+    empSelect.innerHTML = '<option value="">-- Choose Employee --</option>' + allEmps.map(emp => {
+      const rec = records[emp.empNo];
+      const statusBadge = rec && rec.isCompleted ? ` [${rec.status || 'Done'} - ${rec.markPct || 0}%]` : '';
+      return `<option value="${emp.empNo}">[${emp.empNo}] ${emp.name} - ${emp.section}${statusBadge}</option>`;
+    }).join('');
+    if (currentVal) empSelect.value = currentVal;
+  }
+}
+
+function exportDataToCSV(dataArray, filename) {
+  if (!dataArray || !dataArray.length) {
+    showToast('No records available for export.');
+    return;
+  }
+  const headers = Object.keys(dataArray[0]);
+  const rows = [];
+  rows.push(headers.map(h => `"${String(h).replace(/"/g, '""')}"`).join(','));
+
+  dataArray.forEach(row => {
+    const vals = headers.map(h => {
+      const val = row[h] === undefined || row[h] === null ? '' : String(row[h]);
+      return `"${val.replace(/"/g, '""')}"`;
+    });
+    rows.push(vals.join(','));
+  });
+
+  const csvContent = '\uFEFF' + rows.join('\r\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename.endsWith('.csv') ? filename : `${filename}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function getAdminExportDataset() {
+  const records = getStoredRecords();
+  return EMPLOYEES.map((emp, index) => {
     const rec = records[emp.empNo] || {};
     return {
       "S.No": index + 1,
@@ -1832,13 +1911,98 @@ function exportAdminExcel() {
       "Attempt Date": rec.attemptDate || ""
     };
   });
+}
 
-  const worksheet = XLSX.utils.json_to_sheet(exportData);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "ILUO Assessment Report");
+// Export Excel Report for Admin Only
+function exportAdminExcel() {
+  try {
+    const exportData = getAdminExportDataset();
+    const filename = `Yokohama_ILUO_QA_Assessment_Report_${new Date().toISOString().split('T')[0]}`;
 
-  XLSX.writeFile(workbook, `Yokohama_ILUO_QA_Assessment_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
-  showToast('Excel report downloaded successfully!');
+    if (typeof XLSX !== 'undefined') {
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "ILUO Assessment Report");
+      XLSX.writeFile(workbook, `${filename}.xlsx`);
+      showToast('Master Excel report (.xlsx) downloaded successfully!');
+    } else {
+      exportDataToCSV(exportData, `${filename}.csv`);
+      showToast('Downloaded as CSV report (Excel compatible).');
+    }
+  } catch (err) {
+    console.error('Export Excel failed:', err);
+    exportAdminCSV();
+  }
+}
+
+function exportAdminCSV() {
+  const exportData = getAdminExportDataset();
+  const filename = `Yokohama_ILUO_QA_Assessment_Report_${new Date().toISOString().split('T')[0]}.csv`;
+  exportDataToCSV(exportData, filename);
+  showToast('Master CSV report downloaded successfully!');
+}
+
+function exportSelectedSectionExcel() {
+  const selectEl = document.getElementById('reportSectionSelect');
+  const secKey = selectEl ? selectEl.value : 'warehouse';
+  exportCurrentSectionExcel(secKey);
+}
+
+function exportSelectedSectionCSV() {
+  const selectEl = document.getElementById('reportSectionSelect');
+  const secKey = selectEl ? selectEl.value : 'warehouse';
+  exportCurrentSectionCSV(secKey);
+}
+
+function exportFullQuestionBankExcel() {
+  const allQs = [];
+  ['L', 'U', 'O'].forEach(lvl => {
+    (QUESTION_BANK[lvl] || []).forEach(q => {
+      allQs.push({
+        "Level": q.level,
+        "Section": q.section,
+        "Question ID": q.id,
+        "Category": q.category || "General QA",
+        "Question Text": q.question,
+        "Option A": (q.options && q.options[0]) ? q.options[0].text : "",
+        "Option B": (q.options && q.options[1]) ? q.options[1].text : "",
+        "Option C": (q.options && q.options[2]) ? q.options[2].text : "",
+        "Option D": (q.options && q.options[3]) ? q.options[3].text : "",
+        "Correct Answer": q.correctAnswer
+      });
+    });
+  });
+
+  const filename = `Yokohama_QA_Question_Bank_Master_${new Date().toISOString().split('T')[0]}`;
+  try {
+    if (typeof XLSX !== 'undefined') {
+      const workbook = XLSX.utils.book_new();
+      ['L', 'U', 'O'].forEach(lvl => {
+        const lvlQs = allQs.filter(q => q.Level === lvl);
+        const ws = XLSX.utils.json_to_sheet(lvlQs);
+        XLSX.utils.book_append_sheet(workbook, ws, `${lvl} Level Questions`);
+      });
+      XLSX.writeFile(workbook, `${filename}.xlsx`);
+      showToast('Master Question Bank Excel downloaded successfully!');
+    } else {
+      exportDataToCSV(allQs, `${filename}.csv`);
+      showToast('Question Bank downloaded as CSV.');
+    }
+  } catch (err) {
+    console.error('Question Bank Excel export error:', err);
+    exportDataToCSV(allQs, `${filename}.csv`);
+    showToast('Downloaded Question Bank as CSV.');
+  }
+}
+
+function generateSelectedEmployeePDF() {
+  const selectEl = document.getElementById('reportEmpSelect');
+  const empNo = selectEl ? selectEl.value : '';
+  if (!empNo) {
+    showToast('Please select an employee from the dropdown list first.');
+    return;
+  }
+  downloadEmployeePDF(empNo);
 }
 
 // Bulk Clear & Docx Upload Parser
@@ -2368,20 +2532,16 @@ function filterSectionQuestions() {
   }).join('');
 }
 
-function exportCurrentSectionExcel() {
-  const currentSec = QA_SECTIONS_LIST.find(s => s.id === currentActiveSectionKey) || QA_SECTIONS_LIST[0];
+function exportCurrentSectionExcel(targetSecKey) {
+  const secKey = targetSecKey || currentActiveSectionKey || 'warehouse';
+  const currentSec = QA_SECTIONS_LIST.find(s => s.id === secKey) || QA_SECTIONS_LIST[0];
   const normSec = currentSec.normName;
   const records = getStoredRecords();
 
   const sectionEmps = EMPLOYEES.filter(emp => normalizeSectionName(emp.section) === normSec);
 
-  if (sectionEmps.length === 0) {
-    showToast(`No employee records available for ${currentSec.title}`);
-    return;
-  }
-
   // Sheet 1: Employees & Marks
-  const empSheetData = sectionEmps.map((emp, index) => {
+  const empSheetData = sectionEmps.length > 0 ? sectionEmps.map((emp, index) => {
     const rec = records[emp.empNo] || {};
     return {
       "S.No": index + 1,
@@ -2402,7 +2562,7 @@ function exportCurrentSectionExcel() {
       "Status": rec.status || (rec.inProgress ? "In Progress" : "Not Started"),
       "Attempt Date": rec.attemptDate || ""
     };
-  });
+  }) : [{ "Notice": `No registered employees currently under ${currentSec.title}.` }];
 
   // Sheet 2: Section Questions Bank
   const allSectionQs = [];
@@ -2428,17 +2588,30 @@ function exportCurrentSectionExcel() {
     "Correct Answer": q.correctAnswer
   }));
 
-  const workbook = XLSX.utils.book_new();
-  const wsEmps = XLSX.utils.json_to_sheet(empSheetData);
-  XLSX.utils.book_append_sheet(workbook, wsEmps, "Employees & Marks");
-
-  if (qSheetData.length > 0) {
-    const wsQs = XLSX.utils.json_to_sheet(qSheetData);
-    XLSX.utils.book_append_sheet(workbook, wsQs, "Section Question Bank");
-  }
-
   const cleanTitle = currentSec.title.replace(/[^a-zA-Z0-9]/g, '_');
-  XLSX.writeFile(workbook, `Yokohama_${cleanTitle}_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
-  showToast(`${currentSec.title} Excel report downloaded successfully!`);
+  const filename = `Yokohama_${cleanTitle}_Report_${new Date().toISOString().split('T')[0]}`;
+
+  try {
+    if (typeof XLSX !== 'undefined') {
+      const workbook = XLSX.utils.book_new();
+      const wsEmps = XLSX.utils.json_to_sheet(empSheetData);
+      XLSX.utils.book_append_sheet(workbook, wsEmps, "Employees & Marks");
+
+      if (qSheetData.length > 0) {
+        const wsQs = XLSX.utils.json_to_sheet(qSheetData);
+        XLSX.utils.book_append_sheet(workbook, wsQs, "Section Question Bank");
+      }
+
+      XLSX.writeFile(workbook, `${filename}.xlsx`);
+      showToast(`${currentSec.title} Excel report downloaded successfully!`);
+    } else {
+      exportDataToCSV(empSheetData, `${filename}.csv`);
+      showToast(`${currentSec.title} downloaded as CSV report.`);
+    }
+  } catch (err) {
+    console.error('Section export error:', err);
+    exportDataToCSV(empSheetData, `${filename}.csv`);
+    showToast(`${currentSec.title} downloaded as CSV report.`);
+  }
 }
 

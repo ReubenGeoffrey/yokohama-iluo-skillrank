@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Yokohama ILUO Skill Assessment Portal | Tire Building QA</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="xlsx.full.min.js"></script>
+  <script>if (typeof XLSX === 'undefined') { document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"><\/script>'); }</script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <link rel="stylesheet" href="styles.css?v=19.0">
@@ -753,23 +754,188 @@
             </div>
           </div>
 
-          <!-- SUB-VIEW F: Export Excel (/control-center/export) -->
-          <div class="control-subview" id="ctrlSubExport" style="display: none;">
+          <!-- SUB-VIEW F: Reports & Excel (/control-center/reports or /control-center/export) -->
+          <div class="control-subview" id="ctrlSubReports" style="display: none;">
             <div class="admin-header">
               <div>
-                <div class="admin-title">Export Assessment Reports</div>
-                <div style="font-size: 0.85rem; color: var(--text-muted);">Download official Excel reports for management review</div>
+                <div class="admin-title">Reports &amp; Excel Operations Center</div>
+                <div style="font-size: 0.85rem; color: var(--text-muted);">Generate, preview, and download master assessment Excel workbooks, section spreadsheets, and employee evaluation PDF reports</div>
               </div>
             </div>
 
-            <div class="instruction-card" style="margin: 0;">
-              <h3>Admin Excel Generator</h3>
-              <p style="color: var(--text-muted); margin: 12px 0 24px 0;">Exports full .xlsx sheet formatted with all employee and assessment metrics.</p>
+            <!-- Reports KPI Bar -->
+            <div class="metrics-grid" style="margin-bottom: 24px;">
+              <div class="metric-card">
+                <div class="metric-header">
+                  <span class="metric-title">Total Employees</span>
+                  <span class="metric-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-3-3.87"/><path d="M9 21v-2a4 4 0 0 1 3-3.87"/><circle cx="9" cy="7" r="4"/></svg>
+                  </span>
+                </div>
+                <div class="metric-value" id="reportMetricTotalEmps">236</div>
+                <div class="metric-trend">Registered across 8 QA Sections</div>
+              </div>
 
-              <button class="btn-excel" style="padding: 14px 28px; font-size: 1rem; display: inline-flex; align-items: center; gap: 10px;" onclick="exportAdminExcel()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                <span>Download Full Excel Report (.xlsx)</span>
-              </button>
+              <div class="metric-card">
+                <div class="metric-header">
+                  <span class="metric-title">Assessments Taken</span>
+                  <span class="metric-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                  </span>
+                </div>
+                <div class="metric-value" id="reportMetricCompleted">0</div>
+                <div class="metric-trend" id="reportMetricPassRate">Pass Rate: 0%</div>
+              </div>
+
+              <div class="metric-card">
+                <div class="metric-header">
+                  <span class="metric-title">Master Question Bank</span>
+                  <span class="metric-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  </span>
+                </div>
+                <div class="metric-value">720</div>
+                <div class="metric-trend">240 L-Level &bull; 240 U-Level &bull; 240 O-Level</div>
+              </div>
+
+              <div class="metric-card">
+                <div class="metric-header">
+                  <span class="metric-title">Passing Standard</span>
+                  <span class="metric-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+                  </span>
+                </div>
+                <div class="metric-value">70%</div>
+                <div class="metric-trend">Official Yokohama QA Qualification Mark</div>
+              </div>
+            </div>
+
+            <!-- Export Cards Grid -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 20px; margin-bottom: 24px;">
+              
+              <!-- CARD 1: Master Company Assessment Excel -->
+              <div class="instruction-card" style="margin: 0; display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(5, 150, 105, 0.1); color: #059669; display: flex; align-items: center; justify-content: center;">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    </div>
+                    <div>
+                      <h3 style="margin: 0; font-size: 1.1rem; color: var(--primary-dark);">Master Assessment Report</h3>
+                      <span style="font-size: 0.78rem; color: var(--text-muted);">Company-Wide Assessment Matrix</span>
+                    </div>
+                  </div>
+                  <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin: 12px 0 20px 0;">
+                    Exports complete assessment status for all 236 employees across all 8 QA sections, including Department, Section, Skill Level, U/L/O Marks, Percentage, Tab Switches, and Pass/Fail Qualification.
+                  </p>
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                  <button class="btn-excel" style="padding: 10px 20px; font-size: 0.92rem; display: inline-flex; align-items: center; gap: 8px;" onclick="exportAdminExcel()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>Download Master Excel (.xlsx)</span>
+                  </button>
+                  <button class="btn-secondary" style="padding: 10px 16px; font-size: 0.92rem; display: inline-flex; align-items: center; gap: 6px;" onclick="exportAdminCSV()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>CSV Format</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- CARD 2: Section-Wise Multi-Sheet Excel -->
+              <div class="instruction-card" style="margin: 0; display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(2, 132, 199, 0.1); color: #0284C7; display: flex; align-items: center; justify-content: center;">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                    </div>
+                    <div>
+                      <h3 style="margin: 0; font-size: 1.1rem; color: var(--primary-dark);">Section-Wise Excel Report</h3>
+                      <span style="font-size: 0.78rem; color: var(--text-muted);">Multi-Tab Section Assessment &amp; Question Bank</span>
+                    </div>
+                  </div>
+                  <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin: 12px 0 14px 0;">
+                    Generates a specialized workbook with Sheet 1 (Section Employees &amp; Marks) and Sheet 2 (Section Question Bank with verified answer keys).
+                  </p>
+                  <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="reportSectionSelect" style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Select QA Section</label>
+                    <select id="reportSectionSelect" class="form-control" style="font-weight: 600;">
+                      <option value="warehouse">Warehouse QA</option>
+                      <option value="final_finish">Final Finish QA</option>
+                      <option value="tire_building">Tire Building QA</option>
+                      <option value="tire_curing">Tire Curing QA</option>
+                      <option value="solid_tire">Solid Tire QA</option>
+                      <option value="rro_alt">Final Finish RRO &amp; ALT QA</option>
+                      <option value="preparatory">Preparatory QA</option>
+                      <option value="fid_inspector">FID Inspector QA</option>
+                    </select>
+                  </div>
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                  <button class="btn-primary" style="padding: 10px 20px; font-size: 0.92rem; background: #0284C7; border-color: #0284C7; display: inline-flex; align-items: center; gap: 8px;" onclick="exportSelectedSectionExcel()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>Download Section Excel (.xlsx)</span>
+                  </button>
+                  <button class="btn-secondary" style="padding: 10px 16px; font-size: 0.92rem; display: inline-flex; align-items: center; gap: 6px;" onclick="exportSelectedSectionCSV()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>Section CSV</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- CARD 3: Question Bank Master Excel (720 Questions) -->
+              <div class="instruction-card" style="margin: 0; display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(99, 102, 241, 0.1); color: #6366F1; display: flex; align-items: center; justify-content: center;">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    </div>
+                    <div>
+                      <h3 style="margin: 0; font-size: 1.1rem; color: var(--primary-dark);">Question Bank Master Excel</h3>
+                      <span style="font-size: 0.78rem; color: var(--text-muted);">Curated 720 Questions Bank across L, U, O</span>
+                    </div>
+                  </div>
+                  <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin: 12px 0 20px 0;">
+                    Exports all 720 verified questions categorized by Section and Skill Level with Options A, B, C, D and verified Answer Keys in separate sheets.
+                  </p>
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                  <button class="btn-primary" style="padding: 10px 20px; font-size: 0.92rem; background: #6366F1; border-color: #6366F1; display: inline-flex; align-items: center; gap: 8px;" onclick="exportFullQuestionBankExcel()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>Export Question Bank (.xlsx)</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- CARD 4: Individual Employee PDF Scorecard -->
+              <div class="instruction-card" style="margin: 0; display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(220, 38, 38, 0.1); color: #DC2626; display: flex; align-items: center; justify-content: center;">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                    </div>
+                    <div>
+                      <h3 style="margin: 0; font-size: 1.1rem; color: var(--primary-dark);">Employee Assessment PDF</h3>
+                      <span style="font-size: 0.78rem; color: var(--text-muted);">Official A4 Scorecard &amp; Audit Breakdown</span>
+                    </div>
+                  </div>
+                  <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin: 12px 0 14px 0;">
+                    Select any employee to generate their official A4 evaluation certificate containing question response audit, supervisor signature, and pass/fail seal.
+                  </p>
+                  <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="reportEmpSelect" style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Select Employee</label>
+                    <select id="reportEmpSelect" class="form-control" style="font-weight: 600;">
+                      <option value="">-- Choose Employee --</option>
+                    </select>
+                  </div>
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                  <button class="btn-primary" style="padding: 10px 20px; font-size: 0.92rem; background: #DC2626; border-color: #DC2626; display: inline-flex; align-items: center; gap: 8px;" onclick="generateSelectedEmployeePDF()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>Download Employee PDF</span>
+                  </button>
+                </div>
+              </div>
+
             </div>
           </div>
 
