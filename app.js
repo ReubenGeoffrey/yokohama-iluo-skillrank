@@ -2825,31 +2825,6 @@ function getAllTrainingDataset() {
 }
 
 function renderTrainingRequirements() {
-  const dataset = getAllTrainingDataset();
-
-  // Compute Metrics
-  let criticalCount = 0;
-  let progressionCount = 0;
-  let scheduledCount = 0;
-
-  dataset.forEach(item => {
-    if (item.priority === 'CRITICAL') criticalCount++;
-    if (item.priority === 'PROGRESSION') progressionCount++;
-    if (item.status === 'SCHEDULED' || item.status === 'COMPLETED') scheduledCount++;
-  });
-
-  const elTotal = document.getElementById('trainingMetricTotal');
-  if (elTotal) elTotal.innerText = dataset.length;
-
-  const elCrit = document.getElementById('trainingMetricCritical');
-  if (elCrit) elCrit.innerText = criticalCount;
-
-  const elProg = document.getElementById('trainingMetricProgression');
-  if (elProg) elProg.innerText = progressionCount;
-
-  const elSched = document.getElementById('trainingMetricScheduled');
-  if (elSched) elSched.innerText = scheduledCount;
-
   filterTrainingRequirements();
 }
 
