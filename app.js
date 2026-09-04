@@ -1098,6 +1098,7 @@ function showControlCenterSubView(subName) {
   // Render sub-view data
   if (subName === 'dashboard') renderAdminDashboard();
   else if (subName === 'questions') renderQuestionsManager();
+  else if (subName === 'sections') renderSectionsExplorer();
   else if (subName === 'employees') renderEmployeeDirectory();
   else if (subName === 'results') renderAdminTable('');
 }
@@ -1956,3 +1957,488 @@ function handleDocxUpload(event) {
 
   reader.readAsArrayBuffer(file);
 }
+
+// ---------------------------------------------------------------------
+// QA SECTIONS & DEPARTMENT EXPLORER (/control-center/sections)
+// ---------------------------------------------------------------------
+const QA_SECTIONS_LIST = [
+  { id: 'warehouse', name: 'Ware House QA', normName: 'warehouse qa', icon: '📦', title: 'Warehouse QA' },
+  { id: 'final_finish', name: 'Final Finish QA', normName: 'final finish qa', icon: '🏁', title: 'Final Finish QA' },
+  { id: 'tire_building', name: 'Tire building QA', normName: 'tire building qa', icon: '🏗️', title: 'Tire Building QA' },
+  { id: 'tire_curing', name: 'Tire curing QA', normName: 'tire curing qa', icon: '🔥', title: 'Tire Curing QA' },
+  { id: 'solid_tire', name: 'Solid Tire QA', normName: 'solid tire qa', icon: '🛞', title: 'Solid Tire QA' },
+  { id: 'rro_alt', name: 'Final Finish RRO & ALT QA', normName: 'final finish rro & alt qa', icon: '⚙️', title: 'Final Finish RRO & ALT QA' },
+  { id: 'preparatory', name: 'Preparatory QA', normName: 'preparatory qa', icon: '🧪', title: 'Preparatory QA' },
+  { id: 'fid_inspector', name: 'FID Inspector QA', normName: 'fid inspector qa', icon: '🔍', title: 'FID Inspector QA' }
+];
+
+let currentActiveSectionKey = 'warehouse'; // Default to Ware House QA
+let currentActiveSectionTab = 'employees';
+
+function renderSectionsExplorer(targetSecKey) {
+  if (targetSecKey) currentActiveSectionKey = targetSecKey;
+  const currentSec = QA_SECTIONS_LIST.find(s => s.id === currentActiveSectionKey) || QA_SECTIONS_LIST[0];
+  const normSec = currentSec.normName;
+  const records = getStoredRecords();
+
+  // All employees in this section
+  const sectionEmps = EMPLOYEES.filter(emp => normalizeSectionName(emp.section) === normSec);
+
+  // All questions in this section across L, U, O
+  const allSectionQs = [];
+  ['L', 'U', 'O'].forEach(lvl => {
+    (QUESTION_BANK[lvl] || []).forEach(q => {
+      if (normalizeSectionName(q.section) === normSec) {
+        allSectionQs.push(q);
+      }
+    });
+  });
+
+  // Calculate section metrics
+  let completedCount = 0;
+  let totalScorePct = 0;
+  let passCount = 0;
+
+  sectionEmps.forEach(emp => {
+    const rec = records[emp.empNo];
+    if (rec && rec.isCompleted) {
+      completedCount++;
+      totalScorePct += (rec.markPct || 0);
+      if (rec.status && !rec.status.includes('Fail') && !rec.status.includes('Terminated')) {
+        passCount++;
+      }
+    }
+  });
+
+  const avgScore = completedCount > 0 ? (totalScorePct / completedCount).toFixed(1) : '0';
+  const passRate = completedCount > 0 ? Math.round((passCount / completedCount) * 100) : 0;
+
+  // 1. Render Section Selector Cards Grid
+  const pillsContainer = document.getElementById('sectionPillsGrid');
+  if (pillsContainer) {
+    pillsContainer.innerHTML = QA_SECTIONS_LIST.map(sec => {
+      const empCount = EMPLOYEES.filter(e => normalizeSectionName(e.section) === sec.normName).length;
+      let qCount = 0;
+      ['L', 'U', 'O'].forEach(lvl => {
+        qCount += (QUESTION_BANK[lvl] || []).filter(q => normalizeSectionName(q.section) === sec.normName).length;
+      });
+
+      const isActive = sec.id === currentSec.id;
+      return `
+        <div class="sec-pill-card ${isActive ? 'active' : ''}" onclick="selectExplorerSection('${sec.id}')">
+          <div class="sec-pill-icon">${sec.icon}</div>
+          <div class="sec-pill-info">
+            <div class="sec-pill-title">${sec.title}</div>
+            <div class="sec-pill-meta">👥 ${empCount} Emps &bull; ❓ ${qCount} Qs</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // 2. Render Active Section Banner Header
+  const bannerHeader = document.getElementById('sectionBannerHeader');
+  if (bannerHeader) {
+    bannerHeader.innerHTML = `
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="font-size: 2rem; background: #EFF6FF; border: 1px solid #BFDBFE; width: 54px; height: 54px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+            ${currentSec.icon}
+          </div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <h2 style="font-size: 1.35rem; font-weight: 800; color: var(--text-main); margin: 0;">${currentSec.title}</h2>
+              <span class="brand-badge" style="background: var(--primary-color); font-size: 0.72rem;">QUALITY CONTROL</span>
+            </div>
+            <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 2px;">
+              Yokohama Industrial QA &bull; Normalization: <code>${currentSec.normName}</code>
+            </div>
+          </div>
+        </div>
+        <button class="btn-primary" style="padding: 8px 16px; font-size: 0.85rem; background: #059669; border-color: #059669; display: flex; align-items: center; gap: 6px;" onclick="exportCurrentSectionExcel()">
+          <span>📊 Download ${currentSec.title} Excel</span>
+        </button>
+      </div>
+    `;
+  }
+
+  // 3. Render Section Stats Grid
+  const statsGrid = document.getElementById('sectionStatsGrid');
+  if (statsGrid) {
+    statsGrid.innerHTML = `
+      <div class="stat-card">
+        <div class="stat-title">Section Employees</div>
+        <div class="stat-value" style="color: var(--primary-color);">${sectionEmps.length}</div>
+        <div style="font-size: 0.76rem; color: var(--text-muted); margin-top: 4px;">Assigned in Master Database</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">Section Questions</div>
+        <div class="stat-value" style="color: #6366F1;">${allSectionQs.length}</div>
+        <div style="font-size: 0.76rem; color: var(--text-muted); margin-top: 4px;">Across L, U &amp; O levels</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">Completed Exams</div>
+        <div class="stat-value" style="color: #059669;">${completedCount}</div>
+        <div style="font-size: 0.76rem; color: var(--text-muted); margin-top: 4px;">${sectionEmps.length - completedCount} pending completion</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">Average Score</div>
+        <div class="stat-value" style="color: ${avgScore >= 60 ? '#059669' : '#D97706'};">${avgScore}%</div>
+        <div style="font-size: 0.76rem; color: var(--text-muted); margin-top: 4px;">Pass Rate: <strong>${passRate}%</strong></div>
+      </div>
+    `;
+  }
+
+  // Update badge counters
+  const empBadge = document.getElementById('secEmpCountBadge');
+  if (empBadge) empBadge.innerText = sectionEmps.length;
+  const qBadge = document.getElementById('secQCountBadge');
+  if (qBadge) qBadge.innerText = allSectionQs.length;
+
+  // Render active inner tab
+  renderActiveSectionTab();
+}
+
+function selectExplorerSection(secKey) {
+  renderSectionsExplorer(secKey);
+}
+
+function switchSectionTab(tabName) {
+  currentActiveSectionTab = tabName;
+  ['employees', 'skills', 'questions'].forEach(t => {
+    const btn = document.getElementById(`secTabBtn${capitalize(t)}`);
+    const pane = document.getElementById(`secPane${capitalize(t)}`);
+    if (btn) {
+      if (t === tabName) btn.classList.add('active');
+      else btn.classList.remove('active');
+    }
+    if (pane) {
+      pane.style.display = t === tabName ? 'block' : 'none';
+    }
+  });
+
+  renderActiveSectionTab();
+}
+
+function renderActiveSectionTab() {
+  const currentSec = QA_SECTIONS_LIST.find(s => s.id === currentActiveSectionKey) || QA_SECTIONS_LIST[0];
+  const normSec = currentSec.normName;
+
+  if (currentActiveSectionTab === 'employees') {
+    filterSectionEmployees();
+  } else if (currentActiveSectionTab === 'skills') {
+    renderSectionSkillMarks(normSec);
+  } else if (currentActiveSectionTab === 'questions') {
+    filterSectionQuestions();
+  }
+}
+
+function filterSectionEmployees() {
+  const currentSec = QA_SECTIONS_LIST.find(s => s.id === currentActiveSectionKey) || QA_SECTIONS_LIST[0];
+  const normSec = currentSec.normName;
+  const records = getStoredRecords();
+  const searchInput = document.getElementById('secEmpSearchInput');
+  const q = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+  const sectionEmps = EMPLOYEES.filter(emp => {
+    if (normalizeSectionName(emp.section) !== normSec) return false;
+    if (!q) return true;
+    return (
+      emp.empNo.toLowerCase().includes(q) ||
+      emp.name.toLowerCase().includes(q) ||
+      (emp.currentLevel && emp.currentLevel.toLowerCase().includes(q)) ||
+      (emp.qualification && emp.qualification.toLowerCase().includes(q))
+    );
+  });
+
+  const countElem = document.getElementById('secEmpTableCount');
+  if (countElem) countElem.innerText = sectionEmps.length;
+
+  const tbody = document.getElementById('secEmpTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (sectionEmps.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="13" style="text-align: center; padding: 24px; color: var(--text-muted);">
+          No employees found matching the search criteria in ${currentSec.title}.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  sectionEmps.forEach(emp => {
+    const rec = records[emp.empNo] || {};
+    const tr = document.createElement('tr');
+
+    const statusBadge = rec.isCompleted
+      ? `<span class="${rec.status && rec.status.includes('Terminated') ? 'badge-fail' : 'badge-pass'}">${rec.status || 'Completed'}</span>`
+      : rec.inProgress
+      ? `<span class="badge-pending">In Progress (${rec.tabSwitchCount || 0} Sw)</span>`
+      : `<span style="color: #94A3B8;">Not Started</span>`;
+
+    const hasRecord = rec.isCompleted || rec.inProgress;
+    const actionBtn = hasRecord
+      ? `<div style="display: flex; gap: 6px; flex-wrap: wrap;">
+           <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #0284C7; border-color: #0284C7;" onclick="downloadEmployeePDF('${emp.empNo}')">📄 PDF</button>
+           <button class="btn-reset" style="padding: 3px 8px; font-size: 0.75rem;" onclick="confirmAndResetExam('${emp.empNo}', '${emp.name.replace(/'/g, "\\'")}')">🔄 Reset</button>
+         </div>`
+      : `<span style="color: #CBD5E1; font-size: 0.78rem;">No attempt</span>`;
+
+    tr.innerHTML = `
+      <td><strong>${emp.empNo}</strong></td>
+      <td><strong>${emp.name}</strong></td>
+      <td><span class="skill-level-badge" style="background: #EFF6FF; color: var(--primary-color); border: 1px solid #BFDBFE;">${emp.currentLevel || 'I'} Level</span></td>
+      <td>${emp.qualification || '-'}</td>
+      <td>${emp.doj || '-'} <small style="color: var(--text-muted); display: block;">${emp.yearExp || ''}</small></td>
+      <td>${rec.uMark !== undefined ? rec.uMark : '-'}</td>
+      <td>${rec.lMark !== undefined ? rec.lMark : '-'}</td>
+      <td>${rec.oMark !== undefined ? rec.oMark : '-'}</td>
+      <td><strong style="color: var(--text-main); font-size: 0.95rem;">${rec.totalMark !== undefined ? rec.totalMark : '-'}</strong></td>
+      <td><strong>${rec.markPct !== undefined ? rec.markPct + '%' : '-'}</strong></td>
+      <td>${statusBadge}</td>
+      <td>${rec.attemptDate || '-'}</td>
+      <td>${actionBtn}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderSectionSkillMarks(normSec) {
+  const container = document.getElementById('secSkillsBreakdownContainer');
+  if (!container) return;
+
+  const sectionEmps = EMPLOYEES.filter(e => normalizeSectionName(e.section) === normSec);
+  const records = getStoredRecords();
+
+  const skillGroups = {
+    'I': { title: 'I Level (Trainee)', color: '#3B82F6', total: 0, completed: 0, totalPct: 0, pass: 0 },
+    'L': { title: 'L Level (Basic)', color: '#10B981', total: 0, completed: 0, totalPct: 0, pass: 0 },
+    'U': { title: 'U Level (Skilled)', color: '#F59E0B', total: 0, completed: 0, totalPct: 0, pass: 0 },
+    'O': { title: 'O Level (Expert)', color: '#8B5CF6', total: 0, completed: 0, totalPct: 0, pass: 0 }
+  };
+
+  sectionEmps.forEach(emp => {
+    const lvl = (emp.currentLevel || 'I').toUpperCase().trim();
+    const group = skillGroups[lvl] || skillGroups['I'];
+    group.total++;
+
+    const rec = records[emp.empNo];
+    if (rec && rec.isCompleted) {
+      group.completed++;
+      group.totalPct += (rec.markPct || 0);
+      if (rec.status && !rec.status.includes('Fail') && !rec.status.includes('Terminated')) {
+        group.pass++;
+      }
+    }
+  });
+
+  const cardsHtml = Object.keys(skillGroups).map(lvlKey => {
+    const g = skillGroups[lvlKey];
+    const avgScore = g.completed > 0 ? (g.totalPct / g.completed).toFixed(1) : '0';
+    const passRate = g.completed > 0 ? Math.round((g.pass / g.completed) * 100) : 0;
+    const completionRate = g.total > 0 ? Math.round((g.completed / g.total) * 100) : 0;
+
+    return `
+      <div class="skill-matrix-card level-${lvlKey}">
+        <div class="skill-matrix-header">
+          <span class="skill-level-badge" style="background: ${g.color}15; color: ${g.color}; border: 1px solid ${g.color}40;">
+            ${g.title}
+          </span>
+          <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted);">
+            ${g.total} Employees
+          </span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px;">
+          <div class="skill-matrix-stat">${avgScore}%</div>
+          <span style="font-size: 0.78rem; color: var(--text-muted);">Avg Mark Obtained</span>
+        </div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">
+          Completed: <strong>${g.completed} / ${g.total}</strong> &bull; Pass Rate: <strong>${passRate}%</strong>
+        </div>
+        <!-- Progress bar -->
+        <div style="background: #E2E8F0; height: 8px; border-radius: 4px; overflow: hidden;">
+          <div style="background: ${g.color}; width: ${completionRate}%; height: 100%; border-radius: 4px; transition: width 0.3s ease;"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = `
+    <div style="margin-bottom: 18px;">
+      <h3 style="font-size: 1.05rem; font-weight: 700; color: var(--text-main); margin-bottom: 4px;">
+        ILUO Skill Level Competency &amp; Mark Distribution
+      </h3>
+      <p style="font-size: 0.83rem; color: var(--text-muted);">
+        Detailed assessment marks and completion metrics aggregated by Employee Skill Level (I, L, U, O) in this section
+      </p>
+    </div>
+    <div class="skills-cards-grid">
+      ${cardsHtml}
+    </div>
+  `;
+}
+
+function filterSectionQuestions() {
+  const currentSec = QA_SECTIONS_LIST.find(s => s.id === currentActiveSectionKey) || QA_SECTIONS_LIST[0];
+  const normSec = currentSec.normName;
+  const container = document.getElementById('secQuestionsListContainer');
+  if (!container) return;
+
+  const searchInput = document.getElementById('secQSearchInput');
+  const levelSelect = document.getElementById('secQLevelSelect');
+  const catSelect = document.getElementById('secQCategorySelect');
+
+  const qText = searchInput ? searchInput.value.toLowerCase().trim() : '';
+  const levelFilter = levelSelect ? levelSelect.value : 'ALL';
+  const catFilter = catSelect ? catSelect.value : 'ALL';
+
+  // Gather questions for this section
+  const allSectionQs = [];
+  ['L', 'U', 'O'].forEach(lvl => {
+    if (levelFilter !== 'ALL' && lvl !== levelFilter) return;
+    (QUESTION_BANK[lvl] || []).forEach(q => {
+      if (normalizeSectionName(q.section) === normSec) {
+        allSectionQs.push(q);
+      }
+    });
+  });
+
+  // Filter questions
+  const filtered = allSectionQs.filter(q => {
+    if (catFilter !== 'ALL') {
+      const qCat = (q.category || '').toLowerCase();
+      const filterCat = catFilter.toLowerCase();
+      if (!qCat.includes(filterCat)) return false;
+    }
+    if (qText) {
+      const titleMatch = (q.question || '').toLowerCase().includes(qText);
+      const catMatch = (q.category || '').toLowerCase().includes(qText);
+      const optMatch = (q.options || []).some(opt => (opt.text || '').toLowerCase().includes(qText));
+      return titleMatch || catMatch || optMatch;
+    }
+    return true;
+  });
+
+  const countElem = document.getElementById('secQFilteredCount');
+  if (countElem) countElem.innerText = filtered.length;
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 36px; background: #F8FAFC; border: 1px dashed var(--border-color); border-radius: var(--radius-md); color: var(--text-muted);">
+        No questions found in ${currentSec.title} matching the selected level/category filters.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = filtered.map((q, idx) => {
+    const lvlColor = q.level === 'O' ? '#8B5CF6' : q.level === 'U' ? '#F59E0B' : '#10B981';
+    return `
+      <div class="sec-q-card">
+        <div class="sec-q-header">
+          <div class="sec-q-badges">
+            <span class="skill-level-badge" style="background: ${lvlColor}15; color: ${lvlColor}; border: 1px solid ${lvlColor}40;">
+              ${q.level} Level
+            </span>
+            <span style="font-size: 0.75rem; background: #F1F5F9; color: var(--text-muted); padding: 3px 8px; border-radius: 4px; font-weight: 600;">
+              ${q.category || 'General QA'}
+            </span>
+            <span style="font-size: 0.72rem; color: #94A3B8; font-family: monospace;">${q.id}</span>
+          </div>
+          <span style="font-size: 0.78rem; color: var(--text-muted); font-weight: 600;">Question #${idx + 1}</span>
+        </div>
+        <div class="sec-q-title">${q.question}</div>
+        <div class="sec-q-options">
+          ${(q.options || []).map(opt => {
+            const isCorrect = (opt.key === q.correctAnswer);
+            return `
+              <div class="sec-q-option-item ${isCorrect ? 'correct-answer' : ''}">
+                <strong style="min-width: 18px;">${opt.key}.</strong>
+                <span>${opt.text}</span>
+                ${isCorrect ? '<span style="margin-left: auto; font-size: 0.78rem; font-weight: 800; color: #059669;">✓ Correct</span>' : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function exportCurrentSectionExcel() {
+  const currentSec = QA_SECTIONS_LIST.find(s => s.id === currentActiveSectionKey) || QA_SECTIONS_LIST[0];
+  const normSec = currentSec.normName;
+  const records = getStoredRecords();
+
+  const sectionEmps = EMPLOYEES.filter(emp => normalizeSectionName(emp.section) === normSec);
+
+  if (sectionEmps.length === 0) {
+    showToast(`No employee records available for ${currentSec.title}`);
+    return;
+  }
+
+  // Sheet 1: Employees & Marks
+  const empSheetData = sectionEmps.map((emp, index) => {
+    const rec = records[emp.empNo] || {};
+    return {
+      "S.No": index + 1,
+      "Employee No": emp.empNo,
+      "Name": emp.name,
+      "Department": emp.dept,
+      "Section": emp.section,
+      "Skill Level": emp.currentLevel || "I",
+      "Qualification": emp.qualification || "",
+      "DOJ": emp.doj || "",
+      "Experience": emp.yearExp || "",
+      "U Mark": rec.uMark !== undefined ? rec.uMark : 0,
+      "L Mark": rec.lMark !== undefined ? rec.lMark : 0,
+      "O Mark": rec.oMark !== undefined ? rec.oMark : 0,
+      "Total Mark": rec.totalMark !== undefined ? rec.totalMark : 0,
+      "Percentage": rec.markPct !== undefined ? rec.markPct + "%" : "0%",
+      "Tab Switches": rec.tabSwitchCount || 0,
+      "Status": rec.status || (rec.inProgress ? "In Progress" : "Not Started"),
+      "Attempt Date": rec.attemptDate || ""
+    };
+  });
+
+  // Sheet 2: Section Questions Bank
+  const allSectionQs = [];
+  ['L', 'U', 'O'].forEach(lvl => {
+    (QUESTION_BANK[lvl] || []).forEach(q => {
+      if (normalizeSectionName(q.section) === normSec) {
+        allSectionQs.push(q);
+      }
+    });
+  });
+
+  const qSheetData = allSectionQs.map((q, idx) => ({
+    "Q.No": idx + 1,
+    "Question ID": q.id,
+    "Level": q.level,
+    "Section": q.section,
+    "Category": q.category || "General",
+    "Question Text": q.question,
+    "Option A": (q.options && q.options[0]) ? q.options[0].text : "",
+    "Option B": (q.options && q.options[1]) ? q.options[1].text : "",
+    "Option C": (q.options && q.options[2]) ? q.options[2].text : "",
+    "Option D": (q.options && q.options[3]) ? q.options[3].text : "",
+    "Correct Answer": q.correctAnswer
+  }));
+
+  const workbook = XLSX.utils.book_new();
+  const wsEmps = XLSX.utils.json_to_sheet(empSheetData);
+  XLSX.utils.book_append_sheet(workbook, wsEmps, "Employees & Marks");
+
+  if (qSheetData.length > 0) {
+    const wsQs = XLSX.utils.json_to_sheet(qSheetData);
+    XLSX.utils.book_append_sheet(workbook, wsQs, "Section Question Bank");
+  }
+
+  const cleanTitle = currentSec.title.replace(/[^a-zA-Z0-9]/g, '_');
+  XLSX.writeFile(workbook, `Yokohama_${cleanTitle}_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+  showToast(`${currentSec.title} Excel report downloaded successfully!`);
+}
+

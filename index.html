@@ -337,6 +337,11 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
             </span> Manage Questions
           </a>
+          <a class="sidebar-link" id="navCtrlSections" onclick="navigateTo('/control-center/sections')">
+            <span class="sidebar-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+            </span> QA Sections
+          </a>
           <a class="sidebar-link" id="navCtrlExams" onclick="navigateTo('/control-center/exams')">
             <span class="sidebar-icon">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -573,6 +578,131 @@
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+
+          <!-- SUB-VIEW: QA Sections Explorer (/control-center/sections) -->
+          <div class="control-subview" id="ctrlSubSections" style="display: none;">
+            <div class="admin-header">
+              <div>
+                <div class="admin-title">QA Sections &amp; Department Explorer</div>
+                <div style="font-size: 0.85rem; color: var(--text-muted);">
+                  Select any section to inspect its Employee Directory, Skill Level Marks, Question Bank, and Performance Analytics
+                </div>
+              </div>
+              <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button class="btn-primary" style="padding: 8px 16px; font-size: 0.88rem; background: #059669; border-color: #059669; display: flex; align-items: center; gap: 8px;" onclick="exportCurrentSectionExcel()">
+                  <span>📥 Export Section Excel (.xlsx)</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Section Selector Card Grid -->
+            <div class="section-selector-container" style="margin-bottom: 20px;">
+              <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
+                <span>🏭 Choose Quality Control Section:</span>
+              </div>
+              <div class="section-pills-grid" id="sectionPillsGrid">
+                <!-- Dynamically rendered section cards -->
+              </div>
+            </div>
+
+            <!-- Active Section Main Card -->
+            <div class="table-card" style="padding: 24px; border-radius: var(--radius-lg); box-shadow: var(--shadow-md);">
+              
+              <!-- Active Section Top Banner -->
+              <div class="section-banner-header" id="sectionBannerHeader" style="margin-bottom: 20px;">
+                <!-- Dynamic Header details -->
+              </div>
+
+              <!-- Section KPI Stats -->
+              <div class="stats-grid" id="sectionStatsGrid" style="margin-bottom: 24px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));">
+                <!-- Dynamic KPIs -->
+              </div>
+
+              <!-- Section Inner Tabs Navigation -->
+              <div class="section-nav-tabs" style="display: flex; gap: 8px; border-bottom: 2px solid var(--border-color); padding-bottom: 8px; margin-bottom: 20px; flex-wrap: wrap;">
+                <button class="sec-tab-btn active" id="secTabBtnEmployees" onclick="switchSectionTab('employees')">
+                  👥 Section Employees &amp; Marks (<span id="secEmpCountBadge">0</span>)
+                </button>
+                <button class="sec-tab-btn" id="secTabBtnSkills" onclick="switchSectionTab('skills')">
+                  📊 Skill Level Marks Breakdown
+                </button>
+                <button class="sec-tab-btn" id="secTabBtnQuestions" onclick="switchSectionTab('questions')">
+                  ❓ Section Question Bank (<span id="secQCountBadge">0</span>)
+                </button>
+              </div>
+
+              <!-- TAB 1: Section Employees Table -->
+              <div class="sec-tab-pane" id="secPaneEmployees">
+                <div class="table-header-tools" style="margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                  <div class="search-box" style="flex: 1; max-width: 360px;">
+                    <input type="text" id="secEmpSearchInput" class="form-control" placeholder="Search employee by ID, Name or Skill..." onkeyup="filterSectionEmployees()">
+                  </div>
+                  <div style="font-size: 0.85rem; color: var(--text-muted);">
+                    Showing <strong id="secEmpTableCount">0</strong> employees in this section
+                  </div>
+                </div>
+                <div class="data-table-wrapper">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Emp No</th>
+                        <th>Name</th>
+                        <th>Skill Level</th>
+                        <th>Qualification</th>
+                        <th>DOJ / Exp</th>
+                        <th>U Mark</th>
+                        <th>L Mark</th>
+                        <th>O Mark</th>
+                        <th>Total Mark</th>
+                        <th>Mark %</th>
+                        <th>Status</th>
+                        <th>Attempt Date</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="secEmpTableBody">
+                      <!-- Dynamic rows -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- TAB 2: Section Skill Level Marks Breakdown -->
+              <div class="sec-tab-pane" id="secPaneSkills" style="display: none;">
+                <div id="secSkillsBreakdownContainer">
+                  <!-- Dynamic skill level cards -->
+                </div>
+              </div>
+
+              <!-- TAB 3: Section Question Bank -->
+              <div class="sec-tab-pane" id="secPaneQuestions" style="display: none;">
+                <div class="table-header-tools" style="flex-wrap: wrap; gap: 10px; margin-bottom: 14px; display: flex; align-items: center;">
+                  <div class="search-box" style="flex: 1; min-width: 200px;">
+                    <input type="text" id="secQSearchInput" class="form-control" placeholder="Search question text or category..." onkeyup="filterSectionQuestions()">
+                  </div>
+                  <select id="secQLevelSelect" class="form-control" style="width: 140px;" onchange="filterSectionQuestions()">
+                    <option value="ALL">All Levels (L, U, O)</option>
+                    <option value="L">L Level (Basic)</option>
+                    <option value="U">U Level (Skilled)</option>
+                    <option value="O">O Level (Expert)</option>
+                  </select>
+                  <select id="secQCategorySelect" class="form-control" style="width: 170px;" onchange="filterSectionQuestions()">
+                    <option value="ALL">All Categories</option>
+                    <option value="Safety">Safety &amp; Env</option>
+                    <option value="CI &amp; TPM">CI &amp; TPM</option>
+                    <option value="Technical">QA Technical</option>
+                  </select>
+                  <div style="font-size: 0.85rem; color: var(--text-muted); align-self: center;">
+                    Total <strong id="secQFilteredCount">0</strong> questions
+                  </div>
+                </div>
+                <div id="secQuestionsListContainer" style="display: flex; flex-direction: column; gap: 12px;">
+                  <!-- Dynamic questions -->
+                </div>
+              </div>
+
             </div>
           </div>
 
