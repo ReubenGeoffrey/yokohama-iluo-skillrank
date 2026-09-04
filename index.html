@@ -344,6 +344,11 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
             </span> Results Database
           </a>
+          <a class="sidebar-link" id="navCtrlTraining" onclick="navigateTo('/control-center/training')">
+            <span class="sidebar-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+            </span> Training Requirement
+          </a>
           <a class="sidebar-link" id="navCtrlReports" onclick="navigateTo('/control-center/reports')">
             <span class="sidebar-icon">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
@@ -922,6 +927,140 @@
                 </div>
               </div>
 
+            </div>
+          </div>
+
+          <!-- SUB-VIEW: Training Requirement (/control-center/training) -->
+          <div class="control-subview" id="ctrlSubTraining" style="display: none;">
+            <div class="admin-header">
+              <div>
+                <div class="admin-title">Training Requirement &amp; Skill Gap Matrix</div>
+                <div style="font-size: 0.85rem; color: var(--text-muted);">
+                  Automated Training Needs Identification (TNI), Skill Progression Roadmaps, and Retraining Schedules based on Assessment Performance
+                </div>
+              </div>
+              <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button class="btn-primary" style="padding: 8px 16px; font-size: 0.88rem; background: #059669; border-color: #059669; display: flex; align-items: center; gap: 8px;" onclick="exportTrainingPlanExcel()">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  <span>Export Training Plan (.xlsx)</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Training KPI Summary Cards -->
+            <div class="metrics-grid" style="margin-bottom: 24px;">
+              <div class="metric-card">
+                <div class="metric-header">
+                  <span class="metric-title">Identified Training Needs</span>
+                  <span class="metric-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-3-3.87"/><path d="M9 21v-2a4 4 0 0 1 3-3.87"/><circle cx="9" cy="7" r="4"/></svg>
+                  </span>
+                </div>
+                <div class="metric-value" id="trainingMetricTotal">0</div>
+                <div class="metric-trend">Employees requiring skill or refresher training</div>
+              </div>
+
+              <div class="metric-card">
+                <div class="metric-header">
+                  <span class="metric-title">Critical Priority (Retest)</span>
+                  <span class="metric-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  </span>
+                </div>
+                <div class="metric-value" id="trainingMetricCritical" style="color: #DC2626;">0</div>
+                <div class="metric-trend">Scored &lt;70% or exam violations</div>
+              </div>
+
+              <div class="metric-card">
+                <div class="metric-header">
+                  <span class="metric-title">Skill Progression Candidates</span>
+                  <span class="metric-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                  </span>
+                </div>
+                <div class="metric-value" id="trainingMetricProgression" style="color: #0284C7;">0</div>
+                <div class="metric-trend">Eligible for I &rarr; L &rarr; U &rarr; O level advancement</div>
+              </div>
+
+              <div class="metric-card">
+                <div class="metric-header">
+                  <span class="metric-title">Scheduled / In Training</span>
+                  <span class="metric-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  </span>
+                </div>
+                <div class="metric-value" id="trainingMetricScheduled" style="color: #059669;">0</div>
+                <div class="metric-trend">Sessions assigned or underway</div>
+              </div>
+            </div>
+
+            <!-- Filter & Search Toolbar -->
+            <div class="table-card" style="padding: 16px 20px; margin-bottom: 20px;">
+              <div style="display: flex; gap: 14px; flex-wrap: wrap; align-items: center; justify-content: space-between;">
+                <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center; flex: 1;">
+                  <div style="min-width: 220px; flex: 1;">
+                    <input type="text" id="trainingSearchInput" class="form-control" placeholder="Search by employee name or ID..." oninput="filterTrainingRequirements()">
+                  </div>
+                  <div style="min-width: 180px;">
+                    <select id="trainingSectionFilter" class="form-control" onchange="filterTrainingRequirements()">
+                      <option value="ALL">All Sections (8)</option>
+                      <option value="warehouse qa">Warehouse QA</option>
+                      <option value="final finish qa">Final Finish QA</option>
+                      <option value="tire building qa">Tire Building QA</option>
+                      <option value="tire curing qa">Tire Curing QA</option>
+                      <option value="solid tire qa">Solid Tire QA</option>
+                      <option value="final finish rro & alt qa">Final Finish RRO &amp; ALT QA</option>
+                      <option value="preparatory qa">Preparatory QA</option>
+                      <option value="fid inspector qa">FID Inspector QA</option>
+                    </select>
+                  </div>
+                  <div style="min-width: 160px;">
+                    <select id="trainingPriorityFilter" class="form-control" onchange="filterTrainingRequirements()">
+                      <option value="ALL">All Priorities</option>
+                      <option value="CRITICAL">Critical (Failed/Retest)</option>
+                      <option value="PROGRESSION">Skill Progression</option>
+                      <option value="REFRESHER">Periodic Refresher</option>
+                    </select>
+                  </div>
+                  <div style="min-width: 150px;">
+                    <select id="trainingStatusFilter" class="form-control" onchange="filterTrainingRequirements()">
+                      <option value="ALL">All Statuses</option>
+                      <option value="PENDING">Pending Schedule</option>
+                      <option value="SCHEDULED">Scheduled</option>
+                      <option value="COMPLETED">Completed</option>
+                    </select>
+                  </div>
+                </div>
+                <div style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600;">
+                  Showing <span id="trainingRowCount" style="color: var(--primary-dark); font-weight: 700;">0</span> records
+                </div>
+              </div>
+            </div>
+
+            <!-- Training Requirement Data Table -->
+            <div class="table-card">
+              <div class="data-table-wrapper">
+                <table class="data-table" id="trainingTable">
+                  <thead>
+                    <tr>
+                      <th style="width: 50px;">S.No</th>
+                      <th style="width: 90px;">Emp ID</th>
+                      <th>Employee Name</th>
+                      <th>Section</th>
+                      <th style="width: 80px;">Current</th>
+                      <th style="width: 90px;">Target</th>
+                      <th>Assessment Finding</th>
+                      <th>Recommended Training Module</th>
+                      <th style="width: 110px;">Priority</th>
+                      <th style="width: 110px;">Status</th>
+                      <th style="width: 150px; text-align: center;">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="trainingTableBody">
+                    <!-- Dynamic Rows -->
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 

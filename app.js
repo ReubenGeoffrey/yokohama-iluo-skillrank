@@ -1152,6 +1152,7 @@ function showControlCenterSubView(subName) {
 
   // Normalize alias
   if (subName === 'export') subName = 'reports';
+  if (subName === 'training-requirements' || subName === 'training-requirement') subName = 'training';
 
   // Highlight active sidebar link
   document.querySelectorAll('.sidebar-link').forEach(link => link.classList.remove('active'));
@@ -1170,6 +1171,7 @@ function showControlCenterSubView(subName) {
   else if (subName === 'employees') renderEmployeeDirectory();
   else if (subName === 'results') renderAdminTable('');
   else if (subName === 'reports') renderReportsCenter();
+  else if (subName === 'training') renderTrainingRequirements();
 }
 
 function capitalize(str) {
@@ -2676,6 +2678,341 @@ function exportCurrentSectionExcel(targetSecKey) {
     console.error('Section export error:', err);
     exportDataToCSV(empSheetData, `${filename}.csv`);
     showToast(`${currentSec.title} downloaded as CSV report.`);
+  }
+}
+
+// ---------------------------------------------------------------------
+// TRAINING REQUIREMENTS & SKILL GAP MATRIX
+// ---------------------------------------------------------------------
+const STORAGE_KEY_TRAINING = 'yokohama_training_status_v1';
+
+function getStoredTrainingRecords() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY_TRAINING)) || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveTrainingRecord(empNo, data) {
+  const all = getStoredTrainingRecords();
+  all[empNo] = { ...(all[empNo] || {}), ...data, updatedAt: new Date().toISOString() };
+  localStorage.setItem(STORAGE_KEY_TRAINING, JSON.stringify(all));
+}
+
+const SECTION_TRAINING_MODULES = {
+  'warehouse qa': [
+    'WH-QA-01: Finished Goods FIFO & Barcode Scanning SOP',
+    'WH-QA-02: Visual Defect Segregation & Loading Inspection',
+    'WH-QA-03: Material Handling Safety & Damage Control'
+  ],
+  'final finish qa': [
+    'FF-QA-01: Visual Defect Classification & Critical Defect Standards',
+    'FF-QA-02: Casing, Sidewall & Tread Surface Inspection SOP',
+    'FF-QA-03: Barcode Verification & Scrap Segregation Control'
+  ],
+  'tire building qa': [
+    'TB-QA-01: Green Tire Dimension Checks & Cord Angle Alignment',
+    'TB-QA-02: Carcass Splice & Turn-up Inspection Protocols',
+    'TB-QA-03: Component Symmetry & Bead Placement Verification'
+  ],
+  'tire curing qa': [
+    'TC-QA-01: Bladder Inspection & Cure Temperature Monitoring',
+    'TC-QA-02: Mold Venting, Segment Alignment & Pressure Specs',
+    'TC-QA-03: Post-Cure Visual Audit & Blister/Under-cure Defect Prevention'
+  ],
+  'solid tire qa': [
+    'ST-QA-01: Solid Tire Core Bonding & Steel Ring Alignment',
+    'ST-QA-02: Base / Tread Compound Uniformity & Visual QA Standard',
+    'ST-QA-03: Post-Mold Cooling, Flash Trimming & Inspection Checklist'
+  ],
+  'final finish rro & alt qa': [
+    'RA-QA-01: Radial Runout (RRO) & Lateral Runout Measurement Standards',
+    'RA-QA-02: Dynamic Balance & Force Variation Machine Calibration',
+    'RA-QA-03: Accelerated Life Testing (ALT) Rig Protocols & Diagnostics'
+  ],
+  'preparatory qa': [
+    'PR-QA-01: Raw Compound Mooney Viscosity & Rheometer Protocols',
+    'PR-QA-02: Calender Fabric & Steel Cord Caliper Inspection',
+    'PR-QA-03: Extruder Profile Dimensional Verification & Weight Control'
+  ],
+  'fid inspector qa': [
+    'FD-QA-01: Final Inspection Defect Standard & Audit Log Documentation',
+    'FD-QA-02: Customer Delivery Release Checklists & Quality Sign-Off',
+    'FD-QA-03: Plant PDI Audit & Non-Conformance Escalation SOP'
+  ]
+};
+
+function computeEmployeeTrainingNeed(emp, rec, trainingRec) {
+  const normSec = normalizeSectionName(emp.section);
+  const modules = SECTION_TRAINING_MODULES[normSec] || [
+    'QA-GEN-01: Quality SOP Standard Work & Visual Inspection',
+    'QA-GEN-02: Plant 5S, Safety & Defect Categorization'
+  ];
+
+  const currLevel = emp.currentLevel || 'I';
+  const status = trainingRec && trainingRec.status ? trainingRec.status : 'PENDING';
+  const scheduledDate = trainingRec && trainingRec.date ? trainingRec.date : '';
+
+  let priority = 'PROGRESSION';
+  let targetLevel = 'L Level';
+  let finding = '';
+  let assignedModule = modules[0];
+
+  if (rec && (rec.status === 'Failed' || (rec.markPct !== undefined && rec.markPct < 70) || (rec.tabSwitchCount && rec.tabSwitchCount > 3))) {
+    priority = 'CRITICAL';
+    targetLevel = `Retest (${rec.targetLevel || currLevel})`;
+    finding = `Scored ${rec.markPct !== undefined ? rec.markPct + '%' : 'Failed'} (<70% standard) - Needs Refresher & Retest`;
+    assignedModule = modules[1] || modules[0];
+  } else if (rec && (rec.status === 'Passed' || (rec.markPct !== undefined && rec.markPct >= 70))) {
+    priority = 'PROGRESSION';
+    if (currLevel === 'I') targetLevel = 'L Level (Basic Operator)';
+    else if (currLevel === 'L') targetLevel = 'U Level (Independent Skilled)';
+    else if (currLevel === 'U') targetLevel = 'O Level (Supervisor / Evaluator)';
+    else targetLevel = 'Master Trainer (ILUO Lead)';
+
+    finding = `Passed ${rec.targetLevel || currLevel} with ${rec.markPct}% - Eligible for Next Level Advancement`;
+    assignedModule = modules[2] || modules[0];
+  } else {
+    // Not yet attempted
+    if (currLevel === 'I') {
+      priority = 'PROGRESSION';
+      targetLevel = 'L Level (Basic)';
+      finding = 'Learner (I Level) - Foundational Operator Qualification Training required';
+      assignedModule = modules[0];
+    } else if (currLevel === 'L') {
+      priority = 'PROGRESSION';
+      targetLevel = 'U Level (Independent)';
+      finding = 'Supervised Operator (L Level) - Eligible for Independent Skilled qualification';
+      assignedModule = modules[1] || modules[0];
+    } else if (currLevel === 'U') {
+      priority = 'PROGRESSION';
+      targetLevel = 'O Level (Evaluator)';
+      finding = 'Skilled Operator (U Level) - Training for Evaluator / Trainer certification';
+      assignedModule = modules[2] || modules[0];
+    } else {
+      priority = 'REFRESHER';
+      targetLevel = 'O Level (Master)';
+      finding = 'Expert (O Level) - Annual QA Calibration & Defect Analysis refresher';
+      assignedModule = modules[0];
+    }
+  }
+
+  return {
+    empNo: emp.empNo,
+    name: emp.name,
+    section: emp.section,
+    normSection: normSec,
+    currentLevel: currLevel,
+    targetLevel,
+    priority, // CRITICAL | PROGRESSION | REFRESHER
+    finding,
+    assignedModule,
+    status, // PENDING | SCHEDULED | COMPLETED
+    scheduledDate
+  };
+}
+
+function getAllTrainingDataset() {
+  const records = getStoredRecords();
+  const trainingRecords = getStoredTrainingRecords();
+
+  return EMPLOYEES.map(emp => {
+    const rec = records[emp.empNo];
+    const trainingRec = trainingRecords[emp.empNo];
+    return computeEmployeeTrainingNeed(emp, rec, trainingRec);
+  });
+}
+
+function renderTrainingRequirements() {
+  const dataset = getAllTrainingDataset();
+
+  // Compute Metrics
+  let criticalCount = 0;
+  let progressionCount = 0;
+  let scheduledCount = 0;
+
+  dataset.forEach(item => {
+    if (item.priority === 'CRITICAL') criticalCount++;
+    if (item.priority === 'PROGRESSION') progressionCount++;
+    if (item.status === 'SCHEDULED' || item.status === 'COMPLETED') scheduledCount++;
+  });
+
+  const elTotal = document.getElementById('trainingMetricTotal');
+  if (elTotal) elTotal.innerText = dataset.length;
+
+  const elCrit = document.getElementById('trainingMetricCritical');
+  if (elCrit) elCrit.innerText = criticalCount;
+
+  const elProg = document.getElementById('trainingMetricProgression');
+  if (elProg) elProg.innerText = progressionCount;
+
+  const elSched = document.getElementById('trainingMetricScheduled');
+  if (elSched) elSched.innerText = scheduledCount;
+
+  filterTrainingRequirements();
+}
+
+function filterTrainingRequirements() {
+  const searchInput = document.getElementById('trainingSearchInput');
+  const secFilter = document.getElementById('trainingSectionFilter');
+  const prioFilter = document.getElementById('trainingPriorityFilter');
+  const statusFilter = document.getElementById('trainingStatusFilter');
+  const tbody = document.getElementById('trainingTableBody');
+  const countEl = document.getElementById('trainingRowCount');
+
+  if (!tbody) return;
+
+  const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+  const selectedSec = secFilter ? secFilter.value : 'ALL';
+  const selectedPrio = prioFilter ? prioFilter.value : 'ALL';
+  const selectedStatus = statusFilter ? statusFilter.value : 'ALL';
+
+  const dataset = getAllTrainingDataset();
+
+  const filtered = dataset.filter(item => {
+    if (selectedSec !== 'ALL' && item.normSection !== selectedSec) return false;
+    if (selectedPrio !== 'ALL' && item.priority !== selectedPrio) return false;
+    if (selectedStatus !== 'ALL' && item.status !== selectedStatus) return false;
+
+    if (query) {
+      const matchName = item.name.toLowerCase().includes(query);
+      const matchId = item.empNo.toLowerCase().includes(query);
+      const matchSec = item.section.toLowerCase().includes(query);
+      const matchMod = item.assignedModule.toLowerCase().includes(query);
+      return matchName || matchId || matchSec || matchMod;
+    }
+    return true;
+  });
+
+  if (countEl) countEl.innerText = filtered.length;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="11" style="text-align: center; padding: 36px; color: var(--text-muted);">
+          No training requirement records found matching the active filters.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map((item, index) => {
+    const prioBadge = item.priority === 'CRITICAL'
+      ? `<span style="background: #FEE2E2; color: #DC2626; border: 1px solid #FCA5A5; padding: 3px 8px; border-radius: 4px; font-weight: 800; font-size: 0.72rem; letter-spacing: 0.5px;">CRITICAL</span>`
+      : item.priority === 'PROGRESSION'
+      ? `<span style="background: #EFF6FF; color: #0284C7; border: 1px solid #BFDBFE; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 0.72rem;">PROGRESSION</span>`
+      : `<span style="background: #F3E8FF; color: #7C3AED; border: 1px solid #DDD6FE; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 0.72rem;">REFRESHER</span>`;
+
+    const statusBadge = item.status === 'COMPLETED'
+      ? `<span style="background: #DCFCE7; color: #166534; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 0.74rem;">Completed</span>`
+      : item.status === 'SCHEDULED'
+      ? `<span style="background: #DBEAFE; color: #1E40AF; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 0.74rem;">Scheduled</span>`
+      : `<span style="background: #FEF3C7; color: #D97706; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 0.74rem;">Pending</span>`;
+
+    let actionHtml = '';
+    if (item.status === 'PENDING') {
+      actionHtml = `
+        <button class="btn-primary" style="padding: 4px 10px; font-size: 0.76rem; background: #0284C7; border-color: #0284C7;" onclick="toggleTrainingSchedule('${item.empNo}')">
+          Schedule
+        </button>
+      `;
+    } else if (item.status === 'SCHEDULED') {
+      actionHtml = `
+        <div style="display: flex; gap: 4px; justify-content: center;">
+          <button class="btn-primary" style="padding: 4px 8px; font-size: 0.74rem; background: #059669; border-color: #059669;" onclick="toggleTrainingComplete('${item.empNo}')">
+            Done
+          </button>
+          <button class="btn-secondary" style="padding: 4px 6px; font-size: 0.74rem;" onclick="resetTrainingStatus('${item.empNo}')">
+            Cancel
+          </button>
+        </div>
+      `;
+    } else {
+      actionHtml = `
+        <button class="btn-secondary" style="padding: 4px 8px; font-size: 0.74rem;" onclick="resetTrainingStatus('${item.empNo}')">
+          Re-open
+        </button>
+      `;
+    }
+
+    return `
+      <tr>
+        <td style="font-weight: 700; color: var(--text-muted);">${index + 1}</td>
+        <td><strong style="color: #005B9E; font-family: monospace;">${item.empNo}</strong></td>
+        <td><strong>${item.name}</strong></td>
+        <td><span style="font-size: 0.85rem; color: #475569;">${item.section}</span></td>
+        <td>
+          <span class="skill-level-badge level-${item.currentLevel}" style="font-size: 0.76rem; padding: 2px 8px;">
+            ${item.currentLevel} Level
+          </span>
+        </td>
+        <td>
+          <strong style="color: #0284C7; font-size: 0.82rem;">${item.targetLevel}</strong>
+        </td>
+        <td style="font-size: 0.82rem; color: #334155;">${item.finding}</td>
+        <td style="font-size: 0.82rem; font-weight: 600; color: #0F172A;">${item.assignedModule}</td>
+        <td>${prioBadge}</td>
+        <td>${statusBadge}</td>
+        <td style="text-align: center;">${actionHtml}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function toggleTrainingSchedule(empNo) {
+  const scheduledDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  saveTrainingRecord(empNo, { status: 'SCHEDULED', date: scheduledDate });
+  showToast(`Training scheduled for Employee ${empNo} (Target Date: ${scheduledDate})`);
+  renderTrainingRequirements();
+}
+
+function toggleTrainingComplete(empNo) {
+  saveTrainingRecord(empNo, { status: 'COMPLETED', completedAt: new Date().toISOString().split('T')[0] });
+  showToast(`Training marked COMPLETED for Employee ${empNo}`);
+  renderTrainingRequirements();
+}
+
+function resetTrainingStatus(empNo) {
+  saveTrainingRecord(empNo, { status: 'PENDING', date: '' });
+  showToast(`Training status reset to PENDING for Employee ${empNo}`);
+  renderTrainingRequirements();
+}
+
+function exportTrainingPlanExcel() {
+  const dataset = getAllTrainingDataset();
+  const exportData = dataset.map((item, idx) => ({
+    "S.No": idx + 1,
+    "Employee No": item.empNo,
+    "Employee Name": item.name,
+    "Section": item.section,
+    "Current Skill Level": item.currentLevel,
+    "Target Skill Level": item.targetLevel,
+    "Assessment Finding": item.finding,
+    "Recommended Training Module": item.assignedModule,
+    "Training Priority": item.priority,
+    "Schedule Status": item.status,
+    "Scheduled Target Date": item.scheduledDate || ""
+  }));
+
+  const filename = `Yokohama_ILUO_Training_Requirements_Plan_${new Date().toISOString().split('T')[0]}`;
+
+  try {
+    if (typeof XLSX !== 'undefined') {
+      const workbook = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      XLSX.utils.book_append_sheet(workbook, ws, "Training Requirements Plan");
+      XLSX.writeFile(workbook, `${filename}.xlsx`);
+      showToast('Training Plan Excel (.xlsx) downloaded successfully!');
+    } else {
+      exportDataToCSV(exportData, `${filename}.csv`);
+      showToast('Downloaded Training Plan as CSV.');
+    }
+  } catch (err) {
+    console.error('Training plan export error:', err);
+    exportDataToCSV(exportData, `${filename}.csv`);
+    showToast('Downloaded Training Plan as CSV.');
   }
 }
 
