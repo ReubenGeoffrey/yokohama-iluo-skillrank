@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 5000;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'yokohama_iluo_qa_secret_2026';
 const AUTHORIZED_ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'reubengeoffrey16@gmail.com').toLowerCase();
 

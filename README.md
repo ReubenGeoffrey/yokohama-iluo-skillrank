@@ -149,7 +149,7 @@ npm install
 
 ### 2. Configure Environment (`.env`)
 ```env
-PORT=8080
+PORT=5000
 SESSION_SECRET=yokohama_iluo_qa_secret_2026
 ADMIN_EMAIL=admin@company.com
 
