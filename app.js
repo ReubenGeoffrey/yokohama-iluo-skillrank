@@ -1962,14 +1962,14 @@ function handleDocxUpload(event) {
 // QA SECTIONS & DEPARTMENT EXPLORER (/control-center/sections)
 // ---------------------------------------------------------------------
 const QA_SECTIONS_LIST = [
-  { id: 'warehouse', name: 'Ware House QA', normName: 'warehouse qa', icon: '📦', title: 'Warehouse QA' },
-  { id: 'final_finish', name: 'Final Finish QA', normName: 'final finish qa', icon: '🏁', title: 'Final Finish QA' },
-  { id: 'tire_building', name: 'Tire building QA', normName: 'tire building qa', icon: '🏗️', title: 'Tire Building QA' },
-  { id: 'tire_curing', name: 'Tire curing QA', normName: 'tire curing qa', icon: '🔥', title: 'Tire Curing QA' },
-  { id: 'solid_tire', name: 'Solid Tire QA', normName: 'solid tire qa', icon: '🛞', title: 'Solid Tire QA' },
-  { id: 'rro_alt', name: 'Final Finish RRO & ALT QA', normName: 'final finish rro & alt qa', icon: '⚙️', title: 'Final Finish RRO & ALT QA' },
-  { id: 'preparatory', name: 'Preparatory QA', normName: 'preparatory qa', icon: '🧪', title: 'Preparatory QA' },
-  { id: 'fid_inspector', name: 'FID Inspector QA', normName: 'fid inspector qa', icon: '🔍', title: 'FID Inspector QA' }
+  { id: 'warehouse', name: 'Ware House QA', normName: 'warehouse qa', code: 'WH', title: 'Warehouse QA' },
+  { id: 'final_finish', name: 'Final Finish QA', normName: 'final finish qa', code: 'FF', title: 'Final Finish QA' },
+  { id: 'tire_building', name: 'Tire building QA', normName: 'tire building qa', code: 'TB', title: 'Tire Building QA' },
+  { id: 'tire_curing', name: 'Tire curing QA', normName: 'tire curing qa', code: 'TC', title: 'Tire Curing QA' },
+  { id: 'solid_tire', name: 'Solid Tire QA', normName: 'solid tire qa', code: 'ST', title: 'Solid Tire QA' },
+  { id: 'rro_alt', name: 'Final Finish RRO & ALT QA', normName: 'final finish rro & alt qa', code: 'RA', title: 'Final Finish RRO & ALT QA' },
+  { id: 'preparatory', name: 'Preparatory QA', normName: 'preparatory qa', code: 'PR', title: 'Preparatory QA' },
+  { id: 'fid_inspector', name: 'FID Inspector QA', normName: 'fid inspector qa', code: 'FD', title: 'FID Inspector QA' }
 ];
 
 let currentActiveSectionKey = 'warehouse'; // Default to Ware House QA
@@ -2026,10 +2026,10 @@ function renderSectionsExplorer(targetSecKey) {
       const isActive = sec.id === currentSec.id;
       return `
         <div class="sec-pill-card ${isActive ? 'active' : ''}" onclick="selectExplorerSection('${sec.id}')">
-          <div class="sec-pill-icon">${sec.icon}</div>
+          <div class="sec-pill-icon" style="font-weight: 800; font-size: 0.82rem;">${sec.code}</div>
           <div class="sec-pill-info">
             <div class="sec-pill-title">${sec.title}</div>
-            <div class="sec-pill-meta">👥 ${empCount} Emps &bull; ❓ ${qCount} Qs</div>
+            <div class="sec-pill-meta">${empCount} Employees &bull; ${qCount} Questions</div>
           </div>
         </div>
       `;
@@ -2042,8 +2042,8 @@ function renderSectionsExplorer(targetSecKey) {
     bannerHeader.innerHTML = `
       <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;">
         <div style="display: flex; align-items: center; gap: 14px;">
-          <div style="font-size: 2rem; background: #EFF6FF; border: 1px solid #BFDBFE; width: 54px; height: 54px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
-            ${currentSec.icon}
+          <div style="font-size: 1.1rem; font-weight: 800; background: #EFF6FF; color: var(--primary-color); border: 1.5px solid #BFDBFE; width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+            ${currentSec.code}
           </div>
           <div>
             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
@@ -2056,7 +2056,7 @@ function renderSectionsExplorer(targetSecKey) {
           </div>
         </div>
         <button class="btn-primary" style="padding: 8px 16px; font-size: 0.85rem; background: #059669; border-color: #059669; display: flex; align-items: center; gap: 6px;" onclick="exportCurrentSectionExcel()">
-          <span>📊 Download ${currentSec.title} Excel</span>
+          <span>Download ${currentSec.title} Excel</span>
         </button>
       </div>
     `;
@@ -2182,8 +2182,8 @@ function filterSectionEmployees() {
     const hasRecord = rec.isCompleted || rec.inProgress;
     const actionBtn = hasRecord
       ? `<div style="display: flex; gap: 6px; flex-wrap: wrap;">
-           <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #0284C7; border-color: #0284C7;" onclick="downloadEmployeePDF('${emp.empNo}')">📄 PDF</button>
-           <button class="btn-reset" style="padding: 3px 8px; font-size: 0.75rem;" onclick="confirmAndResetExam('${emp.empNo}', '${emp.name.replace(/'/g, "\\'")}')">🔄 Reset</button>
+           <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #0284C7; border-color: #0284C7;" onclick="downloadEmployeePDF('${emp.empNo}')">PDF</button>
+           <button class="btn-reset" style="padding: 3px 8px; font-size: 0.75rem;" onclick="confirmAndResetExam('${emp.empNo}', '${emp.name.replace(/'/g, "\\'")}')">Reset</button>
          </div>`
       : `<span style="color: #CBD5E1; font-size: 0.78rem;">No attempt</span>`;
 
@@ -2358,7 +2358,7 @@ function filterSectionQuestions() {
               <div class="sec-q-option-item ${isCorrect ? 'correct-answer' : ''}">
                 <strong style="min-width: 18px;">${opt.key}.</strong>
                 <span>${opt.text}</span>
-                ${isCorrect ? '<span style="margin-left: auto; font-size: 0.78rem; font-weight: 800; color: #059669;">✓ Correct</span>' : ''}
+                ${isCorrect ? '<span style="margin-left: auto; font-size: 0.78rem; font-weight: 800; color: #059669;">Correct</span>' : ''}
               </div>
             `;
           }).join('')}
