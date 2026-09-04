@@ -218,6 +218,51 @@ app.post('/api/auth/admin/send-otp', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------
+// API ROUTE: POST /api/auth/admin/login (Testing Mode: Username & Password)
+// ---------------------------------------------------------------------
+app.post('/api/auth/admin/login', async (req, res) => {
+  const username = (req.body.username || '').trim();
+  const password = (req.body.password || '').trim();
+
+  if (username === 'admin' && password === 'admin123') {
+    const sessionToken = crypto.randomBytes(32).toString('hex');
+    const adminName = 'Administrator';
+
+    const sessionData = {
+      email: 'admin@yokohama.com',
+      name: adminName,
+      role: 'SUPERADMIN',
+      createdAt: new Date().toISOString()
+    };
+
+    await setCloudSession(sessionToken, sessionData);
+
+    res.cookie('admin_session', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 8 * 60 * 60 * 1000,
+      signed: true
+    });
+
+    return res.json({
+      success: true,
+      message: 'Admin authenticated successfully',
+      admin: {
+        email: 'admin@yokohama.com',
+        name: adminName,
+        role: 'SUPERADMIN'
+      }
+    });
+  }
+
+  return res.status(401).json({
+    success: false,
+    message: 'Invalid credentials. Testing username: admin, password: admin123'
+  });
+});
+
+// ---------------------------------------------------------------------
 // API ROUTE 2: POST /api/auth/admin/verify-otp
 // ---------------------------------------------------------------------
 app.post('/api/auth/admin/verify-otp', async (req, res) => {

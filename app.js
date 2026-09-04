@@ -474,6 +474,70 @@ function startOtpCountdownTimer() {
     }
   }, 1000);
 }
+// ---------------------------------------------------------------------
+// ADMIN AUTHENTICATION (Testing Mode: username: admin / password: admin123)
+// ---------------------------------------------------------------------
+async function handleAdminLogin(e) {
+  if (e) e.preventDefault();
+  const usernameInput = document.getElementById('adminUsernameInput');
+  const passwordInput = document.getElementById('adminPasswordInput');
+
+  const username = usernameInput ? usernameInput.value.trim() : '';
+  const password = passwordInput ? passwordInput.value.trim() : '';
+
+  if (!username || !password) {
+    showToast('Please enter both admin username and password.');
+    return;
+  }
+
+  // Direct credential verification for testing mode (supports both offline & online)
+  if (username === 'admin' && password === 'admin123') {
+    const adminName = 'Administrator';
+    localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify({
+      role: 'admin',
+      username: 'admin',
+      email: 'admin@yokohama.com',
+      name: adminName
+    }));
+    updateUserBadge(adminName);
+    showToast('Authenticated successfully as Administrator');
+    navigateTo('/secure-control/dashboard');
+
+    // Also sync session with backend if reachable
+    fetch('/api/auth/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    }).catch(() => {});
+    return;
+  }
+
+  // Backend verification check
+  try {
+    const res = await fetch('/api/auth/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (data.success) {
+      const adminName = (data.admin && data.admin.name) ? data.admin.name : 'Administrator';
+      localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify({
+        role: 'admin',
+        username: username,
+        email: data.admin && data.admin.email ? data.admin.email : 'admin@yokohama.com',
+        name: adminName
+      }));
+      updateUserBadge(adminName);
+      showToast(`Authenticated successfully as ${adminName}`);
+      navigateTo('/secure-control/dashboard');
+    } else {
+      showToast(data.message || 'Invalid username or password (Testing mode: admin / admin123)');
+    }
+  } catch (err) {
+    showToast('Invalid username or password (Testing mode: admin / admin123)');
+  }
+}
 
 async function handleSendAdminOTP(e) {
   if (e) e.preventDefault();

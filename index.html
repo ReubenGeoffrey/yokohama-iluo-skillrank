@@ -91,58 +91,44 @@
       </div>
     </section>
 
-    <!-- VIEW 2: Admin Mail ID + OTP Login (/secure-control) -->
+    <!-- VIEW 2: Admin Login (/secure-control) -->
     <section class="view-section" id="viewAdminLogin">
       <div class="login-wrapper">
         <div class="login-card" style="border: 2px solid #0F172A;">
           <div class="login-header" style="background: linear-gradient(135deg, #0F172A 0%, #003D6B 100%);">
             <div style="font-size: 0.75rem; background: var(--accent-red); color: white; display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 700; margin-bottom: 8px;">ADMIN CONTROL CENTER</div>
-            <h2>Admin Email OTP Sign In</h2>
-            <p>Enter your official Admin Email ID to receive a 6-digit OTP</p>
+            <h2>Admin Sign In</h2>
+            <p>Testing Mode &bull; Enter credentials to access Control Center</p>
           </div>
 
           <div class="login-body">
-            <!-- Step 1: Send OTP Form -->
-            <form id="adminEmailForm" onsubmit="handleSendAdminOTP(event)">
-              <div class="form-group">
-                <label for="adminEmailInput">Official Admin Email ID</label>
-                <input type="email" id="adminEmailInput" class="form-control" placeholder="Enter your Admin Email ID" required autofocus>
+            <!-- Testing Credentials Banner -->
+            <div class="rules-box" style="background: #EFF6FF; border-left-color: #0284C7; margin-bottom: 18px; padding: 12px 14px;">
+              <div style="font-size: 0.82rem; color: #1E40AF; line-height: 1.5;">
+                <strong>Testing Credentials:</strong><br>
+                Username: <code style="background: #DBEAFE; color: #1E40AF; padding: 2px 6px; border-radius: 4px; font-weight: 700;">admin</code> &bull; 
+                Password: <code style="background: #DBEAFE; color: #1E40AF; padding: 2px 6px; border-radius: 4px; font-weight: 700;">admin123</code>
               </div>
-              <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #0F172A 0%, #003D6B 100%); font-weight: 700;">
-                Send One-Time Password (OTP)
-              </button>
-            </form>
+            </div>
 
-            <!-- Step 2: Verify OTP Form (Hidden by default) -->
-            <form id="adminOtpForm" onsubmit="handleVerifyAdminOTP(event)" style="display: none;">
-              <div class="rules-box" style="background: #E0F2FE; border-left-color: #0284C7; margin-bottom: 16px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: #0369A1;">
-                  <div>OTP sent to <strong id="otpTargetEmail">admin@yokohama.com</strong></div>
-                  <div style="background: #0284C7; color: white; padding: 2px 8px; border-radius: 12px; font-weight: 700; font-size: 0.78rem; display: flex; align-items: center; gap: 4px;">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                    <span id="otpTimerDisplay">60s</span>
-                  </div>
-                </div>
+            <!-- Admin Username & Password Form -->
+            <form id="adminLoginForm" onsubmit="handleAdminLogin(event)">
+              <div class="form-group">
+                <label for="adminUsernameInput">Admin Username</label>
+                <input type="text" id="adminUsernameInput" class="form-control" placeholder="Enter username (admin)" value="admin" required autofocus style="font-weight: 600;">
               </div>
 
               <div class="form-group">
-                <label for="adminOtpInput">Enter 6-Digit OTP Code</label>
-                <input type="text" id="adminOtpInput" class="form-control" placeholder="Enter 6-digit OTP from Gmail" maxlength="6" required style="letter-spacing: 4px; font-size: 1.2rem; font-weight: 800; text-align: center;">
+                <label for="adminPasswordInput">Password</label>
+                <input type="password" id="adminPasswordInput" class="form-control" placeholder="Enter password (admin123)" value="admin123" required style="font-weight: 600;">
               </div>
 
-              <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); font-weight: 700;">
-                Verify OTP &amp; Sign In
+              <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #0F172A 0%, #003D6B 100%); font-weight: 700; width: 100%; padding: 12px; margin-top: 8px;">
+                Sign In to Admin Control Center
               </button>
-
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; font-size: 0.82rem;">
-                <span class="login-toggle-link" onclick="resetAdminOtpForm()">Change Email</span>
-                <button type="button" id="btnResendOtp" class="btn-reset" style="padding: 4px 10px; font-size: 0.8rem;" onclick="resendAdminOTP()" disabled>
-                  Resend OTP in 60s
-                </button>
-              </div>
             </form>
 
-            <div class="login-toggle-text">
+            <div class="login-toggle-text" style="margin-top: 20px;">
               Looking for Employee Portal? <span class="login-toggle-link" onclick="navigateTo('/employee-portal')">Switch to Employee Portal</span>
             </div>
           </div>
