@@ -49,7 +49,7 @@ function saveRecord(empNo, recordData) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ empNo, recordData })
-    }).catch(err => console.log('Server sync pending:', err.message));
+ }).catch(err => console.log('Server sync pending:', err.message));
   } catch (e) {}
 }
 
@@ -94,8 +94,8 @@ function saveCustomQuestionsToServer() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ questionBank: QUESTION_BANK })
     }).then(res => res.json()).then(data => {
-      console.log('☁️ Question Bank Cloud Save Status:', data.message);
-    }).catch(err => console.log('Question cloud sync pending:', err.message));
+ console.log(' Question Bank Cloud Save Status:', data.message);
+ }).catch(err => console.log('Question cloud sync pending:', err.message));
   } catch (e) {}
 }
 
@@ -122,16 +122,16 @@ function handleRoute() {
   // Explicit Employee Login Page (/employee-portal)
   if (hash === '/employee-portal' || hash === '/employee/login') {
     showView('viewEmpLogin');
-    document.getElementById('btnSwitchPortal').innerText = 'Admin Portal';
-    document.getElementById('navbarSystemTitle').innerText = 'Tire Building QA Assessment Portal';
+ document.getElementById('btnSwitchPortal').innerText = 'Admin Portal';
+ document.getElementById('navbarSystemTitle').innerText = 'Tire Building QA Assessment Portal';
     return;
   }
 
   // Explicit Admin Login Page (/secure-control)
   if (hash === '/secure-control' || hash === '/admin-login' || hash === '/admin') {
     showView('viewAdminLogin');
-    document.getElementById('btnSwitchPortal').innerText = 'Employee Portal';
-    document.getElementById('navbarSystemTitle').innerText = 'Admin Control Center';
+ document.getElementById('btnSwitchPortal').innerText = 'Employee Portal';
+ document.getElementById('navbarSystemTitle').innerText = 'Admin Control Center';
     return;
   }
 
@@ -141,8 +141,8 @@ function handleRoute() {
       navigateTo('/secure-control');
       return;
     }
-    document.getElementById('btnSwitchPortal').innerText = 'Employee Portal';
-    document.getElementById('navbarSystemTitle').innerText = 'Admin Control Center';
+ document.getElementById('btnSwitchPortal').innerText = 'Employee Portal';
+ document.getElementById('navbarSystemTitle').innerText = 'Admin Control Center';
     updateUserBadge(session.name || 'Administrator');
     
     let sub = hash.replace(/^\/(control-center|secure-control)\/?/, '').trim();
@@ -157,8 +157,8 @@ function handleRoute() {
       navigateTo('/employee-portal');
       return;
     }
-    document.getElementById('btnSwitchPortal').innerText = 'Admin Portal';
-    document.getElementById('navbarSystemTitle').innerText = 'Tire Building QA Assessment Portal';
+ document.getElementById('btnSwitchPortal').innerText = 'Admin Portal';
+ document.getElementById('navbarSystemTitle').innerText = 'Tire Building QA Assessment Portal';
     
     if (currentUser) updateUserBadge(currentUser.name);
 
@@ -188,7 +188,7 @@ function initSecurityMonitors() {
     document.addEventListener(evt, (e) => {
       if (isExamActive()) {
         e.preventDefault();
-        showToast('🔒 Action restricted during assessment!');
+ showToast('Action restricted during assessment!');
       }
     });
   });
@@ -203,7 +203,7 @@ function initSecurityMonitors() {
         ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i', 'j', 'c', 'k'].includes(e.key.toLowerCase()))
       ) {
         e.preventDefault();
-        showToast('🔒 Keyboard shortcut blocked during assessment!');
+ showToast('Keyboard shortcut blocked during assessment!');
       }
     }
   });
@@ -250,7 +250,7 @@ function updateTabWarningBadge() {
   const countDisplay = document.getElementById('tabSwitchCountDisplay');
   
   const count = activeExam ? (activeExam.tabSwitchCount || 0) : 0;
-  countDisplay.innerText = `${count} / 3`;
+ countDisplay.innerText = `${count} / 3`;
 
   if (count > 0) {
     badgeContainer.classList.add('danger');
@@ -261,7 +261,7 @@ function updateTabWarningBadge() {
 
 function showSecurityWarningModal(count) {
   const modal = document.getElementById('securityWarningModal');
-  document.getElementById('secWarningNum').innerText = count;
+ document.getElementById('secWarningNum').innerText = count;
   modal.classList.add('active');
 }
 
@@ -341,7 +341,7 @@ async function checkExistingSession() {
     try {
       const session = JSON.parse(sessionStr);
       if (session.role === 'admin') {
-        updateUserBadge(session.name || 'Reuben Geoffrey (Superadmin)');
+        updateUserBadge(session.name || 'Administrator');
         handleRoute();
         return;
       } else if (session.empNo) {
@@ -368,7 +368,7 @@ async function checkExistingSession() {
 // Toast Notifications
 function showToast(msg) {
   const toast = document.getElementById('toast');
-  toast.innerText = msg;
+ toast.innerText = msg;
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 3000);
 }
@@ -389,8 +389,8 @@ function updateUserBadge(name) {
   if (name) {
     badge.style.display = 'flex';
     logoutBtn.style.display = 'block';
-    avatar.innerText = name.charAt(0).toUpperCase();
-    nameSpan.innerText = name;
+ avatar.innerText = name.charAt(0).toUpperCase();
+ nameSpan.innerText = name;
   } else {
     badge.style.display = 'none';
     logoutBtn.style.display = 'none';
@@ -399,10 +399,10 @@ function updateUserBadge(name) {
 
 function togglePortalMode() {
   const hash = window.location.hash;
-  if (hash.startsWith('#/control-center') || hash === '#/admin-login') {
-    navigateTo('/employee/login');
+  if (hash.startsWith('#/control-center') || hash.startsWith('#/secure-control')) {
+    navigateTo('/employee-portal');
   } else {
-    navigateTo('/admin-login');
+    navigateTo('/secure-control');
   }
 }
 
@@ -412,13 +412,13 @@ function handleEmpLogin(e) {
   const empIdVal = document.getElementById('empIdInput').value.trim();
   
   if (!empIdVal) {
-    showToast('Please enter a valid Employee ID');
+ showToast('Please enter a valid Employee ID');
     return;
   }
 
   const emp = EMPLOYEES.find(e => e.empNo === empIdVal || e.empNo === '0' + empIdVal);
   if (!emp) {
-    showToast('Employee ID not found in database!');
+ showToast('Employee ID not found in database!');
     return;
   }
 
@@ -453,24 +453,24 @@ function startOtpCountdownTimer() {
 
   if (resendBtn) {
     resendBtn.disabled = true;
-    resendBtn.innerText = `Resend OTP in 60s`;
+ resendBtn.innerText = `Resend OTP in 60s`;
   }
-  if (timerEl) timerEl.innerText = `60s`;
+ if (timerEl) timerEl.innerText = `60s`;
 
   adminOtpState.timerInterval = setInterval(() => {
     adminOtpState.secondsLeft--;
 
     if (adminOtpState.secondsLeft > 0) {
-      if (timerEl) timerEl.innerText = `${adminOtpState.secondsLeft}s`;
-      if (resendBtn) resendBtn.innerText = `Resend OTP in ${adminOtpState.secondsLeft}s`;
+ if (timerEl) timerEl.innerText = `${adminOtpState.secondsLeft}s`;
+ if (resendBtn) resendBtn.innerText = `Resend OTP in ${adminOtpState.secondsLeft}s`;
     } else {
       clearInterval(adminOtpState.timerInterval);
-      if (timerEl) timerEl.innerText = `Expired`;
+ if (timerEl) timerEl.innerText = `Expired`;
       if (resendBtn) {
         resendBtn.disabled = false;
-        resendBtn.innerText = `🔄 Resend New OTP`;
+ resendBtn.innerText = 'Resend New OTP';
       }
-      showToast('⚠️ OTP Code Expired (1-minute validity limit)! Click Resend OTP.');
+ showToast('OTP Code Expired (1-minute validity limit)! Click Resend OTP.');
     }
   }, 1000);
 }
@@ -486,7 +486,7 @@ async function handleAdminLogin(e) {
   const password = passwordInput ? passwordInput.value.trim() : '';
 
   if (!username || !password) {
-    showToast('Please enter both admin username and password.');
+ showToast('Please enter both admin username and password.');
     return;
   }
 
@@ -500,7 +500,7 @@ async function handleAdminLogin(e) {
       name: adminName
     }));
     updateUserBadge(adminName);
-    showToast('Authenticated successfully as Administrator');
+ showToast('Authenticated successfully as Administrator');
     navigateTo('/secure-control/dashboard');
 
     // Also sync session with backend if reachable
@@ -529,13 +529,13 @@ async function handleAdminLogin(e) {
         name: adminName
       }));
       updateUserBadge(adminName);
-      showToast(`Authenticated successfully as ${adminName}`);
+ showToast(`Authenticated successfully as ${adminName}`);
       navigateTo('/secure-control/dashboard');
     } else {
-      showToast(data.message || 'Invalid username or password (Testing mode: admin / admin123)');
+ showToast(data.message || 'Invalid username or password (Testing mode: admin / admin123)');
     }
   } catch (err) {
-    showToast('Invalid username or password (Testing mode: admin / admin123)');
+ showToast('Invalid username or password (Testing mode: admin / admin123)');
   }
 }
 
@@ -544,11 +544,11 @@ async function handleSendAdminOTP(e) {
   const emailInput = document.getElementById('adminEmailInput').value.trim();
 
   if (!emailInput || !emailInput.includes('@')) {
-    showToast('Please enter a valid Admin Email ID');
+ showToast('Please enter a valid Admin Email ID');
     return;
   }
 
-  showToast('📩 Sending OTP to ' + emailInput + ' via Gmail SMTP...');
+ showToast('Sending OTP to ' + emailInput + ' via Gmail SMTP...');
 
   try {
     const res = await fetch('/api/auth/admin/send-otp', {
@@ -562,7 +562,7 @@ async function handleSendAdminOTP(e) {
     if (data.success) {
       adminOtpState.email = emailInput;
 
-      document.getElementById('otpTargetEmail').innerText = emailInput;
+ document.getElementById('otpTargetEmail').innerText = emailInput;
       document.getElementById('adminEmailForm').style.display = 'none';
       document.getElementById('adminOtpForm').style.display = 'block';
 
@@ -572,13 +572,13 @@ async function handleSendAdminOTP(e) {
 
       startOtpCountdownTimer();
 
-      showToast(data.message || '✉️ OTP sent to your email inbox. Please check your Gmail and enter the 6-digit OTP.');
+ showToast(data.message || 'OTP sent to your email inbox. Please check your Gmail and enter the 6-digit OTP.');
     } else {
-      showToast('⚠️ ' + (data.message || 'Failed to send OTP'));
+ showToast('' + (data.message || 'Failed to send OTP'));
     }
   } catch (err) {
     console.error('API Error:', err);
-    showToast('⚠️ Could not connect to authentication server. Please check your network or server status.');
+ showToast('Could not connect to authentication server. Please check your network or server status.');
   }
 }
 
@@ -592,7 +592,7 @@ async function handleVerifyAdminOTP(e) {
   const email = adminOtpState.email;
 
   if (!otpEntered || otpEntered.length !== 6) {
-    showToast('Please enter the 6-digit OTP code received in your Gmail inbox');
+ showToast('Please enter the 6-digit OTP code received in your Gmail inbox');
     return;
   }
 
@@ -612,14 +612,14 @@ async function handleVerifyAdminOTP(e) {
 
       localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify({ role: 'admin', email: email, name: adminName }));
       updateUserBadge(adminName);
-      showToast(`✅ Authenticated successfully as ${adminName}`);
+ showToast(`Authenticated successfully as ${adminName}`);
       navigateTo('/secure-control/dashboard');
     } else {
-      showToast(`❌ ${data.message || 'Verification failed: Incorrect OTP code'}`);
+ showToast(`${data.message || 'Verification failed: Incorrect OTP code'}`);
     }
   } catch (err) {
     console.error('API Error:', err);
-    showToast('❌ Verification error. Please try again.');
+ showToast('Verification error. Please try again.');
   }
 }
 
@@ -657,11 +657,11 @@ function showEmpDashboard() {
 
   currentUser.targetLevel = targetLevel;
 
-  document.getElementById('infoEmpNo').innerText = currentUser.empNo;
-  document.getElementById('infoEmpName').innerText = currentUser.name;
-  document.getElementById('infoEmpDept').innerText = `${currentUser.dept} / ${currentUser.section || 'QA'}`;
-  document.getElementById('infoEmpDoj').innerText = currentUser.doj || 'N/A';
-  document.getElementById('infoTargetLevel').innerText = `${targetLevel} Level Assessment (${targetRules.numQuestions} Qs)`;
+ document.getElementById('infoEmpNo').innerText = currentUser.empNo;
+ document.getElementById('infoEmpName').innerText = currentUser.name;
+ document.getElementById('infoEmpDept').innerText = `${currentUser.dept} / ${currentUser.section || 'QA'}`;
+ document.getElementById('infoEmpDoj').innerText = currentUser.doj || 'N/A';
+ document.getElementById('infoTargetLevel').innerText = `${targetLevel} Level Assessment (${targetRules.numQuestions} Qs)`;
 
   showView('viewEmpDashboard');
 }
@@ -839,7 +839,7 @@ function startOrResumeExam() {
       tabSwitchCount: empRecord.tabSwitchCount || 0,
       isCompleted: false
     };
-    showToast('Resuming active assessment...');
+ showToast('Resuming active assessment...');
   } else {
     activeExam = {
       empNo: currentUser.empNo,
@@ -902,7 +902,7 @@ function startTimer() {
 
     if (activeExam.remainingSeconds <= 0) {
       clearInterval(timerInterval);
-      showToast('Time expired! Submitting assessment...');
+ showToast('Time expired! Submitting assessment...');
       submitAssessment();
     }
   }, 1000);
@@ -913,7 +913,7 @@ function updateTimerDisplay() {
   const mins = Math.floor(activeExam.remainingSeconds / 60);
   const secs = activeExam.remainingSeconds % 60;
   const formatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  document.getElementById('timerDisplay').innerText = formatted;
+ document.getElementById('timerDisplay').innerText = formatted;
 }
 
 // Question Renderer
@@ -930,10 +930,10 @@ function renderCurrentQuestion() {
 
   const q = activeExam.questions[qIndex];
 
-  document.getElementById('quizProgressText').innerText = `Question ${qIndex + 1} of ${totalQs}`;
-  document.getElementById('quizSubText').innerText = `Target: Level ${activeExam.targetLevel} Assessment`;
-  document.getElementById('qCategoryTag').innerText = q.category || 'QA & Safety';
-  document.getElementById('qTitleText').innerText = q.question;
+ document.getElementById('quizProgressText').innerText = `Question ${qIndex + 1} of ${totalQs}`;
+ document.getElementById('quizSubText').innerText = `Target: Level ${activeExam.targetLevel} Assessment`;
+ document.getElementById('qCategoryTag').innerText = q.category || 'QA & Safety';
+ document.getElementById('qTitleText').innerText = q.question;
 
   const container = document.getElementById('optionsContainer');
   container.innerHTML = '';
@@ -955,9 +955,9 @@ function renderCurrentQuestion() {
 
   const nextBtn = document.getElementById('btnNextQ');
   if (qIndex === totalQs - 1) {
-    nextBtn.innerText = 'Submit Assessment ✔';
+    nextBtn.innerText = 'Submit Assessment';
   } else {
-    nextBtn.innerText = 'Next Question ➔';
+    nextBtn.innerText = 'Next Question';
   }
 
   nextBtn.disabled = !selectedOpt;
@@ -1066,19 +1066,19 @@ function submitAssessment() {
 }
 
 function showResultView(record, isImmediateCompletion = false) {
-  document.getElementById('resAttempted').innerText = `${record.attemptedCount || 0} Questions`;
+ document.getElementById('resAttempted').innerText = `${record.attemptedCount || 0} Questions`;
   
   const totalMarks = record.totalMark !== undefined ? record.totalMark : (record.lMark || record.uMark || record.oMark || 0);
   const qCount = record.submittedQuestions ? record.submittedQuestions.length : (record.targetLevel === 'L' ? 20 : (record.targetLevel === 'U' ? 30 : 40));
   
   const resMarksEl = document.getElementById('resMarks');
-  if (resMarksEl) resMarksEl.innerText = `${totalMarks} / ${qCount} Marks`;
+ if (resMarksEl) resMarksEl.innerText = `${totalMarks} / ${qCount} Marks`;
 
   const resPctEl = document.getElementById('resPct');
-  if (resPctEl) resPctEl.innerText = `${record.markPct !== undefined ? record.markPct + '%' : '-'}`;
+ if (resPctEl) resPctEl.innerText = `${record.markPct !== undefined ? record.markPct + '%' : '-'}`;
 
   const statusEl = document.getElementById('resStatus');
-  statusEl.innerText = record.status || 'Completed';
+ statusEl.innerText = record.status || 'Completed';
   
   if (record.status && record.status.includes('Terminated')) {
     statusEl.style.color = 'var(--accent-red)';
@@ -1195,10 +1195,10 @@ function renderAdminDashboard() {
 
   const notStartedCount = allEmps.length - completedCount - inProgressCount;
 
-  document.getElementById('statTotalEmp').innerText = allEmps.length;
-  document.getElementById('statCompleted').innerText = completedCount;
-  document.getElementById('statInProgress').innerText = inProgressCount;
-  document.getElementById('statNotStarted').innerText = notStartedCount;
+ document.getElementById('statTotalEmp').innerText = allEmps.length;
+ document.getElementById('statCompleted').innerText = completedCount;
+ document.getElementById('statInProgress').innerText = inProgressCount;
+ document.getElementById('statNotStarted').innerText = notStartedCount;
 
   renderPieChart(completedCount, inProgressCount, notStartedCount);
   renderBarChart(records);
@@ -1295,7 +1295,7 @@ function renderQuestionsManager() {
     return matchSec && matchSearch;
   });
 
-  document.getElementById('qCountText').innerText = filtered.length;
+ document.getElementById('qCountText').innerText = filtered.length;
 
   if (filtered.length === 0) {
     container.innerHTML = `
@@ -1338,7 +1338,7 @@ function renderQuestionsManager() {
 }
 
 function openAddQuestionModal() {
-  document.getElementById('modalQTitle').innerText = '➕ Add New Question';
+  document.getElementById('modalQTitle').innerText = 'Add New Question';
   document.getElementById('qEditId').value = '';
   document.getElementById('modalQText').value = '';
   document.getElementById('modalOptA').value = '';
@@ -1358,7 +1358,7 @@ function openEditQuestionModal(qId) {
 
   if (!targetQ) return showToast('Question not found');
 
-  document.getElementById('modalQTitle').innerText = '✏️ Edit Question';
+  document.getElementById('modalQTitle').innerText = 'Edit Question';
   document.getElementById('qEditId').value = targetQ.id;
   document.getElementById('modalQLevel').value = targetQ.level || 'O';
   document.getElementById('modalQSection').value = targetQ.section || 'Final Finish QA';
@@ -1417,11 +1417,11 @@ function saveQuestionFromModal(e) {
       if (idx !== -1) QUESTION_BANK[lvl].splice(idx, 1);
     });
     QUESTION_BANK[level].push(newQ);
-    showToast('Question updated successfully! ✏️');
+ showToast('Question updated successfully!');
   } else {
     // Add new
     QUESTION_BANK[level].push(newQ);
-    showToast('New question added successfully! ➕');
+ showToast('New question added successfully!');
   }
 
   saveCustomQuestionsToServer();
@@ -1440,7 +1440,7 @@ function deleteQuestion(qId) {
   });
 
   saveCustomQuestionsToServer();
-  showToast('Question deleted successfully 🗑️');
+ showToast('Question deleted successfully');
   renderQuestionsManager();
 }
 
@@ -1465,7 +1465,7 @@ function saveCustomEmployeesToServer() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ employees: EMPLOYEES })
-    }).catch(err => console.log('Employees sync pending:', err.message));
+ }).catch(err => console.log('Employees sync pending:', err.message));
   } catch (e) {}
 }
 
@@ -1515,10 +1515,10 @@ function saveSecuritySettings(e) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ settings: settings })
     }).then(res => res.json()).then(data => {
-      showToast('Security Settings saved & updated in Cloud DB! ⚙️');
-    }).catch(err => showToast('Failed to save settings: ' + err.message));
+ showToast('Security Settings saved & updated in Cloud DB!');
+ }).catch(err => showToast('Failed to save settings: ' + err.message));
   } catch (err) {
-    showToast('Failed to save settings: ' + err.message);
+ showToast('Failed to save settings: ' + err.message);
   }
 }
 
@@ -1536,7 +1536,7 @@ function renderEmployeeDirectory() {
   });
 
   const countEl = document.getElementById('empDirCountText');
-  if (countEl) countEl.innerText = filtered.length;
+ if (countEl) countEl.innerText = filtered.length;
 
   filtered.forEach(emp => {
     const tr = document.createElement('tr');
@@ -1559,7 +1559,7 @@ function renderEmployeeDirectory() {
 }
 
 function openAddEmpModal() {
-  document.getElementById('modalEmpTitle').innerText = '➕ Add New Employee';
+ document.getElementById('modalEmpTitle').innerText = 'Add New Employee';
   document.getElementById('empIsEdit').value = 'false';
   document.getElementById('empOldNo').value = '';
   document.getElementById('modalEmpNo').value = '';
@@ -1575,7 +1575,7 @@ function openAddEmpModal() {
 function openEditEmpModal(empNo) {
   const emp = EMPLOYEES.find(e => e.empNo === empNo);
   if (!emp) return;
-  document.getElementById('modalEmpTitle').innerText = `✏️ Edit Employee (${empNo})`;
+  document.getElementById('modalEmpTitle').innerText = `Edit Employee (${empNo})`;
   document.getElementById('empIsEdit').value = 'true';
   document.getElementById('empOldNo').value = empNo;
   document.getElementById('modalEmpNo').value = emp.empNo;
@@ -1612,11 +1612,11 @@ function saveEmployeeFromModal(e) {
     const idx = EMPLOYEES.findIndex(e => e.empNo === oldNo);
     if (idx !== -1) {
       EMPLOYEES[idx] = { empNo, name, dept, section, doj, currentLevel: level };
-      showToast(`Employee ${empNo} updated successfully! ✏️`);
+ showToast(`Employee ${empNo} updated successfully!`);
     }
   } else {
     EMPLOYEES.unshift({ empNo, name, dept, section, doj, currentLevel: level });
-    showToast(`New Employee ${empNo} (${name}) added! ➕`);
+ showToast(`New Employee ${empNo} (${name}) added!`);
   }
 
   saveCustomEmployeesToServer();
@@ -1630,7 +1630,7 @@ function deleteEmployee(empNo) {
   if (idx !== -1) {
     EMPLOYEES.splice(idx, 1);
     saveCustomEmployeesToServer();
-    showToast(`Employee ${empNo} deleted from Directory 🗑️`);
+ showToast(`Employee ${empNo} deleted from Directory`);
     renderEmployeeDirectory();
   }
 }
@@ -1653,7 +1653,7 @@ function renderAdminTable(query) {
     );
   });
 
-  document.getElementById('tableCountText').innerText = filtered.length;
+ document.getElementById('tableCountText').innerText = filtered.length;
 
   filtered.forEach(emp => {
     const rec = records[emp.empNo] || {};
@@ -1837,7 +1837,7 @@ function downloadEmployeePDF(empNo) {
 
   document.body.appendChild(reportDiv);
 
-  showToast(`Generating PDF report for ${empNo}...`);
+ showToast(`Generating PDF report for ${empNo}...`);
 
   if (typeof html2pdf !== 'undefined') {
     const opt = {
@@ -1850,7 +1850,7 @@ function downloadEmployeePDF(empNo) {
 
     html2pdf().set(opt).from(reportDiv).save().then(() => {
       if (document.body.contains(reportDiv)) document.body.removeChild(reportDiv);
-      showToast('PDF Report downloaded successfully!');
+ showToast('PDF Report downloaded successfully!');
     }).catch(err => {
       console.error('PDF export error:', err);
       if (document.body.contains(reportDiv)) document.body.removeChild(reportDiv);
@@ -1871,7 +1871,7 @@ function confirmAndResetExam(empNo, empName) {
       try {
         fetch('/api/records/' + encodeURIComponent(empNo), { method: 'DELETE' }).catch(e => {});
       } catch (e) {}
-      showToast(`Exam reset successfully for Employee ${empNo}`);
+ showToast(`Exam reset successfully for Employee ${empNo}`);
       renderAdminTable('');
     }
   }
@@ -1905,13 +1905,13 @@ function renderReportsCenter() {
   const passRate = completedCount > 0 ? Math.round((passCount / completedCount) * 100) : 0;
 
   const elTotalEmps = document.getElementById('reportMetricTotalEmps');
-  if (elTotalEmps) elTotalEmps.innerText = allEmps.length;
+ if (elTotalEmps) elTotalEmps.innerText = allEmps.length;
 
   const elCompleted = document.getElementById('reportMetricCompleted');
-  if (elCompleted) elCompleted.innerText = completedCount;
+ if (elCompleted) elCompleted.innerText = completedCount;
 
   const elPassRate = document.getElementById('reportMetricPassRate');
-  if (elPassRate) elPassRate.innerText = `Pass Rate: ${passRate}% (${passCount} Passed)`;
+ if (elPassRate) elPassRate.innerText = `Pass Rate: ${passRate}% (${passCount} Passed)`;
 
   // Populate Employee Select Dropdown
   const empSelect = document.getElementById('reportEmpSelect');
@@ -1928,7 +1928,7 @@ function renderReportsCenter() {
 
 function exportDataToCSV(dataArray, filename) {
   if (!dataArray || !dataArray.length) {
-    showToast('No records available for export.');
+ showToast('No records available for export.');
     return;
   }
   const headers = Object.keys(dataArray[0]);
@@ -1990,10 +1990,10 @@ function exportAdminExcel() {
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "ILUO Assessment Report");
       XLSX.writeFile(workbook, `${filename}.xlsx`);
-      showToast('Master Excel report (.xlsx) downloaded successfully!');
+ showToast('Master Excel report (.xlsx) downloaded successfully!');
     } else {
       exportDataToCSV(exportData, `${filename}.csv`);
-      showToast('Downloaded as CSV report (Excel compatible).');
+ showToast('Downloaded as CSV report (Excel compatible).');
     }
   } catch (err) {
     console.error('Export Excel failed:', err);
@@ -2005,7 +2005,7 @@ function exportAdminCSV() {
   const exportData = getAdminExportDataset();
   const filename = `Yokohama_ILUO_QA_Assessment_Report_${new Date().toISOString().split('T')[0]}.csv`;
   exportDataToCSV(exportData, filename);
-  showToast('Master CSV report downloaded successfully!');
+ showToast('Master CSV report downloaded successfully!');
 }
 
 function exportSelectedSectionExcel() {
@@ -2049,15 +2049,15 @@ function exportFullQuestionBankExcel() {
         XLSX.utils.book_append_sheet(workbook, ws, `${lvl} Level Questions`);
       });
       XLSX.writeFile(workbook, `${filename}.xlsx`);
-      showToast('Master Question Bank Excel downloaded successfully!');
+ showToast('Master Question Bank Excel downloaded successfully!');
     } else {
       exportDataToCSV(allQs, `${filename}.csv`);
-      showToast('Question Bank downloaded as CSV.');
+ showToast('Question Bank downloaded as CSV.');
     }
   } catch (err) {
     console.error('Question Bank Excel export error:', err);
     exportDataToCSV(allQs, `${filename}.csv`);
-    showToast('Downloaded Question Bank as CSV.');
+ showToast('Downloaded Question Bank as CSV.');
   }
 }
 
@@ -2065,7 +2065,7 @@ function generateSelectedEmployeePDF() {
   const selectEl = document.getElementById('reportEmpSelect');
   const empNo = selectEl ? selectEl.value : '';
   if (!empNo) {
-    showToast('Please select an employee from the dropdown list first.');
+ showToast('Please select an employee from the dropdown list first.');
     return;
   }
   downloadEmployeePDF(empNo);
@@ -2080,7 +2080,7 @@ function clearAllQuestions() {
   QUESTION_BANK.O = [];
 
   saveCustomQuestionsToServer();
-  showToast('All questions deleted! Bank is now empty 🗑️');
+ showToast('All questions deleted! Question bank is now empty.');
   renderQuestionsManager();
 }
 
@@ -2177,7 +2177,7 @@ function handleDocxUpload(event) {
         QUESTION_BANK[level_code].push(...parsed_qs);
 
         saveCustomQuestionsToServer();
-        showToast(`🎉 Successfully imported ${parsed_qs.length} questions from ${filename}!`);
+        showToast(`Successfully imported ${parsed_qs.length} questions from ${filename}!`);
         renderQuestionsManager();
       })
       .catch(function(err) {
@@ -2321,9 +2321,9 @@ function renderSectionsExplorer(targetSecKey) {
 
   // Update badge counters
   const empBadge = document.getElementById('secEmpCountBadge');
-  if (empBadge) empBadge.innerText = sectionEmps.length;
+ if (empBadge) empBadge.innerText = sectionEmps.length;
   const qBadge = document.getElementById('secQCountBadge');
-  if (qBadge) qBadge.innerText = allSectionQs.length;
+ if (qBadge) qBadge.innerText = allSectionQs.length;
 
   // Render active inner tab
   renderActiveSectionTab();
@@ -2382,7 +2382,7 @@ function filterSectionEmployees() {
   });
 
   const countElem = document.getElementById('secEmpTableCount');
-  if (countElem) countElem.innerText = sectionEmps.length;
+ if (countElem) countElem.innerText = sectionEmps.length;
 
   const tbody = document.getElementById('secEmpTableBody');
   if (!tbody) return;
@@ -2553,7 +2553,7 @@ function filterSectionQuestions() {
   });
 
   const countElem = document.getElementById('secQFilteredCount');
-  if (countElem) countElem.innerText = filtered.length;
+ if (countElem) countElem.innerText = filtered.length;
 
   if (filtered.length === 0) {
     container.innerHTML = `
@@ -2669,16 +2669,51 @@ function exportCurrentSectionExcel(targetSecKey) {
       }
 
       XLSX.writeFile(workbook, `${filename}.xlsx`);
-      showToast(`${currentSec.title} Excel report downloaded successfully!`);
+ showToast(`${currentSec.title} Excel report downloaded successfully!`);
     } else {
       exportDataToCSV(empSheetData, `${filename}.csv`);
-      showToast(`${currentSec.title} downloaded as CSV report.`);
+ showToast(`${currentSec.title} downloaded as CSV report.`);
     }
   } catch (err) {
     console.error('Section export error:', err);
     exportDataToCSV(empSheetData, `${filename}.csv`);
-    showToast(`${currentSec.title} downloaded as CSV report.`);
+ showToast(`${currentSec.title} downloaded as CSV report.`);
   }
+}
+
+function exportCurrentSectionCSV(targetSecKey) {
+  const secKey = targetSecKey || currentActiveSectionKey || 'warehouse';
+  const currentSec = QA_SECTIONS_LIST.find(s => s.id === secKey) || QA_SECTIONS_LIST[0];
+  const normSec = currentSec.normName;
+  const records = getStoredRecords();
+
+  const sectionEmps = EMPLOYEES.filter(emp => normalizeSectionName(emp.section) === normSec);
+
+  const empData = sectionEmps.length > 0 ? sectionEmps.map((emp, index) => {
+    const rec = records[emp.empNo] || {};
+    return {
+      "S.No": index + 1,
+      "Employee No": emp.empNo,
+      "Name": emp.name,
+      "Department": emp.dept,
+      "Section": emp.section,
+      "Skill Level": emp.currentLevel || "I",
+      "DOJ": emp.doj || "",
+      "U Mark": rec.uMark !== undefined ? rec.uMark : 0,
+      "L Mark": rec.lMark !== undefined ? rec.lMark : 0,
+      "O Mark": rec.oMark !== undefined ? rec.oMark : 0,
+      "Total Mark": rec.totalMark !== undefined ? rec.totalMark : 0,
+      "Percentage": rec.markPct !== undefined ? rec.markPct + "%" : "0%",
+      "Tab Switches": rec.tabSwitchCount || 0,
+      "Status": rec.status || (rec.inProgress ? "In Progress" : "Not Started"),
+      "Attempt Date": rec.attemptDate || ""
+    };
+  }) : [{ "Notice": `No registered employees under ${currentSec.title}.` }];
+
+  const cleanTitle = currentSec.title.replace(/[^a-zA-Z0-9]/g, '_');
+  const filename = `Yokohama_${cleanTitle}_Report_${new Date().toISOString().split('T')[0]}.csv`;
+  exportDataToCSV(empData, filename);
+ showToast(`${currentSec.title} CSV report downloaded successfully!`);
 }
 
 // ---------------------------------------------------------------------
@@ -2860,7 +2895,7 @@ function filterTrainingRequirements() {
     return true;
   });
 
-  if (countEl) countEl.innerText = filtered.length;
+ if (countEl) countEl.innerText = filtered.length;
 
   if (filtered.length === 0) {
     tbody.innerHTML = `
@@ -2939,19 +2974,19 @@ function filterTrainingRequirements() {
 function toggleTrainingSchedule(empNo) {
   const scheduledDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   saveTrainingRecord(empNo, { status: 'SCHEDULED', date: scheduledDate });
-  showToast(`Training scheduled for Employee ${empNo} (Target Date: ${scheduledDate})`);
+ showToast(`Training scheduled for Employee ${empNo} (Target Date: ${scheduledDate})`);
   renderTrainingRequirements();
 }
 
 function toggleTrainingComplete(empNo) {
   saveTrainingRecord(empNo, { status: 'COMPLETED', completedAt: new Date().toISOString().split('T')[0] });
-  showToast(`Training marked COMPLETED for Employee ${empNo}`);
+ showToast(`Training marked COMPLETED for Employee ${empNo}`);
   renderTrainingRequirements();
 }
 
 function resetTrainingStatus(empNo) {
   saveTrainingRecord(empNo, { status: 'PENDING', date: '' });
-  showToast(`Training status reset to PENDING for Employee ${empNo}`);
+ showToast(`Training status reset to PENDING for Employee ${empNo}`);
   renderTrainingRequirements();
 }
 
@@ -2979,15 +3014,15 @@ function exportTrainingPlanExcel() {
       const ws = XLSX.utils.json_to_sheet(exportData);
       XLSX.utils.book_append_sheet(workbook, ws, "Training Requirements Plan");
       XLSX.writeFile(workbook, `${filename}.xlsx`);
-      showToast('Training Plan Excel (.xlsx) downloaded successfully!');
+ showToast('Training Plan Excel (.xlsx) downloaded successfully!');
     } else {
       exportDataToCSV(exportData, `${filename}.csv`);
-      showToast('Downloaded Training Plan as CSV.');
+ showToast('Downloaded Training Plan as CSV.');
     }
   } catch (err) {
     console.error('Training plan export error:', err);
     exportDataToCSV(exportData, `${filename}.csv`);
-    showToast('Downloaded Training Plan as CSV.');
+ showToast('Downloaded Training Plan as CSV.');
   }
 }
 

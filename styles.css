@@ -1365,6 +1365,21 @@ body {
 .skill-matrix-card.level-U::before { background: #F59E0B; }
 .skill-matrix-card.level-O::before { background: #8B5CF6; }
 
+/* Skill Level Badge Pills (used in training table, section views) */
+.skill-level-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.skill-level-badge.level-I { background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; }
+.skill-level-badge.level-L { background: #F0FDF4; color: #16A34A; border: 1px solid #BBF7D0; }
+.skill-level-badge.level-U { background: #FFFBEB; color: #D97706; border: 1px solid #FDE68A; }
+.skill-level-badge.level-O { background: #F5F3FF; color: #7C3AED; border: 1px solid #DDD6FE; }
+
+
 .skill-matrix-header {
   display: flex;
   align-items: center;
