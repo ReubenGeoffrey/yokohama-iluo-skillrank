@@ -1889,30 +1889,6 @@ function renderReportsCenter() {
   const records = getStoredRecords();
   const allEmps = EMPLOYEES;
 
-  let completedCount = 0;
-  let passCount = 0;
-
-  allEmps.forEach(emp => {
-    const rec = records[emp.empNo];
-    if (rec && rec.isCompleted) {
-      completedCount++;
-      if (rec.status === 'Passed' || (rec.markPct !== undefined && rec.markPct >= 70)) {
-        passCount++;
-      }
-    }
-  });
-
-  const passRate = completedCount > 0 ? Math.round((passCount / completedCount) * 100) : 0;
-
-  const elTotalEmps = document.getElementById('reportMetricTotalEmps');
- if (elTotalEmps) elTotalEmps.innerText = allEmps.length;
-
-  const elCompleted = document.getElementById('reportMetricCompleted');
- if (elCompleted) elCompleted.innerText = completedCount;
-
-  const elPassRate = document.getElementById('reportMetricPassRate');
- if (elPassRate) elPassRate.innerText = `Pass Rate: ${passRate}% (${passCount} Passed)`;
-
   // Populate Employee Select Dropdown
   const empSelect = document.getElementById('reportEmpSelect');
   if (empSelect) {
