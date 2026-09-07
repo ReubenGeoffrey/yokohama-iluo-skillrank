@@ -1,0 +1,23 @@
+﻿node_modules
+.git
+.env
+.env.local
+extracted_ppt_images
+QC question
+__pycache__
+*.pptx
+*.xlsx
+*.log
+*.txt
+*.py
+dump_*
+clean_out.txt
+cur_out.txt
+curing_dump.txt
+full_out.txt
+ff_*
+headers.txt
+inspect_*
+test_seq.txt
+verify_out.txt
+deep_out.txt
