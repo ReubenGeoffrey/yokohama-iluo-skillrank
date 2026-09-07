@@ -31,3 +31,6 @@ deep_out.txt
 dump_l.txt
 dump_o.txt
 dump_u.txt
+
+.vercel
+.env*
