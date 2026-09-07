@@ -424,6 +424,15 @@
                   <div class="lbl">Not Attempted</div>
                 </div>
               </div>
+              <div class="stat-card">
+                <div class="stat-icon" style="background: #ECFDF5; color: #059669;">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                </div>
+                <div class="stat-info">
+                  <div class="num" id="statOjtCompleted">0</div>
+                  <div class="lbl">OJT Completed</div>
+                </div>
+              </div>
             </div>
 
             <div class="charts-row">
@@ -438,6 +447,43 @@
                 <div class="chart-container">
                   <canvas id="levelBarChart"></canvas>
                 </div>
+              </div>
+            </div>
+
+            <!-- Section-Wise Completion Matrix -->
+            <div class="table-card" style="margin-top: 24px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+                <div>
+                  <h3 style="font-size: 1.15rem; color: var(--primary-dark); font-weight: 700; margin-bottom: 4px;">
+                    QA Section-Wise Completion Tracker
+                  </h3>
+                  <div style="font-size: 0.82rem; color: var(--text-muted);">
+                    Real-time employee breakdown of MCQ Assessment and OJT Practical completion across all 8 QA sections
+                  </div>
+                </div>
+                <div style="font-size: 0.8rem; font-weight: 700; color: #0284C7; background: #EFF6FF; padding: 6px 14px; border-radius: 20px; border: 1px solid #BFDBFE;">
+                  8 QA Sections
+                </div>
+              </div>
+
+              <div class="data-table-wrapper">
+                <table class="data-table" id="dashboardSectionTable">
+                  <thead>
+                    <tr>
+                      <th style="width: 45px;">S.No</th>
+                      <th>Section Name</th>
+                      <th style="text-align: center; width: 100px;">Total Emps</th>
+                      <th style="text-align: center; width: 120px;">Exam Done</th>
+                      <th style="text-align: center; width: 120px;">OJT Done</th>
+                      <th style="text-align: center; width: 120px;">Both Done</th>
+                      <th style="width: 170px;">Completion Progress</th>
+                      <th style="text-align: center; width: 150px;">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dashboardSectionTableBody">
+                    <!-- Rendered dynamically -->
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -964,17 +1010,19 @@
                 <table class="data-table" id="trainingTable">
                   <thead>
                     <tr>
-                      <th style="width: 50px;">S.No</th>
-                      <th style="width: 90px;">Emp ID</th>
+                      <th style="width: 45px;">S.No</th>
+                      <th style="width: 85px;">Emp ID</th>
                       <th>Employee Name</th>
                       <th>Section</th>
-                      <th style="width: 80px;">Current</th>
-                      <th style="width: 90px;">Target</th>
+                      <th style="width: 75px;">Current</th>
+                      <th style="width: 85px;">Target</th>
+                      <th style="width: 100px;">Exam Mark</th>
+                      <th style="width: 120px;">OJT Form Mark</th>
                       <th>Assessment Finding</th>
                       <th>Recommended Training Module</th>
-                      <th style="width: 110px;">Priority</th>
-                      <th style="width: 110px;">Status</th>
-                      <th style="width: 150px; text-align: center;">Action</th>
+                      <th style="width: 95px;">Priority</th>
+                      <th style="width: 95px;">Status</th>
+                      <th style="width: 140px; text-align: center;">Action</th>
                     </tr>
                   </thead>
                   <tbody id="trainingTableBody">
@@ -1332,6 +1380,59 @@
             Save Evaluation
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Section Completed Employees Details -->
+  <div class="modal-overlay" id="modalSectionCompleted" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.75); z-index: 99999; overflow-y: auto; padding: 20px; opacity: 1; pointer-events: auto;">
+    <div class="security-modal-box" style="max-width: 960px; width: 100%; text-align: left; background: #FFFFFF; border-radius: 12px; padding: 24px 28px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.25); margin: 30px auto; max-height: 90vh; overflow-y: auto;">
+      <!-- Header -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #005B9E; padding-bottom: 12px; margin-bottom: 16px;">
+        <div>
+          <div style="font-size: 0.76rem; font-weight: 800; color: #005B9E; letter-spacing: 0.5px; text-transform: uppercase;">YOKOHAMA QA COMPLETION EXPLORER</div>
+          <h2 id="modalSecTitle" style="margin: 4px 0 0 0; color: #0F172A; font-size: 1.25rem;">Section Completed Employees</h2>
+          <div id="modalSecSubtitle" style="font-size: 0.76rem; color: #64748B; font-weight: 600; margin-top: 2px;">Employees who completed assessments and OJT practical evaluations</div>
+        </div>
+        <button onclick="closeSectionCompletedModal()" style="background: none; border: none; font-size: 1.8rem; cursor: pointer; color: #64748B; line-height: 1;">&times;</button>
+      </div>
+
+      <!-- Filter Controls & Employee Count -->
+      <div style="display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; justify-content: space-between; background: #F8FAFC; padding: 10px 14px; border-radius: 8px; border: 1px solid #E2E8F0;">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn-primary" id="filterModalAllBtn" onclick="filterModalEmployees('ALL')" style="padding: 5px 12px; font-size: 0.8rem;">All Employees</button>
+          <button type="button" class="btn-secondary" id="filterModalExamBtn" onclick="filterModalEmployees('EXAM')" style="padding: 5px 12px; font-size: 0.8rem;">Exam Completed</button>
+          <button type="button" class="btn-secondary" id="filterModalOjtBtn" onclick="filterModalEmployees('OJT')" style="padding: 5px 12px; font-size: 0.8rem;">OJT Completed</button>
+          <button type="button" class="btn-secondary" id="filterModalBothBtn" onclick="filterModalEmployees('BOTH')" style="padding: 5px 12px; font-size: 0.8rem;">Both Completed</button>
+        </div>
+        <div id="modalEmpCount" style="font-size: 0.84rem; color: var(--primary-dark); font-weight: 700;">0 Employees</div>
+      </div>
+
+      <!-- Completed Employees Table -->
+      <div class="data-table-wrapper" style="max-height: 420px; overflow-y: auto; border: 1px solid #E2E8F0; border-radius: 8px; margin-bottom: 16px;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width: 45px;">S.No</th>
+              <th>Emp ID</th>
+              <th>Employee Name</th>
+              <th>Skill Level</th>
+              <th>Exam Mark</th>
+              <th>OJT Form Mark</th>
+              <th>Overall Status</th>
+              <th style="text-align: center;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="modalCompletedEmpsBody">
+            <!-- Dynamic rows -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Action Footer -->
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="font-size: 0.78rem; color: var(--text-muted);">Scores are based on raw marks obtained.</div>
+        <button type="button" class="btn-secondary" onclick="closeSectionCompletedModal()" style="padding: 8px 18px; font-size: 0.85rem;">Close</button>
       </div>
     </div>
   </div>

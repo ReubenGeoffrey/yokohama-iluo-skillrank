@@ -1206,26 +1206,245 @@ function capitalize(str) {
 // Admin Dashboard Analytics
 function renderAdminDashboard() {
   const records = getStoredRecords();
+  const allOjt = getStoredOjtRecords();
   const allEmps = EMPLOYEES;
 
   let completedCount = 0;
   let inProgressCount = 0;
+  let ojtCompletedCount = 0;
 
   allEmps.forEach(emp => {
     const rec = records[emp.empNo];
     if (rec && rec.isCompleted) completedCount++;
     else if (rec && rec.inProgress) inProgressCount++;
+
+    const ojt = allOjt[emp.empNo];
+    if (ojt && (ojt.totalScore !== undefined || ojt.scorePct !== undefined)) {
+      ojtCompletedCount++;
+    }
   });
 
   const notStartedCount = allEmps.length - completedCount - inProgressCount;
 
- document.getElementById('statTotalEmp').innerText = allEmps.length;
- document.getElementById('statCompleted').innerText = completedCount;
- document.getElementById('statInProgress').innerText = inProgressCount;
- document.getElementById('statNotStarted').innerText = notStartedCount;
+  if (document.getElementById('statTotalEmp')) document.getElementById('statTotalEmp').innerText = allEmps.length;
+  if (document.getElementById('statCompleted')) document.getElementById('statCompleted').innerText = completedCount;
+  if (document.getElementById('statInProgress')) document.getElementById('statInProgress').innerText = inProgressCount;
+  if (document.getElementById('statNotStarted')) document.getElementById('statNotStarted').innerText = notStartedCount;
+  if (document.getElementById('statOjtCompleted')) document.getElementById('statOjtCompleted').innerText = ojtCompletedCount;
 
   renderPieChart(completedCount, inProgressCount, notStartedCount);
   renderBarChart(records);
+  renderDashboardSectionMatrix(records, allOjt);
+}
+
+function renderDashboardSectionMatrix(records, allOjt) {
+  const tbody = document.getElementById('dashboardSectionTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  QA_SECTIONS_LIST.forEach((sec, idx) => {
+    const emps = EMPLOYEES.filter(e => normalizeSectionName(e.section) === sec.normName);
+    const total = emps.length;
+
+    let examDone = 0;
+    let ojtDone = 0;
+    let bothDone = 0;
+
+    emps.forEach(e => {
+      const rec = records[e.empNo];
+      const ojt = allOjt[e.empNo];
+      const hasExam = rec && rec.isCompleted;
+      const hasOjt = ojt && (ojt.totalScore !== undefined || ojt.scorePct !== undefined);
+
+      if (hasExam) examDone++;
+      if (hasOjt) ojtDone++;
+      if (hasExam && hasOjt) bothDone++;
+    });
+
+    const completionPct = total > 0 ? Math.round((bothDone / total) * 100) : 0;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="font-weight: 700; color: var(--text-muted);">${idx + 1}</td>
+      <td>
+        <div style="font-weight: 700; color: var(--text-main); font-size: 0.92rem;">${sec.title}</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted);">${sec.code} Section &bull; ${sec.name}</div>
+      </td>
+      <td style="text-align: center; font-weight: 700;">${total}</td>
+      <td style="text-align: center;">
+        <span class="${examDone > 0 ? 'badge-pass' : ''}" style="display: inline-block; padding: 3px 8px; font-weight: 700; font-size: 0.8rem;">
+          ${examDone} / ${total}
+        </span>
+      </td>
+      <td style="text-align: center;">
+        <span class="${ojtDone > 0 ? 'badge-pass' : ''}" style="display: inline-block; padding: 3px 8px; font-weight: 700; font-size: 0.8rem; background: ${ojtDone > 0 ? '#DCFCE7' : '#F1F5F9'}; color: ${ojtDone > 0 ? '#166534' : '#64748B'};">
+          ${ojtDone} / ${total}
+        </span>
+      </td>
+      <td style="text-align: center;">
+        <span style="display: inline-block; padding: 3px 8px; font-weight: 800; font-size: 0.82rem; background: ${bothDone > 0 ? '#DBEAFE' : '#F8FAFC'}; color: ${bothDone > 0 ? '#1E40AF' : '#94A3B8'}; border-radius: 6px;">
+          ${bothDone} / ${total}
+        </span>
+      </td>
+      <td>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="flex: 1; background: #E2E8F0; height: 8px; border-radius: 4px; overflow: hidden;">
+            <div style="width: ${completionPct}%; background: #059669; height: 100%; border-radius: 4px; transition: width 0.3s ease;"></div>
+          </div>
+          <span style="font-size: 0.76rem; font-weight: 700; color: #0F172A; min-width: 50px; text-align: right;">${bothDone} Done</span>
+        </div>
+      </td>
+      <td style="text-align: center;">
+        <div style="display: flex; gap: 6px; justify-content: center;">
+          <button type="button" class="btn-primary" style="padding: 4px 10px; font-size: 0.76rem; background: #005B9E; border-color: #005B9E;" onclick="showSectionCompletedModal('${sec.id}')">
+            View List
+          </button>
+          <button type="button" class="btn-secondary" style="padding: 4px 8px; font-size: 0.76rem;" onclick="navigateTo('/control-center/sections'); renderSectionsExplorer('${sec.id}');">
+            Explorer
+          </button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+let currentModalSectionId = null;
+let currentModalFilterType = 'ALL';
+
+function showSectionCompletedModal(secId, filterType = 'ALL') {
+  currentModalSectionId = secId;
+  currentModalFilterType = filterType;
+
+  const sec = QA_SECTIONS_LIST.find(s => s.id === secId) || QA_SECTIONS_LIST[0];
+  const modal = document.getElementById('modalSectionCompleted');
+  if (!modal) return;
+
+  const titleEl = document.getElementById('modalSecTitle');
+  if (titleEl) titleEl.innerText = `${sec.title} - Completion Details`;
+
+  const subEl = document.getElementById('modalSecSubtitle');
+  if (subEl) subEl.innerText = `Detailed employee scores for MCQ assessment and OJT practical evaluations in ${sec.title}`;
+
+  filterModalEmployees(currentModalFilterType);
+
+  modal.style.display = 'flex';
+  modal.classList.add('active');
+  modal.scrollTop = 0;
+}
+
+function closeSectionCompletedModal() {
+  const modal = document.getElementById('modalSectionCompleted');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
+}
+
+function filterModalEmployees(type) {
+  currentModalFilterType = type;
+
+  ['All', 'Exam', 'Ojt', 'Both'].forEach(k => {
+    const btn = document.getElementById(`filterModal${k}Btn`);
+    if (btn) {
+      if (type.toUpperCase() === k.toUpperCase()) {
+        btn.className = 'btn-primary';
+      } else {
+        btn.className = 'btn-secondary';
+      }
+    }
+  });
+
+  const sec = QA_SECTIONS_LIST.find(s => s.id === currentModalSectionId) || QA_SECTIONS_LIST[0];
+  const sectionEmps = EMPLOYEES.filter(e => normalizeSectionName(e.section) === sec.normName);
+  const records = getStoredRecords();
+  const allOjt = getStoredOjtRecords();
+
+  const filtered = sectionEmps.filter(e => {
+    const rec = records[e.empNo];
+    const ojt = allOjt[e.empNo];
+    const hasExam = rec && rec.isCompleted;
+    const hasOjt = ojt && (ojt.totalScore !== undefined || ojt.scorePct !== undefined);
+
+    if (type === 'EXAM') return hasExam;
+    if (type === 'OJT') return hasOjt;
+    if (type === 'BOTH') return hasExam && hasOjt;
+    return true; // ALL
+  });
+
+  const countEl = document.getElementById('modalEmpCount');
+  if (countEl) countEl.innerText = `${filtered.length} Employees (${type === 'ALL' ? 'Total' : type + ' Done'})`;
+
+  const tbody = document.getElementById('modalCompletedEmpsBody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" style="text-align: center; padding: 28px; color: var(--text-muted);">
+          No employees found for filter "${type}" in ${sec.title}.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  filtered.forEach((emp, idx) => {
+    const rec = records[emp.empNo] || {};
+    const ojt = allOjt[emp.empNo] || {};
+
+    const hasExam = rec.isCompleted;
+    const hasOjt = ojt.totalScore !== undefined || ojt.scorePct !== undefined;
+
+    // RAW MARKS ONLY - NO PERCENTAGE (%) PER USER REQUIREMENT
+    const examMarkDisplay = hasExam ? `${rec.totalMark !== undefined ? rec.totalMark : 0} Marks` : (rec.inProgress ? 'In Progress' : 'Not Started');
+    const ojtMarkDisplay = hasOjt ? `${ojt.totalScore !== undefined ? ojt.totalScore : 0}/${ojt.maxScore || 50} Marks` : 'Pending';
+
+    const examPassed = rec.status === 'Passed' || (rec.markPct !== undefined && rec.markPct >= 70);
+    const ojtPassed = ojt.qualificationStatus === 'Qualified' || (ojt.scorePct !== undefined && ojt.scorePct >= 70);
+
+    let statusHtml = '';
+    if (hasExam && hasOjt) {
+      if (examPassed && ojtPassed) {
+        statusHtml = `<span class="badge-pass">Fully Qualified</span>`;
+      } else {
+        statusHtml = `<span class="badge-fail">Needs Retest</span>`;
+      }
+    } else if (hasExam) {
+      statusHtml = `<span style="background: #EFF6FF; color: #1E40AF; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 0.74rem;">${rec.status || 'Exam Completed'}</span>`;
+    } else if (hasOjt) {
+      statusHtml = `<span style="background: #ECFDF5; color: #065F46; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 0.74rem;">OJT ${ojt.qualificationStatus || 'Done'}</span>`;
+    } else {
+      statusHtml = `<span style="color: #94A3B8; font-size: 0.76rem;">Pending</span>`;
+    }
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="font-weight: 700; color: var(--text-muted);">${idx + 1}</td>
+      <td><strong style="color: #005B9E; font-family: monospace;">${emp.empNo}</strong></td>
+      <td><strong>${emp.name}</strong></td>
+      <td><span class="skill-level-badge level-${emp.currentLevel || 'I'}" style="font-size: 0.76rem; padding: 2px 8px;">${emp.currentLevel || 'I'} Level</span></td>
+      <td>
+        <span class="${hasExam ? (examPassed ? 'badge-pass' : 'badge-fail') : ''}" style="font-weight: 700; font-size: 0.8rem;">
+          ${examMarkDisplay}
+        </span>
+      </td>
+      <td>
+        <span class="${hasOjt ? (ojtPassed ? 'badge-pass' : 'badge-fail') : ''}" style="font-weight: 700; font-size: 0.8rem; cursor: pointer;" onclick="closeSectionCompletedModal(); openOjtModalForEmployee('${emp.empNo}');" title="Click to view/edit OJT">
+          ${ojtMarkDisplay}
+        </span>
+      </td>
+      <td>${statusHtml}</td>
+      <td style="text-align: center;">
+        <div style="display: flex; gap: 4px; justify-content: center;">
+          ${hasExam ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.72rem; background: #0284C7; border-color: #0284C7;" onclick="downloadEmployeePDF('${emp.empNo}')">PDF</button>` : ''}
+          <button class="btn-primary" style="padding: 3px 8px; font-size: 0.72rem; background: #059669; border-color: #059669;" onclick="closeSectionCompletedModal(); openOjtModalForEmployee('${emp.empNo}')">OJT</button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
 }
 
 function renderPieChart(completed, inProgress, notStarted) {
@@ -2818,7 +3037,7 @@ const SECTION_TRAINING_MODULES = {
   ]
 };
 
-function computeEmployeeTrainingNeed(emp, rec, trainingRec) {
+function computeEmployeeTrainingNeed(emp, rec, trainingRec, ojt) {
   const normSec = normalizeSectionName(emp.section);
   const modules = SECTION_TRAINING_MODULES[normSec] || [
     'QA-GEN-01: Quality SOP Standard Work & Visual Inspection',
@@ -2834,35 +3053,56 @@ function computeEmployeeTrainingNeed(emp, rec, trainingRec) {
   let finding = '';
   let assignedModule = modules[0];
 
-  if (rec && (rec.status === 'Failed' || (rec.markPct !== undefined && rec.markPct < 70) || (rec.tabSwitchCount && rec.tabSwitchCount > 3))) {
-    priority = 'CRITICAL';
-    targetLevel = `Retest (${rec.targetLevel || currLevel})`;
-    finding = `Scored ${rec.markPct !== undefined ? rec.markPct + '%' : 'Failed'} (<70% standard) - Needs Refresher & Retest`;
-    assignedModule = modules[1] || modules[0];
-  } else if (rec && (rec.status === 'Passed' || (rec.markPct !== undefined && rec.markPct >= 70))) {
-    priority = 'PROGRESSION';
-    if (currLevel === 'I') targetLevel = 'L Level (Basic Operator)';
-    else if (currLevel === 'L') targetLevel = 'U Level (Independent Skilled)';
-    else if (currLevel === 'U') targetLevel = 'O Level (Supervisor / Evaluator)';
-    else targetLevel = 'Master Trainer (ILUO Lead)';
+  const hasExam = !!(rec && rec.isCompleted);
+  const examFailed = rec && (rec.status === 'Failed' || (rec.markPct !== undefined && rec.markPct < 70) || (rec.tabSwitchCount && rec.tabSwitchCount > 3));
+  const examPassed = rec && (rec.status === 'Passed' || (rec.markPct !== undefined && rec.markPct >= 70));
+  const examMarkVal = rec && rec.totalMark !== undefined ? rec.totalMark : 0;
+  const examMarkStr = hasExam ? `${examMarkVal} Marks` : (rec && rec.inProgress ? 'In Progress' : 'Not Started');
 
-    finding = `Passed ${rec.targetLevel || currLevel} with ${rec.markPct}% - Eligible for Next Level Advancement`;
+  const hasOjt = !!(ojt && (ojt.totalScore !== undefined || ojt.scorePct !== undefined));
+  const ojtFailed = hasOjt && (ojt.qualificationStatus === 'Not Qualified' || (ojt.scorePct !== undefined && ojt.scorePct < 70));
+  const ojtPassed = hasOjt && (ojt.qualificationStatus === 'Qualified' || (ojt.scorePct !== undefined && ojt.scorePct >= 70));
+  const ojtScoreVal = hasOjt ? ojt.totalScore : 0;
+  const ojtMaxVal = hasOjt ? (ojt.maxScore || 50) : 50;
+  const ojtMarkStr = hasOjt ? `${ojtScoreVal}/${ojtMaxVal} Marks` : 'Pending';
+  const ojtStatus = hasOjt ? (ojt.qualificationStatus || (ojtPassed ? 'Qualified' : 'Not Qualified')) : 'Pending';
+
+  if (currLevel === 'I') targetLevel = 'L Level (Basic)';
+  else if (currLevel === 'L') targetLevel = 'U Level (Independent)';
+  else if (currLevel === 'U') targetLevel = 'O Level (Evaluator)';
+  else targetLevel = 'Master Trainer (ILUO Lead)';
+
+  if (examFailed || ojtFailed) {
+    priority = 'CRITICAL';
+    targetLevel = `Retest (${rec && rec.targetLevel ? rec.targetLevel : currLevel})`;
+    if (examFailed && ojtFailed) {
+      finding = `MCQ: ${examMarkVal} Marks (Failed standard) &bull; OJT: ${ojtScoreVal}/${ojtMaxVal} Marks (Not Qualified) &bull; Full Retest & Retraining`;
+    } else if (ojtFailed) {
+      finding = `MCQ: ${examMarkVal} Marks (Passed) &bull; OJT: ${ojtScoreVal}/${ojtMaxVal} Marks (Not Qualified) &bull; Practical Checkpoints Refresher Required`;
+    } else {
+      finding = `MCQ: ${examMarkVal} Marks (Failed standard) &bull; OJT: ${hasOjt ? `${ojtScoreVal}/${ojtMaxVal} Marks` : 'Pending'} &bull; MCQ Retest Required`;
+    }
+    assignedModule = modules[1] || modules[0];
+  } else if (examPassed) {
+    priority = 'PROGRESSION';
+    if (ojtPassed) {
+      finding = `MCQ: ${examMarkVal} Marks &bull; OJT: ${ojtScoreVal}/${ojtMaxVal} Marks (Qualified) &bull; Recommended for ${targetLevel} Advancement`;
+    } else {
+      finding = `MCQ: ${examMarkVal} Marks (Passed) &bull; Practical OJT Evaluation Pending`;
+    }
     assignedModule = modules[2] || modules[0];
   } else {
     // Not yet attempted
     if (currLevel === 'I') {
       priority = 'PROGRESSION';
-      targetLevel = 'L Level (Basic)';
       finding = 'Learner (I Level) - Foundational Operator Qualification Training required';
       assignedModule = modules[0];
     } else if (currLevel === 'L') {
       priority = 'PROGRESSION';
-      targetLevel = 'U Level (Independent)';
       finding = 'Supervised Operator (L Level) - Eligible for Independent Skilled qualification';
       assignedModule = modules[1] || modules[0];
     } else if (currLevel === 'U') {
       priority = 'PROGRESSION';
-      targetLevel = 'O Level (Evaluator)';
       finding = 'Skilled Operator (U Level) - Training for Evaluator / Trainer certification';
       assignedModule = modules[2] || modules[0];
     } else {
@@ -2880,6 +3120,15 @@ function computeEmployeeTrainingNeed(emp, rec, trainingRec) {
     normSection: normSec,
     currentLevel: currLevel,
     targetLevel,
+    examMark: examMarkStr,
+    hasExam,
+    examPassed,
+    examFailed,
+    ojtMark: ojtMarkStr,
+    hasOjt,
+    ojtPassed,
+    ojtFailed,
+    ojtStatus,
     priority, // CRITICAL | PROGRESSION | REFRESHER
     finding,
     assignedModule,
@@ -2890,12 +3139,14 @@ function computeEmployeeTrainingNeed(emp, rec, trainingRec) {
 
 function getAllTrainingDataset() {
   const records = getStoredRecords();
+  const allOjt = getStoredOjtRecords();
   const trainingRecords = getStoredTrainingRecords();
 
   return EMPLOYEES.map(emp => {
     const rec = records[emp.empNo];
+    const ojt = allOjt[emp.empNo];
     const trainingRec = trainingRecords[emp.empNo];
-    return computeEmployeeTrainingNeed(emp, rec, trainingRec);
+    return computeEmployeeTrainingNeed(emp, rec, trainingRec, ojt);
   });
 }
 
@@ -2940,7 +3191,7 @@ function filterTrainingRequirements() {
   if (filtered.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="11" style="text-align: center; padding: 36px; color: var(--text-muted);">
+        <td colspan="13" style="text-align: center; padding: 36px; color: var(--text-muted);">
           No training requirement records found matching the active filters.
         </td>
       </tr>
@@ -3001,6 +3252,16 @@ function filterTrainingRequirements() {
         <td>
           <strong style="color: #0284C7; font-size: 0.82rem;">${item.targetLevel}</strong>
         </td>
+        <td>
+          <span class="${item.hasExam ? (item.examPassed ? 'badge-pass' : 'badge-fail') : ''}" style="font-weight: 700; font-size: 0.8rem;">
+            ${item.examMark}
+          </span>
+        </td>
+        <td>
+          <span class="${item.hasOjt ? (item.ojtPassed ? 'badge-pass' : 'badge-fail') : ''}" style="font-weight: 700; font-size: 0.8rem; cursor: pointer;" onclick="openOjtModalForEmployee('${item.empNo}')" title="Click to view or edit OJT form">
+            ${item.ojtMark}
+          </span>
+        </td>
         <td style="font-size: 0.82rem; color: #334155;">${item.finding}</td>
         <td style="font-size: 0.82rem; font-weight: 600; color: #0F172A;">${item.assignedModule}</td>
         <td>${prioBadge}</td>
@@ -3039,6 +3300,9 @@ function exportTrainingPlanExcel() {
     "Section": item.section,
     "Current Skill Level": item.currentLevel,
     "Target Skill Level": item.targetLevel,
+    "Exam Mark": item.examMark,
+    "OJT Form Mark": item.ojtMark,
+    "OJT Status": item.ojtStatus,
     "Assessment Finding": item.finding,
     "Recommended Training Module": item.assignedModule,
     "Training Priority": item.priority,
