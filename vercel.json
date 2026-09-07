@@ -9,7 +9,8 @@
           "index.html",
           "app.js",
           "data.js",
-          "styles.css"
+          "styles.css",
+          "ojt_evaluations.json"
         ]
       }
     }

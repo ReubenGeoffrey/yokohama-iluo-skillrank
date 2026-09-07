@@ -476,11 +476,21 @@ try {
   console.error('Error loading OJT evaluations:', e.message);
 }
 
-app.get('/api/ojt-evaluations', (req, res) => {
-  res.json({ success: true, evaluations: Object.fromEntries(globalOjtEvaluations) });
+app.get('/api/ojt-evaluations', async (req, res) => {
+  let ojtObj = Object.fromEntries(globalOjtEvaluations);
+
+  if (kvUrl && kvToken) {
+    const cloudOjt = await syncWithCloudKv('GET', 'yokohama_ojt_evaluations');
+    if (cloudOjt && typeof cloudOjt === 'object') {
+      ojtObj = { ...cloudOjt, ...ojtObj };
+      Object.entries(ojtObj).forEach(([k, v]) => globalOjtEvaluations.set(String(k), v));
+    }
+  }
+
+  res.json({ success: true, evaluations: ojtObj });
 });
 
-app.post('/api/ojt-evaluations', (req, res) => {
+app.post('/api/ojt-evaluations', async (req, res) => {
   const { empNo, ojtData } = req.body;
   if (!empNo || !ojtData) {
     return res.status(400).json({ success: false, message: 'empNo and ojtData required' });
@@ -491,7 +501,11 @@ app.post('/api/ojt-evaluations', (req, res) => {
   try {
     fs.writeFileSync(OJT_JSON_FILE, JSON.stringify(Object.fromEntries(globalOjtEvaluations), null, 2), 'utf-8');
   } catch (err) {
-    console.error('Failed to write ojt_evaluations.json:', err.message);
+    // Non-fatal on read-only environments like Vercel serverless
+  }
+
+  if (kvUrl && kvToken) {
+    await syncWithCloudKv('SET', 'yokohama_ojt_evaluations', Object.fromEntries(globalOjtEvaluations));
   }
 
   try {
@@ -506,10 +520,10 @@ app.post('/api/ojt-evaluations', (req, res) => {
       });
     }
   } catch (err) {
-    console.error('Error triggering Excel update script:', err.message);
+    // Non-fatal if python/excel not available on cloud serverless
   }
 
-  res.json({ success: true, message: `OJT evaluation saved and synced to Excel for employee ${empNo}` });
+  res.json({ success: true, message: `OJT evaluation saved and synced for employee ${empNo}` });
 });
 
 // ---------------------------------------------------------------------

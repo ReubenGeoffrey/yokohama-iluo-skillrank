@@ -23,5 +23,34 @@
     "safetyRep": "Safety Lead",
     "qualityRep": "Quality Lead",
     "ciRep": "CI Lead"
+  },
+  "900444": {
+    "empNo": "900444",
+    "name": "S. BALU",
+    "section": "Ware House QA",
+    "templateCode": "89D",
+    "formatNo": "Format No: ATC/T/FOR/HR/89D",
+    "scores": {
+      "1": 5,
+      "2": 5,
+      "3": 4,
+      "4": 3,
+      "5": 3,
+      "6": 4,
+      "7": 4,
+      "8": 4,
+      "9": 5,
+      "10": 4
+    },
+    "totalScore": 41,
+    "maxScore": 50,
+    "scorePct": 82,
+    "qualificationStatus": "Qualified",
+    "comments": "",
+    "safetyRep": "sk",
+    "qualityRep": "xkk",
+    "ciRep": "jndbbddoi",
+    "evaluatedAt": "2026-09-07",
+    "updatedAt": "2026-09-07T09:34:20.003Z"
   }
 }
