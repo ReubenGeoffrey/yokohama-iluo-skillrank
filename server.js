@@ -458,7 +458,23 @@ app.delete('/api/records/:empNo', async (req, res) => {
 // ---------------------------------------------------------------------
 // ON-THE-JOB TRAINING EVALUATION (OJT) CLOUD PERSISTENCE
 // ---------------------------------------------------------------------
+// ON-THE-JOB TRAINING EVALUATION (OJT) CLOUD & EXCEL PERSISTENCE
+// ---------------------------------------------------------------------
+const fs = require('fs');
+const { execFile } = require('child_process');
+const OJT_JSON_FILE = path.join(__dirname, 'ojt_evaluations.json');
 const globalOjtEvaluations = new Map();
+
+try {
+  if (fs.existsSync(OJT_JSON_FILE)) {
+    const raw = fs.readFileSync(OJT_JSON_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    Object.entries(parsed).forEach(([k, v]) => globalOjtEvaluations.set(String(k), v));
+    console.log(`📋 Loaded ${globalOjtEvaluations.size} OJT evaluations from disk.`);
+  }
+} catch (e) {
+  console.error('Error loading OJT evaluations:', e.message);
+}
 
 app.get('/api/ojt-evaluations', (req, res) => {
   res.json({ success: true, evaluations: Object.fromEntries(globalOjtEvaluations) });
@@ -469,8 +485,31 @@ app.post('/api/ojt-evaluations', (req, res) => {
   if (!empNo || !ojtData) {
     return res.status(400).json({ success: false, message: 'empNo and ojtData required' });
   }
+
   globalOjtEvaluations.set(String(empNo), ojtData);
-  res.json({ success: true, message: `OJT evaluation saved for employee ${empNo}` });
+
+  try {
+    fs.writeFileSync(OJT_JSON_FILE, JSON.stringify(Object.fromEntries(globalOjtEvaluations), null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to write ojt_evaluations.json:', err.message);
+  }
+
+  try {
+    const scriptPath = path.join(__dirname, 'update_ojt_excel.py');
+    if (fs.existsSync(scriptPath)) {
+      execFile('python', [scriptPath, '--emp', String(empNo)], (err, stdout, stderr) => {
+        if (err) {
+          console.error(`Error updating Excel for employee ${empNo}:`, err.message);
+        } else {
+          console.log(`Excel updated for employee ${empNo}: ${stdout.trim()}`);
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Error triggering Excel update script:', err.message);
+  }
+
+  res.json({ success: true, message: `OJT evaluation saved and synced to Excel for employee ${empNo}` });
 });
 
 // ---------------------------------------------------------------------

@@ -1,0 +1,27 @@
+{
+  "900141": {
+    "empNo": "900141",
+    "name": "V. JOSEPH RAJ",
+    "section": "Ware House QA",
+    "scores": {
+      "1": 5,
+      "2": 5,
+      "3": 5,
+      "4": 5,
+      "5": 5,
+      "6": 5,
+      "7": 5,
+      "8": 5,
+      "9": 5,
+      "10": 5
+    },
+    "totalScore": 50,
+    "maxScore": 50,
+    "scorePct": 100,
+    "qualificationStatus": "Qualified",
+    "comments": "Perfect score on all warehouse checkpoints",
+    "safetyRep": "Safety Lead",
+    "qualityRep": "Quality Lead",
+    "ciRep": "CI Lead"
+  }
+}

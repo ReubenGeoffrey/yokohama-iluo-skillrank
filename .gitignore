@@ -2,7 +2,9 @@
 node_modules/
 *.log
 *.txt
+__pycache__/
 *.py
+!update_ojt_excel.py
 parsed_qc_questions.json
 parsed_perfect_qc_bank.json
 parsed_docx.json

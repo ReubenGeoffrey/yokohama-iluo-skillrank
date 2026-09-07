@@ -3,6 +3,7 @@
 // LocalStorage Keys
 const STORAGE_KEY_RECORDS = 'iluo_assessment_records_v1';
 const STORAGE_KEY_SESSION = 'iluo_current_session_v1';
+const STORAGE_KEY_OJT = 'yokohama_ojt_evaluations_v1';
 
 // Global App State
 let currentUser = null; // { empNo, name, dept, section, doj, currentLevel, targetLevel }
@@ -25,6 +26,7 @@ function initStorage() {
     localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify({}));
   }
   syncCloudRecords();
+  syncCloudOjtEvaluations();
   syncCloudQuestions();
   syncCloudEmployees();
   syncCloudSettings();
@@ -61,6 +63,23 @@ async function syncCloudRecords() {
       const local = getStoredRecords();
       const merged = { ...local, ...data.records };
       localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(merged));
+      // Re-render admin table if visible
+      if (document.getElementById('adminTableBody')) {
+        const searchInput = document.getElementById('adminSearchInput');
+        renderAdminTable(searchInput ? searchInput.value : '');
+      }
+    }
+  } catch (e) {}
+}
+
+async function syncCloudOjtEvaluations() {
+  try {
+    const res = await fetch('/api/ojt-evaluations');
+    const data = await res.json();
+    if (data.success && data.evaluations) {
+      const local = getStoredOjtRecords();
+      const merged = { ...local, ...data.evaluations };
+      localStorage.setItem(STORAGE_KEY_OJT, JSON.stringify(merged));
       // Re-render admin table if visible
       if (document.getElementById('adminTableBody')) {
         const searchInput = document.getElementById('adminSearchInput');
@@ -1643,6 +1662,7 @@ function deleteEmployee(empNo) {
 // Results Database Table & Reset Action
 function renderAdminTable(query) {
   const records = getStoredRecords();
+  const allOjt = getStoredOjtRecords();
   const tbody = document.getElementById('adminTableBody');
   tbody.innerHTML = '';
 
@@ -1662,6 +1682,7 @@ function renderAdminTable(query) {
 
   filtered.forEach(emp => {
     const rec = records[emp.empNo] || {};
+    const ojt = allOjt[emp.empNo] || {};
 
     const tr = document.createElement('tr');
 
@@ -1670,6 +1691,12 @@ function renderAdminTable(query) {
       : rec.inProgress
       ? `<span class="badge-pending">In Progress (${rec.tabSwitchCount || 0} Sw)</span>`
       : `<span style="color: #94A3B8;">Not Started</span>`;
+
+    const hasOjt = ojt.totalScore !== undefined || ojt.scorePct !== undefined;
+    const isOjtQualified = ojt.qualificationStatus === 'Qualified' || (ojt.scorePct !== undefined && ojt.scorePct >= 70);
+    const ojtBadge = hasOjt
+      ? `<span class="${isOjtQualified ? 'badge-pass' : 'badge-fail'}" style="cursor: pointer; display: inline-block; font-size: 0.78rem;" onclick="openOjtModalForEmployee('${emp.empNo}')" title="Total Score: ${ojt.totalScore}/${ojt.maxScore || 50} (${ojt.scorePct}%) - Click to open">${ojt.qualificationStatus || (isOjtQualified ? 'Qualified' : 'Not Qualified')} (${ojt.scorePct}%)</span>`
+      : `<span style="color: #94A3B8; font-size: 0.8rem; cursor: pointer; text-decoration: underline dotted;" onclick="openOjtModalForEmployee('${emp.empNo}')" title="Click to open OJT evaluation">Pending</span>`;
 
     const hasRecord = rec.isCompleted || rec.inProgress;
     const actionBtn = `
@@ -1693,6 +1720,7 @@ function renderAdminTable(query) {
       <td><strong>${rec.totalMark !== undefined ? rec.totalMark : '-'}</strong></td>
       <td>${rec.markPct !== undefined ? rec.markPct + '%' : '-'}</td>
       <td>${statusBadge}</td>
+      <td>${ojtBadge}</td>
       <td>${rec.attemptDate || '-'}</td>
       <td>${actionBtn}</td>
     `;
@@ -1939,8 +1967,25 @@ function exportDataToCSV(dataArray, filename) {
 
 function getAdminExportDataset() {
   const records = getStoredRecords();
+  const allOjt = getStoredOjtRecords();
   return EMPLOYEES.map((emp, index) => {
     const rec = records[emp.empNo] || {};
+    const ojt = allOjt[emp.empNo] || {};
+    const hasOjt = ojt.totalScore !== undefined || ojt.scorePct !== undefined;
+    const examStatus = rec.status || (rec.inProgress ? "In Progress" : "Not Started");
+    const ojtStatus = hasOjt ? (ojt.qualificationStatus || (ojt.scorePct >= 70 ? "Qualified" : "Not Qualified")) : "Pending";
+
+    let overallStatus = "Pending";
+    if (rec.isCompleted && hasOjt) {
+      if (rec.status === "Passed" && (ojtStatus === "Qualified" || ojt.scorePct >= 70)) {
+        overallStatus = "Fully Qualified";
+      } else {
+        overallStatus = "Needs Retest / Improvement";
+      }
+    } else if (rec.isCompleted) {
+      overallStatus = rec.status === "Passed" ? "Exam Passed (OJT Pending)" : "Exam Failed";
+    }
+
     return {
       "S.No": index + 1,
       "Employee No": emp.empNo,
@@ -1953,9 +1998,13 @@ function getAdminExportDataset() {
       "L mark": rec.lMark !== undefined ? rec.lMark : 0,
       "O mark": rec.oMark !== undefined ? rec.oMark : 0,
       "Total Mark": rec.totalMark !== undefined ? rec.totalMark : 0,
-      "Percentage": rec.markPct !== undefined ? rec.markPct + "%" : "0%",
+      "Exam Percentage": rec.markPct !== undefined ? rec.markPct + "%" : "0%",
       "Tab Switches": rec.tabSwitchCount || 0,
-      "Status": rec.status || (rec.inProgress ? "In Progress" : "Not Started"),
+      "Exam Status": examStatus,
+      "OJT Score": hasOjt ? `${ojt.totalScore}/${ojt.maxScore || 50}` : "-",
+      "OJT Percentage": hasOjt ? `${ojt.scorePct}%` : "-",
+      "OJT Status": ojtStatus,
+      "Overall Status": overallStatus,
       "Attempt Date": rec.attemptDate || ""
     };
   });
@@ -2392,12 +2441,13 @@ function filterSectionEmployees() {
       : `<span style="color: #94A3B8;">Not Started</span>`;
 
     const hasRecord = rec.isCompleted || rec.inProgress;
-    const actionBtn = hasRecord
-      ? `<div style="display: flex; gap: 6px; flex-wrap: wrap;">
-           <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #0284C7; border-color: #0284C7;" onclick="downloadEmployeePDF('${emp.empNo}')">PDF</button>
-           <button class="btn-reset" style="padding: 3px 8px; font-size: 0.75rem;" onclick="confirmAndResetExam('${emp.empNo}', '${emp.name.replace(/'/g, "\\'")}')">Reset</button>
-         </div>`
-      : `<span style="color: #CBD5E1; font-size: 0.78rem;">No attempt</span>`;
+    const actionBtn = `
+      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        ${hasRecord ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #0284C7; border-color: #0284C7;" onclick="downloadEmployeePDF('${emp.empNo}')">PDF</button>` : ''}
+        <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #059669; border-color: #059669;" onclick="openOjtModalForEmployee('${emp.empNo}')">OJT Form</button>
+        ${hasRecord ? `<button class="btn-reset" style="padding: 3px 8px; font-size: 0.75rem;" onclick="confirmAndResetExam('${emp.empNo}', '${emp.name.replace(/'/g, "\\'")}')">Reset</button>` : ''}
+      </div>
+    `;
 
     tr.innerHTML = `
       <td><strong>${emp.empNo}</strong></td>
@@ -2589,8 +2639,13 @@ function exportCurrentSectionExcel(targetSecKey) {
   const sectionEmps = EMPLOYEES.filter(emp => normalizeSectionName(emp.section) === normSec);
 
   // Sheet 1: Employees & Marks
+  const allOjt = getStoredOjtRecords();
   const empSheetData = sectionEmps.length > 0 ? sectionEmps.map((emp, index) => {
     const rec = records[emp.empNo] || {};
+    const ojt = allOjt[emp.empNo] || {};
+    const hasOjt = ojt.totalScore !== undefined || ojt.scorePct !== undefined;
+    const examStatus = rec.status || (rec.inProgress ? "In Progress" : "Not Started");
+    const ojtStatus = hasOjt ? (ojt.qualificationStatus || (ojt.scorePct >= 70 ? "Qualified" : "Not Qualified")) : "Pending";
     return {
       "S.No": index + 1,
       "Employee No": emp.empNo,
@@ -2605,9 +2660,12 @@ function exportCurrentSectionExcel(targetSecKey) {
       "L Mark": rec.lMark !== undefined ? rec.lMark : 0,
       "O Mark": rec.oMark !== undefined ? rec.oMark : 0,
       "Total Mark": rec.totalMark !== undefined ? rec.totalMark : 0,
-      "Percentage": rec.markPct !== undefined ? rec.markPct + "%" : "0%",
+      "Exam Percentage": rec.markPct !== undefined ? rec.markPct + "%" : "0%",
       "Tab Switches": rec.tabSwitchCount || 0,
-      "Status": rec.status || (rec.inProgress ? "In Progress" : "Not Started"),
+      "Exam Status": examStatus,
+      "OJT Score": hasOjt ? `${ojt.totalScore}/${ojt.maxScore || 50}` : "-",
+      "OJT %": hasOjt ? `${ojt.scorePct}%` : "-",
+      "OJT Status": ojtStatus,
       "Attempt Date": rec.attemptDate || ""
     };
   }) : [{ "Notice": `No registered employees currently under ${currentSec.title}.` }];
@@ -3010,7 +3068,6 @@ function exportTrainingPlanExcel() {
 // ---------------------------------------------------------------------
 // ON-THE-JOB TRAINING EVALUATION (OJT) ENGINE (D:\QA 7 Formats)
 // ---------------------------------------------------------------------
-const STORAGE_KEY_OJT = 'yokohama_ojt_evaluations_v1';
 
 const OJT_SECTION_TEMPLATES = {
   'rro_alt': {
@@ -3431,6 +3488,13 @@ function saveOjtEvaluationForm() {
   };
 
   saveOjtRecord(activeOjtEmployee.empNo, ojtData);
+
+  // If admin table is active, refresh it immediately
+  if (document.getElementById('adminTableBody')) {
+    const searchInput = document.getElementById('adminSearchInput');
+    renderAdminTable(searchInput ? searchInput.value : '');
+  }
+
   showToast(`OJT Evaluation saved successfully for Employee ${activeOjtEmployee.empNo} (${qualificationStatus})`);
 }
 
