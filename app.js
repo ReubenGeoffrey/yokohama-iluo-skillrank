@@ -1061,12 +1061,17 @@ function submitAssessment() {
     attemptDate: new Date().toLocaleDateString('en-GB')
   };
 
+  recordData.empNo = currentUser.empNo;
+  window.lastCompletedEmpNo = currentUser.empNo;
   saveRecord(currentUser.empNo, recordData);
   showResultView(recordData, true);
 }
 
 function showResultView(record, isImmediateCompletion = false) {
- document.getElementById('resAttempted').innerText = `${record.attemptedCount || 0} Questions`;
+  if (record && record.empNo) window.lastCompletedEmpNo = record.empNo;
+  else if (currentUser && currentUser.empNo) window.lastCompletedEmpNo = currentUser.empNo;
+  
+  document.getElementById('resAttempted').innerText = `${record.attemptedCount || 0} Questions`;
   
   const totalMarks = record.totalMark !== undefined ? record.totalMark : (record.lMark || record.uMark || record.oMark || 0);
   const qCount = record.submittedQuestions ? record.submittedQuestions.length : (record.targetLevel === 'L' ? 20 : (record.targetLevel === 'U' ? 30 : 40));
@@ -3191,19 +3196,36 @@ let activeOjtScores = {};
 
 function openOjtModalForCurrentEmployee() {
   const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
-  const session = sessionStr ? JSON.parse(sessionStr) : null;
-  const targetEmpNo = (currentUser && currentUser.empNo) || (session && session.empNo);
+  let session = null;
+  try { session = sessionStr ? JSON.parse(sessionStr) : null; } catch (e) {}
+
+  let targetEmpNo = (currentUser && currentUser.empNo) || 
+                    (session && session.empNo) || 
+                    window.lastCompletedEmpNo;
 
   if (!targetEmpNo) {
-    showToast('Please enter your Employee ID to access OJT Evaluation form.');
+    const records = getStoredRecords();
+    const recKeys = Object.keys(records);
+    if (recKeys.length > 0) {
+      targetEmpNo = recKeys[recKeys.length - 1];
+    }
+  }
+
+  if (!targetEmpNo && typeof EMPLOYEES !== 'undefined' && EMPLOYEES.length > 0) {
+    targetEmpNo = EMPLOYEES[0].empNo;
+  }
+
+  if (!targetEmpNo) {
+    showToast('Please sign in or select an employee from the directory.');
     navigateTo('/employee-portal');
     return;
   }
+
   openOjtModalForEmployee(targetEmpNo);
 }
 
 function openOjtModalForEmployee(empNo) {
-  const emp = EMPLOYEES.find(e => e.empNo === empNo);
+  const emp = EMPLOYEES.find(e => String(e.empNo).trim() === String(empNo).trim());
   if (!emp) {
     showToast(`Employee ${empNo} not found in directory.`);
     return;
@@ -3218,16 +3240,31 @@ function openOjtModalForEmployee(empNo) {
 
   const records = getStoredRecords();
   const rec = records[empNo] || {};
-  const assessmentDate = emp.assessmentDate || rec.attemptDate || '30/06/2025';
+  const assessmentDate = emp.assessmentDate || rec.attemptDate || new Date().toLocaleDateString('en-GB');
 
-  document.getElementById('ojtModalHeaderTitle').innerText = activeOjtTemplate.title;
-  document.getElementById('ojtModalFormatNo').innerText = activeOjtTemplate.formatNo;
-  document.getElementById('ojtEmpName').innerText = emp.name;
-  document.getElementById('ojtEmpNo').innerText = emp.empNo;
-  document.getElementById('ojtEmpSection').innerText = `${emp.section} / ${emp.dept}`;
-  document.getElementById('ojtEmpDoj').innerText = emp.doj || '-';
-  document.getElementById('ojtEmpSkillLevel').innerText = `( ${currLvl} ) TO ( ${targetLvl} )`;
-  document.getElementById('ojtAssessmentDate').innerText = assessmentDate;
+  const titleEl = document.getElementById('ojtModalHeaderTitle');
+  if (titleEl) titleEl.innerText = activeOjtTemplate.title;
+
+  const fmtEl = document.getElementById('ojtModalFormatNo');
+  if (fmtEl) fmtEl.innerText = activeOjtTemplate.formatNo;
+
+  const nameEl = document.getElementById('ojtEmpName');
+  if (nameEl) nameEl.innerText = emp.name;
+
+  const noEl = document.getElementById('ojtEmpNo');
+  if (noEl) noEl.innerText = emp.empNo;
+
+  const secEl = document.getElementById('ojtEmpSection');
+  if (secEl) secEl.innerText = `${emp.section} / ${emp.dept}`;
+
+  const dojEl = document.getElementById('ojtEmpDoj');
+  if (dojEl) dojEl.innerText = emp.doj || '-';
+
+  const lvlEl = document.getElementById('ojtEmpSkillLevel');
+  if (lvlEl) lvlEl.innerText = `( ${currLvl} ) TO ( ${targetLvl} )`;
+
+  const dateEl = document.getElementById('ojtAssessmentDate');
+  if (dateEl) dateEl.innerText = assessmentDate;
 
   // Load existing saved evaluation if present
   const allOjt = getStoredOjtRecords();
@@ -3235,49 +3272,65 @@ function openOjtModalForEmployee(empNo) {
 
   activeOjtScores = existing.scores ? { ...existing.scores } : {};
 
-  document.getElementById('ojtImprovementComments').value = existing.comments || '';
-  document.getElementById('ojtSafetyRep').value = existing.safetyRep || '';
-  document.getElementById('ojtQualityRep').value = existing.qualityRep || '';
-  document.getElementById('ojtCiRep').value = existing.ciRep || '';
+  const commEl = document.getElementById('ojtImprovementComments');
+  if (commEl) commEl.value = existing.comments || '';
+
+  const safeEl = document.getElementById('ojtSafetyRep');
+  if (safeEl) safeEl.value = existing.safetyRep || '';
+
+  const qualEl = document.getElementById('ojtQualityRep');
+  if (qualEl) qualEl.value = existing.qualityRep || '';
+
+  const ciEl = document.getElementById('ojtCiRep');
+  if (ciEl) ciEl.value = existing.ciRep || '';
 
   // Render Checkpoint Rows
   const tbody = document.getElementById('ojtCheckpointsBody');
-  tbody.innerHTML = activeOjtTemplate.checkpoints.map((cp, idx) => {
-    const currentScore = activeOjtScores[cp.sno] || 0;
-    const buttonsHtml = [1, 2, 3, 4, 5].map(val => {
-      const isActive = currentScore === val;
+  if (tbody) {
+    tbody.innerHTML = activeOjtTemplate.checkpoints.map((cp, idx) => {
+      const currentScore = activeOjtScores[cp.sno] || 0;
+      const buttonsHtml = [1, 2, 3, 4, 5].map(val => {
+        const isActive = currentScore === val;
+        return `
+          <button type="button" 
+                  class="ojt-score-btn score-${val} ${isActive ? 'active' : ''}" 
+                  onclick="setOjtScore(${cp.sno}, ${val})"
+                  title="Rank ${val}">
+            ${val}
+          </button>
+        `;
+      }).join('');
+
       return `
-        <button type="button" 
-                class="ojt-score-btn score-${val} ${isActive ? 'active' : ''}" 
-                onclick="setOjtScore(${cp.sno}, ${val})"
-                title="Rank ${val}">
-          ${val}
-        </button>
+        <tr style="border-bottom: 1px solid #E2E8F0; background: ${idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+          <td style="padding: 10px 12px; text-align: center; font-weight: 700; color: #64748B;">${cp.sno}</td>
+          <td style="padding: 10px 14px; color: #1E293B; font-weight: 600;">${cp.text}</td>
+          <td style="padding: 10px 14px; text-align: center;">
+            <div class="ojt-score-group">
+              ${buttonsHtml}
+            </div>
+          </td>
+        </tr>
       `;
     }).join('');
-
-    return `
-      <tr style="border-bottom: 1px solid #E2E8F0; background: ${idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
-        <td style="padding: 10px 12px; text-align: center; font-weight: 700; color: #64748B;">${cp.sno}</td>
-        <td style="padding: 10px 14px; color: #1E293B; font-weight: 600;">${cp.text}</td>
-        <td style="padding: 10px 14px; text-align: center;">
-          <div class="ojt-score-group">
-            ${buttonsHtml}
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join('');
+  }
 
   updateOjtTotals();
 
   const modal = document.getElementById('modalOjtEvaluation');
-  if (modal) modal.style.display = 'flex';
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+    modal.scrollTop = 0;
+  }
 }
 
 function closeOjtModal() {
   const modal = document.getElementById('modalOjtEvaluation');
-  if (modal) modal.style.display = 'none';
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('active');
+  }
 }
 
 function setOjtScore(sno, val) {
