@@ -456,6 +456,24 @@ app.delete('/api/records/:empNo', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------
+// ON-THE-JOB TRAINING EVALUATION (OJT) CLOUD PERSISTENCE
+// ---------------------------------------------------------------------
+const globalOjtEvaluations = new Map();
+
+app.get('/api/ojt-evaluations', (req, res) => {
+  res.json({ success: true, evaluations: Object.fromEntries(globalOjtEvaluations) });
+});
+
+app.post('/api/ojt-evaluations', (req, res) => {
+  const { empNo, ojtData } = req.body;
+  if (!empNo || !ojtData) {
+    return res.status(400).json({ success: false, message: 'empNo and ojtData required' });
+  }
+  globalOjtEvaluations.set(String(empNo), ojtData);
+  res.json({ success: true, message: `OJT evaluation saved for employee ${empNo}` });
+});
+
+// ---------------------------------------------------------------------
 // QUESTION BANK CLOUD PERSISTENCE ENGINE (Permanent Admin Edits)
 // ---------------------------------------------------------------------
 let customQuestionBankMemory = null;

@@ -142,6 +142,7 @@
         <a class="subnav-link active" onclick="navigateTo('/employee/dashboard')">Home Dashboard</a>
         <a class="subnav-link" onclick="navigateTo('/employee/exams')">Available Exams</a>
         <a class="subnav-link" onclick="navigateTo('/employee/results')">My Results</a>
+        <a class="subnav-link" onclick="openOjtModalForCurrentEmployee()">OJT Evaluation</a>
         <a class="subnav-link" onclick="navigateTo('/employee/profile')">My Profile</a>
       </div>
 
@@ -254,6 +255,7 @@
         <a class="subnav-link" onclick="navigateTo('/employee/dashboard')">Home Dashboard</a>
         <a class="subnav-link" onclick="navigateTo('/employee/exams')">Available Exams</a>
         <a class="subnav-link active" onclick="navigateTo('/employee/results')">My Results</a>
+        <a class="subnav-link" onclick="openOjtModalForCurrentEmployee()">OJT Evaluation</a>
         <a class="subnav-link" onclick="navigateTo('/employee/profile')">My Profile</a>
       </div>
 
@@ -285,6 +287,17 @@
 
         <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 24px;">Your marks and assessment evaluation have been logged for Admin review.</p>
 
+        <!-- Next Step: On The Job Training Evaluation Form -->
+        <div style="background: #F0FDF4; border: 2px solid #86EFAC; border-radius: 10px; padding: 18px 22px; margin: 20px auto; max-width: 620px; text-align: left; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+          <div>
+            <div style="font-weight: 800; font-size: 1rem; color: #166534; margin-bottom: 3px;">Next Step: On-The-Job Training (OJT) Evaluation</div>
+            <div style="font-size: 0.82rem; color: #15803D; line-height: 1.4;">Complete your section's practical evaluation checkpoints and download your official evaluation sheet.</div>
+          </div>
+          <button class="btn-primary" style="background: #059669; border-color: #059669; font-weight: 700; padding: 10px 18px; font-size: 0.88rem; white-space: nowrap;" onclick="openOjtModalForCurrentEmployee()">
+            Open OJT Evaluation Form &raquo;
+          </button>
+        </div>
+
         <!-- Dynamic One-Time Question & Answer Review Section (Immediate Completion Only) -->
         <div id="oneTimeAnswerReviewContainer" style="margin-top: 28px; text-align: left;"></div>
       </div>
@@ -296,6 +309,7 @@
         <a class="subnav-link" onclick="navigateTo('/employee/dashboard')">Home Dashboard</a>
         <a class="subnav-link" onclick="navigateTo('/employee/exams')">Available Exams</a>
         <a class="subnav-link" onclick="navigateTo('/employee/results')">My Results</a>
+        <a class="subnav-link" onclick="openOjtModalForCurrentEmployee()">OJT Evaluation</a>
         <a class="subnav-link active" onclick="navigateTo('/employee/profile')">My Profile</a>
       </div>
 
@@ -1215,6 +1229,107 @@
           <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #005B9E 0%, #003D6B 100%);">Save Employee</button>
         </div>
       </form>
+    </div>
+  <!-- On-The-Job Training Evaluation (OJT) Form Modal -->
+  <div class="modal-overlay" id="modalOjtEvaluation" style="display: none; z-index: 99999; overflow-y: auto; padding: 20px;">
+    <div class="security-modal-box" style="max-width: 920px; width: 100%; text-align: left; background: #FFFFFF; border-radius: 12px; padding: 24px 28px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.25); margin: 30px auto; max-height: 90vh; overflow-y: auto;">
+      <!-- Modal Header -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #005B9E; padding-bottom: 12px; margin-bottom: 16px;">
+        <div>
+          <div style="font-size: 0.76rem; font-weight: 800; color: #005B9E; letter-spacing: 0.5px; text-transform: uppercase;">ATC TIRES PRIVATE LIMITED &bull; TN PLANT</div>
+          <h2 id="ojtModalHeaderTitle" style="margin: 4px 0 0 0; color: #0F172A; font-size: 1.25rem;">INDIVIDUAL ON THE JOB TRAINING EVALUATION</h2>
+          <div id="ojtModalFormatNo" style="font-size: 0.76rem; color: #64748B; font-weight: 600; margin-top: 2px;">Format No: ATC/T/FOR/HR/87D</div>
+        </div>
+        <button onclick="closeOjtModal()" style="background: none; border: none; font-size: 1.8rem; cursor: pointer; color: #64748B; line-height: 1;">&times;</button>
+      </div>
+
+      <!-- Employee Info Summary Grid -->
+      <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; font-size: 0.85rem;">
+          <div><strong style="color: #64748B;">Employee:</strong> <span id="ojtEmpName" style="font-weight: 700; color: #0F172A;">-</span> (<span id="ojtEmpNo" style="font-weight: 700; color: #005B9E; font-family: monospace;">-</span>)</div>
+          <div><strong style="color: #64748B;">Section &amp; Dept:</strong> <span id="ojtEmpSection" style="font-weight: 600;">-</span></div>
+          <div><strong style="color: #64748B;">Joining Date (DOJ):</strong> <span id="ojtEmpDoj" style="font-weight: 600;">-</span></div>
+          <div><strong style="color: #64748B;">Skill Level:</strong> <span id="ojtEmpSkillLevel" style="font-weight: 700; color: #0284C7;">( I ) TO ( L )</span></div>
+          <div><strong style="color: #64748B;">Assessment Date:</strong> <span id="ojtAssessmentDate" style="font-weight: 600;">-</span></div>
+        </div>
+      </div>
+
+      <!-- Rating Scale Legend Bar -->
+      <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.8rem;">
+        <strong style="color: #1E40AF;">Scoring Standard:</strong>
+        <span style="color: #1E3A8A;"><strong>1</strong> = POOR</span>
+        <span style="color: #1E3A8A;"><strong>2</strong> = FAIR</span>
+        <span style="color: #1E3A8A;"><strong>3</strong> = GOOD</span>
+        <span style="color: #1E3A8A;"><strong>4</strong> = VERY GOOD</span>
+        <span style="color: #1E3A8A;"><strong>5</strong> = EXCELLENT</span>
+      </div>
+
+      <!-- Checkpoints Form Table -->
+      <div style="margin-bottom: 18px; border: 1px solid #E2E8F0; border-radius: 8px; overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.86rem; min-width: 600px;">
+          <thead style="background: #F1F5F9; border-bottom: 1px solid #CBD5E1;">
+            <tr>
+              <th style="padding: 10px 12px; width: 50px; text-align: center;">S.No</th>
+              <th style="padding: 10px 14px; text-align: left;">Training Content / Check Point</th>
+              <th style="padding: 10px 14px; width: 250px; text-align: center;">Score (Rank 1 to 5)</th>
+            </tr>
+          </thead>
+          <tbody id="ojtCheckpointsBody">
+            <!-- Dynamic rows -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Score Summary Bar -->
+      <div style="background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 8px; padding: 12px 18px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+        <div style="display: flex; gap: 24px; align-items: center;">
+          <div>
+            <div style="font-size: 0.72rem; color: #64748B; text-transform: uppercase; font-weight: 700;">Total Score</div>
+            <div style="font-size: 1.35rem; font-weight: 800; color: #0F172A;" id="ojtTotalScoreDisplay">0 / 50 (0%)</div>
+          </div>
+          <div>
+            <div style="font-size: 0.72rem; color: #64748B; text-transform: uppercase; font-weight: 700;">Qualification Status</div>
+            <div id="ojtQualificationBadge" style="font-size: 0.85rem; font-weight: 800; padding: 4px 12px; border-radius: 6px; background: #FEF3C7; color: #D97706; display: inline-block;">PENDING SCORING</div>
+          </div>
+        </div>
+        <div style="font-size: 0.78rem; color: #64748B; font-weight: 600;">Passing Benchmark: &gt;= 70%</div>
+      </div>
+
+      <!-- Improvement Comments -->
+      <div style="margin-bottom: 16px;">
+        <label style="font-weight: 700; font-size: 0.82rem; color: #334155; display: block; margin-bottom: 4px;">Improvement / Training Requirement:</label>
+        <textarea id="ojtImprovementComments" class="form-control" rows="2" placeholder="Enter practical improvement areas, training observations or refresher needs..."></textarea>
+      </div>
+
+      <!-- Sign-off Section -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 22px; background: #F8FAFC; padding: 12px 16px; border-radius: 8px; border: 1px solid #E2E8F0;">
+        <div>
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">Safety Section Representative</label>
+          <input type="text" id="ojtSafetyRep" class="form-control" placeholder="Name &amp; Sign" style="font-size: 0.82rem;">
+        </div>
+        <div>
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">Quality Section Representative</label>
+          <input type="text" id="ojtQualityRep" class="form-control" placeholder="Name &amp; Sign" style="font-size: 0.82rem;">
+        </div>
+        <div>
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">CI Representative</label>
+          <input type="text" id="ojtCiRep" class="form-control" placeholder="Name &amp; Sign" style="font-size: 0.82rem;">
+        </div>
+      </div>
+
+      <!-- Action Footer -->
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <button type="button" class="btn-reset" onclick="closeOjtModal()">Close</button>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <button type="button" class="btn-secondary" style="padding: 10px 16px; font-size: 0.88rem; display: flex; align-items: center; gap: 6px;" onclick="downloadCurrentOjtExcel()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>Download OJT Excel (.xlsx)</span>
+          </button>
+          <button type="button" class="btn-primary" style="padding: 10px 18px; font-size: 0.88rem; background: #059669; border-color: #059669; font-weight: 700;" onclick="saveOjtEvaluationForm()">
+            Save Evaluation
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 

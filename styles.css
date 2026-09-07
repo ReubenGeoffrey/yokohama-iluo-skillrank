@@ -1457,6 +1457,68 @@ body {
   font-weight: 600;
 }
 
+/* On-The-Job Training Evaluation (OJT) Form Styles */
+.ojt-score-group {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  align-items: center;
+}
+
+.ojt-score-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #1E293B;
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ojt-score-btn:hover {
+  border-color: #0284C7;
+  background: #EFF6FF;
+  color: #0284C7;
+}
+
+.ojt-score-btn.active {
+  background: #0284C7;
+  border-color: #0284C7;
+  color: #FFFFFF;
+  box-shadow: 0 2px 4px rgba(2, 132, 199, 0.3);
+}
+
+.ojt-score-btn.active.score-5 {
+  background: #059669;
+  border-color: #059669;
+}
+
+.ojt-score-btn.active.score-4 {
+  background: #0284C7;
+  border-color: #0284C7;
+}
+
+.ojt-score-btn.active.score-3 {
+  background: #D97706;
+  border-color: #D97706;
+}
+
+.ojt-score-btn.active.score-2 {
+  background: #EA580C;
+  border-color: #EA580C;
+}
+
+.ojt-score-btn.active.score-1 {
+  background: #DC2626;
+  border-color: #DC2626;
+}
+
 
 
 

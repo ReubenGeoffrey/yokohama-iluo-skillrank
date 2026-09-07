@@ -1667,12 +1667,13 @@ function renderAdminTable(query) {
       : `<span style="color: #94A3B8;">Not Started</span>`;
 
     const hasRecord = rec.isCompleted || rec.inProgress;
-    const actionBtn = hasRecord
-      ? `<div style="display: flex; gap: 6px; flex-wrap: wrap;">
-           <button class="btn-primary" style="padding: 4px 10px; font-size: 0.78rem; background: #0284C7; border-color: #0284C7;" onclick="downloadEmployeePDF('${emp.empNo}')">📄 PDF Report</button>
-           <button class="btn-reset" style="padding: 4px 10px; font-size: 0.78rem;" onclick="confirmAndResetExam('${emp.empNo}', '${emp.name.replace(/'/g, "\\'")}')">🔄 Reset</button>
-         </div>`
-      : `<span style="color: #CBD5E1; font-size: 0.8rem;">No attempt</span>`;
+    const actionBtn = `
+      <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+        ${hasRecord ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #0284C7; border-color: #0284C7;" onclick="downloadEmployeePDF('${emp.empNo}')">PDF Report</button>` : ''}
+        <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #059669; border-color: #059669;" onclick="openOjtModalForEmployee('${emp.empNo}')">OJT Form</button>
+        ${hasRecord ? `<button class="btn-reset" style="padding: 3px 8px; font-size: 0.75rem;" onclick="confirmAndResetExam('${emp.empNo}', '${emp.name.replace(/'/g, "\\'")}')">Reset</button>` : ''}
+      </div>
+    `;
 
     tr.innerHTML = `
       <td><strong>${emp.empNo}</strong></td>
@@ -2998,7 +2999,462 @@ function exportTrainingPlanExcel() {
   } catch (err) {
     console.error('Training plan export error:', err);
     exportDataToCSV(exportData, `${filename}.csv`);
- showToast('Downloaded Training Plan as CSV.');
   }
 }
 
+// ---------------------------------------------------------------------
+// ON-THE-JOB TRAINING EVALUATION (OJT) ENGINE (D:\QA 7 Formats)
+// ---------------------------------------------------------------------
+const STORAGE_KEY_OJT = 'yokohama_ojt_evaluations_v1';
+
+const OJT_SECTION_TEMPLATES = {
+  'rro_alt': {
+    id: 'rro_alt',
+    code: '83D',
+    title: 'TN PLANT -    INDIVIDUAL ON THE JOB TRAINING EVALUATION  –  RRO & ALT',
+    sectionName: 'Final Finish RRO & ALT QA',
+    formatNo: 'Format No: ATC/T/FOR/HR/83D',
+    fileName: '83D. ON THE JOB TRAINING EVALUATION -  RRO & ALT Operator.xlsx',
+    checkpoints: [
+      { sno: 1, text: 'Plant Safety Awareness (BBs, HSEE, PPE, LOTO, Electrical safety, etc.,)' },
+      { sno: 2, text: 'Basic 5S on shop floor.' },
+      { sno: 3, text: 'Hands-on knowledge of size, engraving description, QR sticker knowledge' },
+      { sno: 4, text: 'EOT operating skill during rim change.' },
+      { sno: 5, text: 'Hands-on Skills on RRO, RRM and ALT operation – Master tire verification, OD verification, Scanning, Poka Yoke and standards' },
+      { sno: 6, text: 'Knowledge on hold tire handling procedure, reverification, disposal.' },
+      { sno: 7, text: 'Knowledge of FIFO & Clearing of old tires on time.' },
+      { sno: 8, text: 'TEI ( Knowledge of QCC, OPL, Kaizen, Suggestion etc.,)' }
+    ],
+    maxScore: 40
+  },
+  'final_finish': {
+    id: 'final_finish',
+    code: '84D',
+    title: 'TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION – FINAL FINISH REPAIR ASSOCIATE',
+    sectionName: 'Final Finish QA',
+    formatNo: 'Format No: ATC/T/FOR/HR/84D',
+    fileName: '84D. ON THE JOB TRAINING EVALUATION -  Final Finish Repair Associate.xlsx',
+    checkpoints: [
+      { sno: 1, text: 'Plant Safety Awareness (BBs,  PPE, naphtha handling etc.,)' },
+      { sno: 2, text: 'Basic 5S on shop floor.' },
+      { sno: 3, text: 'AMR basic operation and tire loading and unloading' },
+      { sno: 4, text: 'Knowledge & Adherence of Flash cutting & Vent trimming Work Instruction and standards.' },
+      { sno: 5, text: 'Knowledge of type of paint and respective tire usage' },
+      { sno: 6, text: 'Segregation of crayon marked tires – LTC, Sample, Pilot, Repair and Hold tires' },
+      { sno: 7, text: 'TEI ( Knowledge of QCC, OPL, Kaizen, Suggestion etc.,)' }
+    ],
+    maxScore: 35
+  },
+  'preparatory': {
+    id: 'preparatory',
+    code: '85D',
+    title: 'TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION - PREPARATORY QA',
+    sectionName: 'Preparatory QA',
+    formatNo: 'Format No: ATC/T/FOR/HR/85D',
+    fileName: '85D. ON THE JOB TRAINING EVALUATION - Preparatory QA.xlsx',
+    checkpoints: [
+      { sno: 1, text: 'Safety Awareness (BBs, PPE, Tire handling, Electrical safety,)' },
+      { sno: 2, text: 'Machine cleanliness and material handling' },
+      { sno: 3, text: 'Verification on – NSNL /MES/Scanning and recipe /Guide light / Pressure gauge/ material Guider centering/ TCU temperature /Poka yoke' },
+      { sno: 4, text: 'Measurement of Ply angle and skiving angle' },
+      { sno: 5, text: 'Material measurement and knowledge on measuring tool' },
+      { sno: 6, text: 'Material direction (Ply/breaker/belt) or material positioning of band building' },
+      { sno: 7, text: 'Understand and read for IPS & MSS requirements' },
+      { sno: 8, text: 'Verification of material aging and non-conformance handling with holding tags' },
+      { sno: 9, text: 'Verification of Kanban system (FIFO)' },
+      { sno: 10, text: 'TEI ( Knowledge of QCC, 5S, OPL, Kaizen, Suggestion etc.,)' }
+    ],
+    maxScore: 50
+  },
+  'solid_tire': {
+    id: 'solid_tire',
+    code: '86D',
+    title: 'TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION - Solid Tire QA',
+    sectionName: 'Solid Tire QA',
+    formatNo: 'Format No: ATC/T/FOR/HR/86D',
+    fileName: '86D. ON THE JOB TRAINING EVALUATION - Solid Tire QA.xlsx',
+    checkpoints: [
+      { sno: 1, text: 'Safety Awareness (BBs, PPE, Tire handling, Electrical safety & manipulator )' },
+      { sno: 2, text: 'Verification of Press parameters steam temperature, Hydraulic Pressure gauges, Tower lamp working condition , bumping count, measurement (Equipment calibrations)' },
+      { sno: 3, text: 'Verification on – NSNL /MES/Scanning and recipe' },
+      { sno: 4, text: 'Verification of tire engraving covered as per route card' },
+      { sno: 5, text: 'Cure cycle time verification as per specification' },
+      { sno: 6, text: 'TBM-Verification of GT condition (Green tire ageing, off centre wind up, and / GT storage)' },
+      { sno: 7, text: 'TBM-Verification for Drum pressure and conveyor pressure as well as green tires weight.' },
+      { sno: 8, text: 'TBM-Verification on – Guide light / Guider centring/ TCU temperature /Pokayoke' },
+      { sno: 9, text: 'Material measurement and knowledge on measuring tool' },
+      { sno: 10, text: 'NC material handling' }
+    ],
+    maxScore: 50
+  },
+  'tire_building': {
+    id: 'tire_building',
+    code: '87D',
+    title: 'TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION -TBM QA',
+    sectionName: 'Tire Building QA',
+    formatNo: 'Format No: ATC/T/FOR/HR/87D',
+    fileName: '87D. ON THE JOB TRAINING EVALUATION - TBM QA.xlsx',
+    checkpoints: [
+      { sno: 1, text: 'Safety Awareness (BBs, PPE, Tire handling, Electrical safety,)' },
+      { sno: 2, text: 'Machine cleanliness and material handling' },
+      { sno: 3, text: 'Verification for BPR parameter & centering.' },
+      { sno: 4, text: 'Verification of Drum parameter with filling of the drum change memo and FTC sheet.' },
+      { sno: 5, text: 'Bottom / Back stitcher tool gap and play verification.' },
+      { sno: 6, text: 'Verification on – NSNL /MES/SKU sticker and recipe /Guide light / Pressure gauge/ material Guider centering/ TCU temperature /Pokayoke' },
+      { sno: 7, text: 'Material measurement and knowledge on measuring tool' },
+      { sno: 8, text: 'Material direction (Ply/breaker/belt) or material positioning for uncommon size.' },
+      { sno: 9, text: 'CC/ GT defect checking and NC material handling' },
+      { sno: 10, text: 'TEI ( Knowledge of QCC, 5S, OPL, Kaizen, Suggestion etc.,)' }
+    ],
+    maxScore: 50
+  },
+  'tire_curing': {
+    id: 'tire_curing',
+    code: '88D',
+    title: 'TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION  - TIRE CURING QA',
+    sectionName: 'Tire Curing QA',
+    formatNo: 'Format No: ATC/T/FOR/HR/88D',
+    fileName: '88D. ON THE JOB TRAINING EVALUATION - Tire Curing QA.xlsx',
+    checkpoints: [
+      { sno: 1, text: 'Safety Awareness (BBs, PPE, Tire handling, Electrical safety & VCL )' },
+      { sno: 2, text: 'Verification of Press parameters dome temperature, Pressure gauges, Tower lamp working condition , Bladder and sleeve height measurement (Equipment calibrations)' },
+      { sno: 3, text: 'Verification on – NSNL /MES/Scanning and recipe' },
+      { sno: 4, text: 'Verification of tire engraving covered as per route card' },
+      { sno: 5, text: 'Cure cycle time verification as per specification' },
+      { sno: 6, text: 'Verification of GT condition (Paint aging and application (Inner & outer)/ GT storage)' },
+      { sno: 7, text: 'GT loading direction against route card' },
+      { sno: 8, text: 'PCI machine pressure & flange width measurement (OD setting if applicable)' },
+      { sno: 9, text: 'NC material handling' },
+      { sno: 10, text: 'Knowledge of Measuring equipments Vernier caliper, Measuring tape, Steel rule, dial gauge and Lux meter.' }
+    ],
+    maxScore: 50
+  },
+  'warehouse': {
+    id: 'warehouse',
+    code: '89D',
+    title: 'TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION - WAREHOUSE QA',
+    sectionName: 'Warehouse QA',
+    formatNo: 'Format No: ATC/T/FOR/HR/89D',
+    fileName: '89D. ON THE JOB TRAINING EVALUATION -  WAREHOUSE QA.xlsx',
+    checkpoints: [
+      { sno: 1, text: 'Safety Awareness (BBs, PPE, Tire handling, Electrical safety,)' },
+      { sno: 2, text: 'Basic 5S on shop floor.' },
+      { sno: 3, text: 'Precautions for forklift usage during tire loading inside the container.' },
+      { sno: 4, text: 'OK tires and not ok tire identification and disposal.' },
+      { sno: 5, text: 'Confirmation of PDI cleared tires.' },
+      { sno: 6, text: 'Containment action and corrective action for customer complaints/feedbacks.' },
+      { sno: 7, text: 'Aging requirements for outgoing product.' },
+      { sno: 8, text: 'Poke Yoke in warehouse.' },
+      { sno: 9, text: 'Purpose of bead vent/flash trimming on tubeless tires before dispatch.' },
+      { sno: 10, text: 'TEI ( Knowledge of QCC, 5S, OPL, Kaizen, Suggestion etc.,)' }
+    ],
+    maxScore: 50
+  }
+};
+
+function getOjtTemplateForSection(secName) {
+  const s = normalizeSectionName(secName);
+  if (s.includes('rro') || s.includes('alt')) return OJT_SECTION_TEMPLATES['rro_alt'];
+  if (s.includes('preparatory')) return OJT_SECTION_TEMPLATES['preparatory'];
+  if (s.includes('solid')) return OJT_SECTION_TEMPLATES['solid_tire'];
+  if (s.includes('building') || s.includes('tbm')) return OJT_SECTION_TEMPLATES['tire_building'];
+  if (s.includes('curing')) return OJT_SECTION_TEMPLATES['tire_curing'];
+  if (s.includes('warehouse') || s.includes('data entry') || s.includes('fid')) return OJT_SECTION_TEMPLATES['warehouse'];
+  return OJT_SECTION_TEMPLATES['final_finish'];
+}
+
+function getStoredOjtRecords() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY_OJT)) || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveOjtRecord(empNo, data) {
+  const all = getStoredOjtRecords();
+  all[empNo] = { ...(all[empNo] || {}), ...data, updatedAt: new Date().toISOString() };
+  localStorage.setItem(STORAGE_KEY_OJT, JSON.stringify(all));
+
+  try {
+    fetch('/api/ojt-evaluations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ empNo, ojtData: all[empNo] })
+    }).catch(() => {});
+  } catch (e) {}
+}
+
+let activeOjtEmployee = null;
+let activeOjtTemplate = null;
+let activeOjtScores = {};
+
+function openOjtModalForCurrentEmployee() {
+  const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
+  const session = sessionStr ? JSON.parse(sessionStr) : null;
+  const targetEmpNo = (currentUser && currentUser.empNo) || (session && session.empNo);
+
+  if (!targetEmpNo) {
+    showToast('Please enter your Employee ID to access OJT Evaluation form.');
+    navigateTo('/employee-portal');
+    return;
+  }
+  openOjtModalForEmployee(targetEmpNo);
+}
+
+function openOjtModalForEmployee(empNo) {
+  const emp = EMPLOYEES.find(e => e.empNo === empNo);
+  if (!emp) {
+    showToast(`Employee ${empNo} not found in directory.`);
+    return;
+  }
+
+  activeOjtEmployee = emp;
+  activeOjtTemplate = getOjtTemplateForSection(emp.section);
+
+  const targetMap = { 'I': 'L', 'L': 'U', 'U': 'O', 'O': 'O' };
+  const currLvl = emp.currentLevel || 'I';
+  const targetLvl = targetMap[currLvl] || 'L';
+
+  const records = getStoredRecords();
+  const rec = records[empNo] || {};
+  const assessmentDate = emp.assessmentDate || rec.attemptDate || '30/06/2025';
+
+  document.getElementById('ojtModalHeaderTitle').innerText = activeOjtTemplate.title;
+  document.getElementById('ojtModalFormatNo').innerText = activeOjtTemplate.formatNo;
+  document.getElementById('ojtEmpName').innerText = emp.name;
+  document.getElementById('ojtEmpNo').innerText = emp.empNo;
+  document.getElementById('ojtEmpSection').innerText = `${emp.section} / ${emp.dept}`;
+  document.getElementById('ojtEmpDoj').innerText = emp.doj || '-';
+  document.getElementById('ojtEmpSkillLevel').innerText = `( ${currLvl} ) TO ( ${targetLvl} )`;
+  document.getElementById('ojtAssessmentDate').innerText = assessmentDate;
+
+  // Load existing saved evaluation if present
+  const allOjt = getStoredOjtRecords();
+  const existing = allOjt[empNo] || {};
+
+  activeOjtScores = existing.scores ? { ...existing.scores } : {};
+
+  document.getElementById('ojtImprovementComments').value = existing.comments || '';
+  document.getElementById('ojtSafetyRep').value = existing.safetyRep || '';
+  document.getElementById('ojtQualityRep').value = existing.qualityRep || '';
+  document.getElementById('ojtCiRep').value = existing.ciRep || '';
+
+  // Render Checkpoint Rows
+  const tbody = document.getElementById('ojtCheckpointsBody');
+  tbody.innerHTML = activeOjtTemplate.checkpoints.map((cp, idx) => {
+    const currentScore = activeOjtScores[cp.sno] || 0;
+    const buttonsHtml = [1, 2, 3, 4, 5].map(val => {
+      const isActive = currentScore === val;
+      return `
+        <button type="button" 
+                class="ojt-score-btn score-${val} ${isActive ? 'active' : ''}" 
+                onclick="setOjtScore(${cp.sno}, ${val})"
+                title="Rank ${val}">
+          ${val}
+        </button>
+      `;
+    }).join('');
+
+    return `
+      <tr style="border-bottom: 1px solid #E2E8F0; background: ${idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+        <td style="padding: 10px 12px; text-align: center; font-weight: 700; color: #64748B;">${cp.sno}</td>
+        <td style="padding: 10px 14px; color: #1E293B; font-weight: 600;">${cp.text}</td>
+        <td style="padding: 10px 14px; text-align: center;">
+          <div class="ojt-score-group">
+            ${buttonsHtml}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  updateOjtTotals();
+
+  const modal = document.getElementById('modalOjtEvaluation');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeOjtModal() {
+  const modal = document.getElementById('modalOjtEvaluation');
+  if (modal) modal.style.display = 'none';
+}
+
+function setOjtScore(sno, val) {
+  activeOjtScores[sno] = val;
+
+  // Update button active state in DOM for this checkpoint row
+  const tbody = document.getElementById('ojtCheckpointsBody');
+  if (tbody) {
+    const rows = tbody.querySelectorAll('tr');
+    activeOjtTemplate.checkpoints.forEach((cp, rIdx) => {
+      if (cp.sno === sno && rows[rIdx]) {
+        const btns = rows[rIdx].querySelectorAll('.ojt-score-btn');
+        btns.forEach((btn, bIdx) => {
+          if (bIdx + 1 === val) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        });
+      }
+    });
+  }
+
+  updateOjtTotals();
+}
+
+function updateOjtTotals() {
+  if (!activeOjtTemplate) return;
+
+  const numCheckpoints = activeOjtTemplate.checkpoints.length;
+  const maxScore = numCheckpoints * 5;
+  let totalScore = 0;
+  let scoredCount = 0;
+
+  activeOjtTemplate.checkpoints.forEach(cp => {
+    const val = activeOjtScores[cp.sno];
+    if (val && val > 0) {
+      totalScore += val;
+      scoredCount++;
+    }
+  });
+
+  const pct = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
+  const isQualified = pct >= 70;
+
+  const totalDisplay = document.getElementById('ojtTotalScoreDisplay');
+  if (totalDisplay) {
+    totalDisplay.innerText = `${totalScore} / ${maxScore} (${pct}%)`;
+  }
+
+  const badge = document.getElementById('ojtQualificationBadge');
+  if (badge) {
+    if (scoredCount === 0) {
+      badge.style.background = '#FEF3C7';
+      badge.style.color = '#D97706';
+      badge.innerText = 'PENDING SCORING';
+    } else if (isQualified) {
+      badge.style.background = '#DCFCE7';
+      badge.style.color = '#166534';
+      badge.innerText = `QUALIFIED (${pct}%)`;
+    } else {
+      badge.style.background = '#FEE2E2';
+      badge.style.color = '#B91C1C';
+      badge.innerText = `NOT QUALIFIED (${pct}%)`;
+    }
+  }
+}
+
+function saveOjtEvaluationForm() {
+  if (!activeOjtEmployee || !activeOjtTemplate) return;
+
+  const numCheckpoints = activeOjtTemplate.checkpoints.length;
+  const maxScore = numCheckpoints * 5;
+  let totalScore = 0;
+  activeOjtTemplate.checkpoints.forEach(cp => {
+    totalScore += (activeOjtScores[cp.sno] || 0);
+  });
+
+  const pct = Math.round((totalScore / maxScore) * 100);
+  const qualificationStatus = pct >= 70 ? 'Qualified' : 'Not Qualified';
+
+  const ojtData = {
+    empNo: activeOjtEmployee.empNo,
+    name: activeOjtEmployee.name,
+    section: activeOjtEmployee.section,
+    templateCode: activeOjtTemplate.code,
+    formatNo: activeOjtTemplate.formatNo,
+    scores: { ...activeOjtScores },
+    totalScore,
+    maxScore,
+    scorePct: pct,
+    qualificationStatus,
+    comments: document.getElementById('ojtImprovementComments').value.trim(),
+    safetyRep: document.getElementById('ojtSafetyRep').value.trim(),
+    qualityRep: document.getElementById('ojtQualityRep').value.trim(),
+    ciRep: document.getElementById('ojtCiRep').value.trim(),
+    evaluatedAt: new Date().toISOString().split('T')[0]
+  };
+
+  saveOjtRecord(activeOjtEmployee.empNo, ojtData);
+  showToast(`OJT Evaluation saved successfully for Employee ${activeOjtEmployee.empNo} (${qualificationStatus})`);
+}
+
+function downloadCurrentOjtExcel() {
+  if (!activeOjtEmployee || !activeOjtTemplate) return;
+
+  saveOjtEvaluationForm();
+
+  const emp = activeOjtEmployee;
+  const tmpl = activeOjtTemplate;
+  const targetMap = { 'I': 'L', 'L': 'U', 'U': 'O', 'O': 'O' };
+  const currLvl = emp.currentLevel || 'I';
+  const targetLvl = targetMap[currLvl] || 'L';
+
+  const numCheckpoints = tmpl.checkpoints.length;
+  const maxScore = numCheckpoints * 5;
+  let totalScore = 0;
+  tmpl.checkpoints.forEach(cp => {
+    totalScore += (activeOjtScores[cp.sno] || 0);
+  });
+  const pct = Math.round((totalScore / maxScore) * 100);
+
+  const comments = document.getElementById('ojtImprovementComments').value.trim();
+  const safetyRep = document.getElementById('ojtSafetyRep').value.trim();
+  const qualityRep = document.getElementById('ojtQualityRep').value.trim();
+  const ciRep = document.getElementById('ojtCiRep').value.trim();
+
+  const rows = [
+    ["ATC TIRES PRIVATE LIMITED"],
+    [tmpl.title],
+    [],
+    [`Name:  ${emp.name}`, "", "", "", "", `Emp ID:  ${emp.empNo}`, "", `Joining Date:  ${emp.doj || '-'}`],
+    [`Section & Dept:  ${emp.section} / ${emp.dept}`, "", "", "", "", `Skill Level: ( ${currLvl} )   TO   ( ${targetLvl} )`, "", `Assessment Date:  ${new Date().toLocaleDateString('en-GB')}`],
+    ["Rank", "1 =   POOR", "", "", "2 =   FAIR", "3 =   GOOD", "", "4 =   VERY GOOD", "", "5 =   EXCELLENT"],
+    ["S.No", "Training Content / Check Point", "", "", "", "", "", "Score", "", "WI Check"]
+  ];
+
+  tmpl.checkpoints.forEach(cp => {
+    const sc = activeOjtScores[cp.sno] || "";
+    rows.push([cp.sno, cp.text, "", "", "", "", "", sc, "", ""]);
+  });
+
+  rows.push(["Total Score", "", "", "", "", "", "", `${totalScore}/${maxScore} = ${pct}%`, "", ""]);
+  rows.push(["Improvement / Training requirement :", comments, "", "", "", "", "", "", "", ""]);
+  rows.push([]);
+  rows.push(["Evaluation By (Name & Sign with date)"]);
+  rows.push(["Safety", "", "Quality", "", "", "", "", "", "CI"]);
+  rows.push([safetyRep || "Section Representative", "", qualityRep || "Section Representative", "", "", "", "", "", ciRep || "Representative"]);
+  rows.push([]);
+  rows.push(["Qualification Status:", "", "", pct >= 70 ? "Qualified" : "Not Qualified", "", "", "Date of Reassessment"]);
+  rows.push([tmpl.formatNo]);
+
+  const cleanName = emp.name.replace(/[^a-zA-Z0-9]/g, '_');
+  const filename = `Yokohama_OJT_${emp.empNo}_${cleanName}`;
+
+  try {
+    if (typeof XLSX !== 'undefined') {
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, `${emp.empNo} - OJT Evaluation`);
+      XLSX.writeFile(wb, `${filename}.xlsx`);
+      showToast(`OJT Evaluation Excel (.xlsx) downloaded for Employee ${emp.empNo}!`);
+    } else {
+      const csvData = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+      const blob = new Blob(['\uFEFF' + csvData], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${filename}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`OJT Evaluation downloaded as CSV for Employee ${emp.empNo}.`);
+    }
+  } catch (err) {
+    console.error('OJT export error:', err);
+    showToast('Download error: ' + err.message);
+  }
+}

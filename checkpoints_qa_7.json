@@ -1,0 +1,324 @@
+{
+  "83D. ON THE JOB TRAINING EVALUATION -  RRO & ALT Operator.xlsx": {
+    "title": "TN PLANT -    INDIVIDUAL ON THE JOB TRAINING EVALUATION  \u2013  RRO & ALT",
+    "format_no": "Format No: ATC/T/FOR/HR/83D",
+    "checkpoints": [
+      {
+        "sno": 1,
+        "text": "Plant Safety Awareness (BBs, HSEE, PPE, LOTO, Electrical safety, etc.,)"
+      },
+      {
+        "sno": 2,
+        "text": "Basic 5S on shop floor."
+      },
+      {
+        "sno": 3,
+        "text": "Hands-on knowledge of size, engraving description, QR sticker knowledge"
+      },
+      {
+        "sno": 4,
+        "text": "EOT operating skill during rim change."
+      },
+      {
+        "sno": 5,
+        "text": "Hands-on Skills on RRO, RRM and ALT operation \u2013 Master tire verification, OD verification, Scanning, Poka Yoke  and standards"
+      },
+      {
+        "sno": 6,
+        "text": "Knowledge on hold tire handling procedure, reverification, disposal."
+      },
+      {
+        "sno": 7,
+        "text": "Knowledge of FIFO & Clearing of old tires on time."
+      },
+      {
+        "sno": 8,
+        "text": "TEI ( Knowledge of QCC, OPL, Kaizen, Suggestion etc.,)"
+      },
+      {
+        "sno": "Total Score",
+        "text": "None"
+      },
+      {
+        "sno": "Improvement / Training requirement :",
+        "text": "None"
+      }
+    ]
+  },
+  "84D. ON THE JOB TRAINING EVALUATION -  Final Finish Repair Associate.xlsx": {
+    "title": "TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION \u2013 FINAL FINISH REPAIR ASSOCIATE",
+    "format_no": "Format No: ATC/T/FOR/HR/84D",
+    "checkpoints": [
+      {
+        "sno": 1,
+        "text": "Plant Safety Awareness (BBs,  PPE, naphtha handling etc.,)"
+      },
+      {
+        "sno": 2,
+        "text": "Basic 5S on shop floor."
+      },
+      {
+        "sno": 3,
+        "text": "AMR basic operation and tire loading and unloading"
+      },
+      {
+        "sno": 4,
+        "text": "Knowledge & Adherence of Flash cutting & Vent trimming Work Instruction and standards."
+      },
+      {
+        "sno": 5,
+        "text": "Knowledge of type of paint and respective tire usage"
+      },
+      {
+        "sno": 6,
+        "text": "Segregation of crayon marked tires \u2013 LTC, Sample, Pilot, Repair and Hold tires"
+      },
+      {
+        "sno": 7,
+        "text": "TEI ( Knowledge of QCC, OPL, Kaizen, Suggestion etc.,)"
+      },
+      {
+        "sno": "Total Score",
+        "text": "None"
+      },
+      {
+        "sno": "Improvement / Training requirement :",
+        "text": "None"
+      },
+      {
+        "sno": null,
+        "text": "None"
+      }
+    ]
+  },
+  "85D. ON THE JOB TRAINING EVALUATION - Preparatory QA.xlsx": {
+    "title": "TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION - PREPARATORY QA",
+    "format_no": "Format No: ATC/T/FOR/HR/85D",
+    "checkpoints": [
+      {
+        "sno": 1,
+        "text": "Safety Awareness (BBs, PPE, Tire handling, Electrical safety,)"
+      },
+      {
+        "sno": 2,
+        "text": "Machine cleanliness and material handling"
+      },
+      {
+        "sno": 3,
+        "text": "Verification on \u2013 NSNL /MES/Scanning and recipe /Guide light / Pressure gauge/ material Guider cantering/ TCU temperature /Poka yoke"
+      },
+      {
+        "sno": 4,
+        "text": "Measurement of Ply angle and skiving angle"
+      },
+      {
+        "sno": 5,
+        "text": "Material measurement and knowledge on measuring tool"
+      },
+      {
+        "sno": 6,
+        "text": "Material direction (Ply/breaker/belt) or material positioning of band building"
+      },
+      {
+        "sno": 7,
+        "text": "Understand and read for IPS & MSS requirements"
+      },
+      {
+        "sno": 8,
+        "text": "Verification of material aging and non-conformance handling & updating"
+      },
+      {
+        "sno": 9,
+        "text": "Verification of Kanban system (FIFO)"
+      },
+      {
+        "sno": 10,
+        "text": "TEI ( Knowledge of QCC, 5S, OPL, Kaizen, Suggestion etc.,)"
+      }
+    ]
+  },
+  "86D. ON THE JOB TRAINING EVALUATION - Solid Tire QA.xlsx": {
+    "title": "TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION  -\nSolid Tire QA",
+    "format_no": "Format No: ATC/T/FOR/HR/86D",
+    "checkpoints": [
+      {
+        "sno": 1,
+        "text": "Safety Awareness (BBs, PPE, Tire handling, Electrical safety & manipulator  )"
+      },
+      {
+        "sno": 2,
+        "text": "Verification of Press parameters steam temperature, Hydraulic Pressure gauges, Tower lamp working condition , bumping count, measurement (Equipment calibrations)"
+      },
+      {
+        "sno": 3,
+        "text": "Verification on \u2013 NSNL /MES/Scanning and recipe"
+      },
+      {
+        "sno": 4,
+        "text": "Verification of tire engraving covered as per route card"
+      },
+      {
+        "sno": 5,
+        "text": "Cure cycle time verification as per specification"
+      },
+      {
+        "sno": 6,
+        "text": "TBM-Verification of GT condition (Green tire ageing, off centre wind up, and / GT storage)"
+      },
+      {
+        "sno": 7,
+        "text": "TBM-Verification for Drum pressure and conveyor pressure as well as green tires weight."
+      },
+      {
+        "sno": 8,
+        "text": "TBM-Verification on \u2013 Guide light / Guider centring/ TCU temperature /Pokayoke"
+      },
+      {
+        "sno": 9,
+        "text": "Material measurement and knowledge on measuring tool"
+      },
+      {
+        "sno": 10,
+        "text": "NC material handling"
+      }
+    ]
+  },
+  "87D. ON THE JOB TRAINING EVALUATION - TBM QA.xlsx": {
+    "title": "TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION -TBM QA",
+    "format_no": "Format No: ATC/T/FOR/HR/87D",
+    "checkpoints": [
+      {
+        "sno": 1,
+        "text": "Safety Awareness (BBs, PPE, Tire handling, Electrical safety,)"
+      },
+      {
+        "sno": 2,
+        "text": "Machine cleanliness and material handling"
+      },
+      {
+        "sno": 3,
+        "text": "Verification for BPR parameter & centering."
+      },
+      {
+        "sno": 4,
+        "text": "Verification of Drum parameter with filling of the drum change memo and FTC sheet."
+      },
+      {
+        "sno": 5,
+        "text": "Bottom / Back stitcher tool gap and play verification."
+      },
+      {
+        "sno": 6,
+        "text": "Verification on \u2013 NSNL /MES/SKU sticker and recipe /Guide light / Pressure gauge/ material Guider centering/ TCU temperature /Pokayoke"
+      },
+      {
+        "sno": 7,
+        "text": "Material measurement and knowledge on measuring tool"
+      },
+      {
+        "sno": 8,
+        "text": "Material direction (Ply/breaker/belt) or material positioning for uncommon size."
+      },
+      {
+        "sno": 9,
+        "text": "CC/ GT defect checking and NC material handling"
+      },
+      {
+        "sno": 10,
+        "text": "TEI ( Knowledge of QCC, 5S, OPL, Kaizen, Suggestion etc.,)"
+      }
+    ]
+  },
+  "88D. ON THE JOB TRAINING EVALUATION - Tire Curing QA.xlsx": {
+    "title": "TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION  - \nTIRE CURING QA",
+    "format_no": "Format No: ATC/T/FOR/HR/88D",
+    "checkpoints": [
+      {
+        "sno": 1,
+        "text": "Safety Awareness (BBs, PPE, Tire handling, Electrical safety & VCL )"
+      },
+      {
+        "sno": 2,
+        "text": "Verification of Press parameters dome temperature, Pressure gauges, Tower lamp working condition , Bladder and sleeve height measurement (Equipment calibrations)"
+      },
+      {
+        "sno": 3,
+        "text": "Verification on \u2013 NSNL /MES/Scanning and recipe"
+      },
+      {
+        "sno": 4,
+        "text": "Verification of tire engraving covered as per route card"
+      },
+      {
+        "sno": 5,
+        "text": "Cure cycle time verification as per specification"
+      },
+      {
+        "sno": 6,
+        "text": "Verification of GT condition (Paint aging and application (Inner & outer)/ GT storage)"
+      },
+      {
+        "sno": 7,
+        "text": "GT loading direction against route card"
+      },
+      {
+        "sno": 8,
+        "text": "PCI machine pressure & flange width measurement (OD setting if applicable)"
+      },
+      {
+        "sno": 9,
+        "text": "NC material handling"
+      },
+      {
+        "sno": 10,
+        "text": "Knowledge of Measuring equipment\u2019s Vernier caliper, Measuring tape, Steel rule, dial gauge and Lux meter."
+      }
+    ]
+  },
+  "89D. ON THE JOB TRAINING EVALUATION -  WAREHOUSE QA.xlsx": {
+    "title": "TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION - WAREHOUSE QA",
+    "format_no": "Format No: ATC/T/FOR/HR/89D",
+    "checkpoints": [
+      {
+        "sno": 1,
+        "text": "Safety Awareness (BBs, PPE, Tire handling, Electrical safety,)"
+      },
+      {
+        "sno": 2,
+        "text": "Basic 5S on shop floor."
+      },
+      {
+        "sno": 3,
+        "text": "Precautions for forklift usage during tire loading inside the container."
+      },
+      {
+        "sno": 4,
+        "text": "OK tires and not ok tire identification and disposal."
+      },
+      {
+        "sno": 5,
+        "text": "Confirmation of PDI cleared tires."
+      },
+      {
+        "sno": 6,
+        "text": "Containment action and corrective action for customer complaints/feedbacks."
+      },
+      {
+        "sno": 7,
+        "text": "Aging requirements for outgoing product."
+      },
+      {
+        "sno": 8,
+        "text": "Poke Yoke in warehouse."
+      },
+      {
+        "sno": 9,
+        "text": "Purpose of bead vent/flash trimming on tubeless tires before dispatch."
+      },
+      {
+        "sno": 10,
+        "text": "TEI ( Knowledge of QCC, 5S, OPL, Kaizen, Suggestion etc.,)"
+      }
+    ]
+  }
+}
