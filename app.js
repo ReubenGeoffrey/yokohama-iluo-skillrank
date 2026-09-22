@@ -2521,22 +2521,39 @@ async function generateClientSideDocx(empNo, recordData) {
   };
 
   const examRecord = recordData || (getStoredRecords()[empNo] || null);
-  const allOjt = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
-  const ojtRecord = allOjt[empNo] || null;
+  const targetLevel = (examRecord && examRecord.targetLevel) || emp.targetLevel || emp.currentLevel || 'O';
+  const templateFilename = window.YokohamaDocxGenerator.getTemplateFilename(targetLevel, emp.section);
 
-  // Try to load logo
-  let logoArrayBuffer = null;
-  try {
-    const logoRes = await fetch('yokohama_logo.png');
-    if (logoRes.ok) {
-      logoArrayBuffer = await logoRes.arrayBuffer();
-    }
-  } catch (e) {}
+  // Fetch template arrayBuffer
+  let templateArrayBuffer = null;
+  const possiblePaths = [
+    `QC_templates/${encodeURIComponent(templateFilename)}`,
+    `QC question/${encodeURIComponent(templateFilename)}`,
+    `/QC_templates/${encodeURIComponent(templateFilename)}`
+  ];
 
-  const zip = await window.YokohamaDocxGenerator.createDocxZip(
-    { emp, examRecord, ojtRecord },
+  for (const path of possiblePaths) {
+    try {
+      const resp = await fetch(path);
+      if (resp.ok) {
+        templateArrayBuffer = await resp.arrayBuffer();
+        break;
+      }
+    } catch (e) {}
+  }
+
+  if (!templateArrayBuffer) {
+    throw new Error(`Could not load template file: ${templateFilename}`);
+  }
+
+  const qbQuestions = (typeof QUESTION_BANK !== 'undefined' && QUESTION_BANK[targetLevel]) ? QUESTION_BANK[targetLevel] : [];
+
+  const zip = await window.YokohamaDocxGenerator.mapExactTemplate(
+    templateArrayBuffer,
+    emp,
+    examRecord,
     window.JSZip,
-    logoArrayBuffer
+    qbQuestions
   );
 
   const blob = await zip.generateAsync({

@@ -483,9 +483,9 @@ app.delete('/api/records/:empNo', async (req, res) => {
 
 // ---------------------------------------------------------------------
 // ---------------------------------------------------------------------
-// INDIVIDUAL EMPLOYEE DOCX QUALIFICATION REPORT GENERATOR (Pure Node.js)
+// INDIVIDUAL EMPLOYEE DOCX QUALIFICATION REPORT GENERATOR (Exact Template Mapper)
 // ---------------------------------------------------------------------
-const { createDocxZip } = require('./docx_generator.js');
+const { getTemplateFilename, mapExactTemplate } = require('./docx_generator.js');
 let JSZipLib = null;
 try {
   JSZipLib = require('./jszip.min.js');
@@ -516,12 +516,36 @@ async function buildDocxBufferForEmployee(empNo, optionalRecordData) {
   }
 
   const examRecord = optionalRecordData || globalAssessmentRecords.get(String(empNo)) || null;
-  const ojtRecord = globalOjtEvaluations.get(String(empNo)) || null;
+  const targetLevel = (examRecord && examRecord.targetLevel) || emp.targetLevel || emp.currentLevel || 'O';
+  const templateFilename = getTemplateFilename(targetLevel, emp.section);
 
-  const logoPath = path.join(__dirname, 'yokohama_logo.png');
-  const logoBuf = fs.existsSync(logoPath) ? fs.readFileSync(logoPath) : null;
+  // Look for template in QC_templates or D:\QC question or QC question
+  let templatePath = path.join(__dirname, 'QC_templates', templateFilename);
+  if (!fs.existsSync(templatePath)) {
+    templatePath = path.join('D:', 'QC question', templateFilename);
+  }
+  if (!fs.existsSync(templatePath)) {
+    templatePath = path.join(__dirname, 'QC question', templateFilename);
+  }
 
-  const zip = await createDocxZip({ emp, examRecord, ojtRecord }, JSZipLib, logoBuf);
+  if (!fs.existsSync(templatePath)) {
+    throw new Error(`Template not found for ${targetLevel} ${emp.section}: ${templateFilename}`);
+  }
+
+  const templateBuf = fs.readFileSync(templatePath);
+
+  // Load question bank questions for this level to map answer keys if candidate hasn't taken exam
+  let qbQuestions = [];
+  if (customQuestionBankMemory && customQuestionBankMemory[targetLevel]) {
+    qbQuestions = customQuestionBankMemory[targetLevel];
+  } else if (fs.existsSync(QUESTIONS_JSON_FILE)) {
+    try {
+      const qb = JSON.parse(fs.readFileSync(QUESTIONS_JSON_FILE, 'utf-8'));
+      qbQuestions = qb[targetLevel] || [];
+    } catch (e) {}
+  }
+
+  const zip = await mapExactTemplate(templateBuf, emp, examRecord, JSZipLib, qbQuestions);
   return await zip.generateAsync({ type: 'nodebuffer' });
 }
 

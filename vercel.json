@@ -17,7 +17,8 @@
             "jszip.min.js",
             "yokohama_logo.png",
             "mammoth.browser.min.js",
-            "xlsx.full.min.js"
+            "xlsx.full.min.js",
+            "QC_templates/**"
           ]
       }
     }
