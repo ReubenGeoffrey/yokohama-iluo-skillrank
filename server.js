@@ -12,7 +12,8 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'yokohama_iluo_qa_secret_20
 const AUTHORIZED_ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'reubengeoffrey16@gmail.com').toLowerCase();
 
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser(SESSION_SECRET));
 app.use(express.static(path.join(__dirname)));
 
@@ -644,9 +645,20 @@ app.post('/api/ojt-evaluations', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------
-// QUESTION BANK CLOUD PERSISTENCE ENGINE (Permanent Admin Edits)
+// QUESTION BANK CLOUD & DISK PERSISTENCE ENGINE (Permanent Admin Edits)
 // ---------------------------------------------------------------------
+const QUESTIONS_JSON_FILE = path.join(__dirname, 'custom_questions.json');
 let customQuestionBankMemory = null;
+
+try {
+  if (fs.existsSync(QUESTIONS_JSON_FILE)) {
+    const raw = fs.readFileSync(QUESTIONS_JSON_FILE, 'utf-8');
+    customQuestionBankMemory = JSON.parse(raw);
+    console.log(`📋 Loaded custom question bank from disk.`);
+  }
+} catch (e) {
+  console.error('Error loading custom questions from disk:', e.message);
+}
 
 // API ROUTE: GET /api/questions (Fetch custom question bank edits)
 app.get('/api/questions', async (req, res) => {
@@ -672,17 +684,34 @@ app.post('/api/questions', async (req, res) => {
 
   customQuestionBankMemory = questionBank;
 
+  try {
+    fs.writeFileSync(QUESTIONS_JSON_FILE, JSON.stringify(questionBank, null, 2), 'utf-8');
+  } catch (err) {
+    // Non-fatal on read-only environments
+  }
+
   if (kvUrl && kvToken) {
     await syncWithCloudKv('SET', 'yokohama_question_bank', questionBank);
   }
 
-  res.json({ success: true, message: 'Question Bank updated and synced permanently to Cloud DB!' });
+  res.json({ success: true, message: 'Question Bank updated and synced permanently!' });
 });
 
 // ---------------------------------------------------------------------
-// EMPLOYEE DIRECTORY CLOUD PERSISTENCE ENGINE (Add, Edit, Delete)
+// EMPLOYEE DIRECTORY CLOUD & DISK PERSISTENCE ENGINE (Add, Edit, Delete)
 // ---------------------------------------------------------------------
+const EMPLOYEES_JSON_FILE = path.join(__dirname, 'custom_employees.json');
 let customEmployeesMemory = null;
+
+try {
+  if (fs.existsSync(EMPLOYEES_JSON_FILE)) {
+    const raw = fs.readFileSync(EMPLOYEES_JSON_FILE, 'utf-8');
+    customEmployeesMemory = JSON.parse(raw);
+    console.log(`📋 Loaded ${customEmployeesMemory.length} custom employees from disk.`);
+  }
+} catch (e) {
+  console.error('Error loading custom employees from disk:', e.message);
+}
 
 app.get('/api/employees', async (req, res) => {
   if (kvUrl && kvToken) {
@@ -700,10 +729,17 @@ app.post('/api/employees', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Array of employees required' });
   }
   customEmployeesMemory = employees;
+
+  try {
+    fs.writeFileSync(EMPLOYEES_JSON_FILE, JSON.stringify(employees, null, 2), 'utf-8');
+  } catch (err) {
+    // Non-fatal on read-only environments
+  }
+
   if (kvUrl && kvToken) {
     await syncWithCloudKv('SET', 'yokohama_employees', employees);
   }
-  res.json({ success: true, message: 'Employee directory updated in Cloud DB' });
+  res.json({ success: true, message: 'Employee directory updated and persisted!' });
 });
 
 // ---------------------------------------------------------------------

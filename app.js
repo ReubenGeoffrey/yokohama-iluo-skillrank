@@ -4,6 +4,8 @@
 const STORAGE_KEY_RECORDS = 'iluo_assessment_records_v1';
 const STORAGE_KEY_SESSION = 'iluo_current_session_v1';
 const STORAGE_KEY_OJT = 'yokohama_ojt_evaluations_v1';
+const STORAGE_KEY_CUSTOM_EMPLOYEES = 'yokohama_custom_employees_v1';
+const STORAGE_KEY_CUSTOM_QUESTIONS = 'yokohama_custom_questions_v1';
 
 // Global App State
 let currentUser = null; // { empNo, name, dept, section, doj, currentLevel, targetLevel }
@@ -25,6 +27,30 @@ function initStorage() {
   if (!localStorage.getItem(STORAGE_KEY_RECORDS)) {
     localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify({}));
   }
+  // Immediate localStorage bootstrap for questions & employees
+  try {
+    const cachedQ = localStorage.getItem(STORAGE_KEY_CUSTOM_QUESTIONS);
+    if (cachedQ) {
+      const parsedQ = JSON.parse(cachedQ);
+      ['L', 'U', 'O'].forEach(lvl => {
+        if (parsedQ[lvl] && Array.isArray(parsedQ[lvl]) && parsedQ[lvl].length > 0) {
+          QUESTION_BANK[lvl] = parsedQ[lvl];
+        }
+      });
+    }
+  } catch (e) {}
+
+  try {
+    const cachedEmp = localStorage.getItem(STORAGE_KEY_CUSTOM_EMPLOYEES);
+    if (cachedEmp) {
+      const parsedEmp = JSON.parse(cachedEmp);
+      if (Array.isArray(parsedEmp) && parsedEmp.length > 0) {
+        EMPLOYEES.length = 0;
+        EMPLOYEES.push(...parsedEmp);
+      }
+    }
+  } catch (e) {}
+
   syncCloudRecords();
   syncCloudOjtEvaluations();
   syncCloudQuestions();
@@ -51,7 +77,7 @@ function saveRecord(empNo, recordData) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ empNo, recordData })
- }).catch(err => console.log('Server sync pending:', err.message));
+    }).catch(err => console.log('Server sync pending:', err.message));
   } catch (e) {}
 }
 
@@ -99,6 +125,9 @@ async function syncCloudQuestions() {
           QUESTION_BANK[lvl] = data.questionBank[lvl];
         }
       });
+      try {
+        localStorage.setItem(STORAGE_KEY_CUSTOM_QUESTIONS, JSON.stringify(QUESTION_BANK));
+      } catch (e) {}
       if (document.getElementById('questionsListContainer')) {
         renderQuestionsManager();
       }
@@ -108,13 +137,16 @@ async function syncCloudQuestions() {
 
 function saveCustomQuestionsToServer() {
   try {
+    localStorage.setItem(STORAGE_KEY_CUSTOM_QUESTIONS, JSON.stringify(QUESTION_BANK));
+  } catch (e) {}
+  try {
     fetch('/api/questions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ questionBank: QUESTION_BANK })
     }).then(res => res.json()).then(data => {
- console.log(' Question Bank Cloud Save Status:', data.message);
- }).catch(err => console.log('Question cloud sync pending:', err.message));
+      console.log('Question Bank Cloud Save Status:', data.message);
+    }).catch(err => console.log('Question cloud sync pending:', err.message));
   } catch (e) {}
 }
 
@@ -135,6 +167,13 @@ function handleRoute() {
   if (hash === '/' || hash === '' || hash === '/public') {
     showView('viewPublicLanding');
     updateUserBadge(session && session.name ? session.name : (session && session.role === 'admin' ? 'Administrator' : null));
+    return;
+  }
+
+  // Direct OJT Practical Evaluation Modal Route (/ojt, /ojt-evaluation, /ojt-form)
+  if (hash === '/ojt' || hash === '/ojt-evaluation' || hash === '/ojt-form') {
+    showView('viewPublicLanding');
+    openOjtModalQuick();
     return;
   }
 
@@ -1586,7 +1625,7 @@ function renderQuestionsManager() {
 }
 
 function openAddQuestionModal() {
-  document.getElementById('modalQTitle').innerText = 'Add New Question';
+  document.getElementById('modalQTitle').innerText = '➕ Add New Question';
   document.getElementById('qEditId').value = '';
   document.getElementById('modalQText').value = '';
   document.getElementById('modalOptA').value = '';
@@ -1594,19 +1633,23 @@ function openAddQuestionModal() {
   document.getElementById('modalOptC').value = '';
   document.getElementById('modalOptD').value = '';
   document.getElementById('modalQCorrect').value = 'A';
-  document.getElementById('modalAddEditQuestion').style.display = 'flex';
+  const modal = document.getElementById('modalAddEditQuestion');
+  if (modal) {
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+  }
 }
 
 function openEditQuestionModal(qId) {
   let targetQ = null;
   ['L', 'U', 'O'].forEach(lvl => {
-    const found = (QUESTION_BANK[lvl] || []).find(q => q.id === qId);
+    const found = (QUESTION_BANK[lvl] || []).find(q => String(q.id).trim() === String(qId).trim());
     if (found) targetQ = found;
   });
 
-  if (!targetQ) return showToast('Question not found');
+  if (!targetQ) return showToast('Question not found: ' + qId);
 
-  document.getElementById('modalQTitle').innerText = 'Edit Question';
+  document.getElementById('modalQTitle').innerText = '✏️ Edit Question';
   document.getElementById('qEditId').value = targetQ.id;
   document.getElementById('modalQLevel').value = targetQ.level || 'O';
   document.getElementById('modalQSection').value = targetQ.section || 'Final Finish QA';
@@ -1620,16 +1663,24 @@ function openEditQuestionModal(qId) {
   document.getElementById('modalOptD').value = opts[3] ? opts[3].text : '';
   document.getElementById('modalQCorrect').value = targetQ.correctAnswer || 'A';
 
-  document.getElementById('modalAddEditQuestion').style.display = 'flex';
+  const modal = document.getElementById('modalAddEditQuestion');
+  if (modal) {
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+  }
 }
 
 function closeQModal() {
-  document.getElementById('modalAddEditQuestion').style.display = 'none';
+  const modal = document.getElementById('modalAddEditQuestion');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
 }
 
 function saveQuestionFromModal(e) {
   e.preventDefault();
-  const qId = document.getElementById('qEditId').value;
+  const qId = document.getElementById('qEditId').value.trim();
   const level = document.getElementById('modalQLevel').value;
   const section = document.getElementById('modalQSection').value;
   const category = document.getElementById('modalQCategory').value;
@@ -1640,6 +1691,15 @@ function saveQuestionFromModal(e) {
   const optC = document.getElementById('modalOptC').value.trim();
   const optD = document.getElementById('modalOptD').value.trim();
   const correctAnswer = document.getElementById('modalQCorrect').value;
+
+  if (!qText) {
+    alert('Please enter question text');
+    return;
+  }
+  if (!optA || !optB) {
+    alert('Please provide at least Option A and Option B');
+    return;
+  }
 
   const newQ = {
     id: qId || `${level}_${section.replace(/\s+/g, '_')}_${Date.now()}`,
@@ -1659,17 +1719,17 @@ function saveQuestionFromModal(e) {
   if (!QUESTION_BANK[level]) QUESTION_BANK[level] = [];
 
   if (qId) {
-    // Edit existing
+    // Edit existing - remove from any previous level bucket in case level was modified
     ['L', 'U', 'O'].forEach(lvl => {
-      const idx = (QUESTION_BANK[lvl] || []).findIndex(q => q.id === qId);
+      const idx = (QUESTION_BANK[lvl] || []).findIndex(q => String(q.id).trim() === String(qId).trim());
       if (idx !== -1) QUESTION_BANK[lvl].splice(idx, 1);
     });
     QUESTION_BANK[level].push(newQ);
- showToast('Question updated successfully!');
+    showToast('Question updated successfully!');
   } else {
     // Add new
     QUESTION_BANK[level].push(newQ);
- showToast('New question added successfully!');
+    showToast('New question added successfully!');
   }
 
   saveCustomQuestionsToServer();
@@ -1680,16 +1740,22 @@ function saveQuestionFromModal(e) {
 function deleteQuestion(qId) {
   if (!confirm('Are you sure you want to delete this question?')) return;
 
+  let deleted = false;
   ['L', 'U', 'O'].forEach(lvl => {
-    const idx = (QUESTION_BANK[lvl] || []).findIndex(q => q.id === qId);
+    const idx = (QUESTION_BANK[lvl] || []).findIndex(q => String(q.id).trim() === String(qId).trim());
     if (idx !== -1) {
       QUESTION_BANK[lvl].splice(idx, 1);
+      deleted = true;
     }
   });
 
-  saveCustomQuestionsToServer();
- showToast('Question deleted successfully');
-  renderQuestionsManager();
+  if (deleted) {
+    saveCustomQuestionsToServer();
+    showToast('Question deleted successfully');
+    renderQuestionsManager();
+  } else {
+    showToast('Question not found or already removed');
+  }
 }
 
 // Cloud Sync for Employees & Security Settings
@@ -1700,20 +1766,27 @@ async function syncCloudEmployees() {
     if (data.success && data.employees && Array.isArray(data.employees) && data.employees.length > 0) {
       EMPLOYEES.length = 0;
       EMPLOYEES.push(...data.employees);
+      try {
+        localStorage.setItem(STORAGE_KEY_CUSTOM_EMPLOYEES, JSON.stringify(EMPLOYEES));
+      } catch (e) {}
       if (document.getElementById('empDirectoryTbody')) {
         renderEmployeeDirectory();
       }
+      populateOjtEmployeeSwitcher();
     }
   } catch (e) {}
 }
 
 function saveCustomEmployeesToServer() {
   try {
+    localStorage.setItem(STORAGE_KEY_CUSTOM_EMPLOYEES, JSON.stringify(EMPLOYEES));
+  } catch (e) {}
+  try {
     fetch('/api/employees', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ employees: EMPLOYEES })
- }).catch(err => console.log('Employees sync pending:', err.message));
+    }).catch(err => console.log('Employees sync pending:', err.message));
   } catch (e) {}
 }
 
@@ -1807,7 +1880,7 @@ function renderEmployeeDirectory() {
 }
 
 function openAddEmpModal() {
- document.getElementById('modalEmpTitle').innerText = 'Add New Employee';
+  document.getElementById('modalEmpTitle').innerText = '➕ Add New Employee';
   document.getElementById('empIsEdit').value = 'false';
   document.getElementById('empOldNo').value = '';
   document.getElementById('modalEmpNo').value = '';
@@ -1817,15 +1890,19 @@ function openAddEmpModal() {
   document.getElementById('modalEmpSection').value = 'Final Finish QA';
   document.getElementById('modalEmpDoj').value = new Date().toLocaleDateString('en-GB');
   document.getElementById('modalEmpLevel').value = 'I';
-  document.getElementById('modalAddEditEmployee').style.display = 'flex';
+  const modal = document.getElementById('modalAddEditEmployee');
+  if (modal) {
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+  }
 }
 
 function openEditEmpModal(empNo) {
-  const emp = EMPLOYEES.find(e => e.empNo === empNo);
-  if (!emp) return;
-  document.getElementById('modalEmpTitle').innerText = `Edit Employee (${empNo})`;
+  const emp = EMPLOYEES.find(e => String(e.empNo).trim() === String(empNo).trim());
+  if (!emp) return showToast('Employee not found: ' + empNo);
+  document.getElementById('modalEmpTitle').innerText = `✏️ Edit Employee (${emp.empNo})`;
   document.getElementById('empIsEdit').value = 'true';
-  document.getElementById('empOldNo').value = empNo;
+  document.getElementById('empOldNo').value = emp.empNo;
   document.getElementById('modalEmpNo').value = emp.empNo;
   document.getElementById('modalEmpNo').disabled = true;
   document.getElementById('modalEmpName').value = emp.name;
@@ -1833,17 +1910,25 @@ function openEditEmpModal(empNo) {
   document.getElementById('modalEmpSection').value = emp.section || 'Final Finish QA';
   document.getElementById('modalEmpDoj').value = emp.doj || '';
   document.getElementById('modalEmpLevel').value = emp.currentLevel || 'I';
-  document.getElementById('modalAddEditEmployee').style.display = 'flex';
+  const modal = document.getElementById('modalAddEditEmployee');
+  if (modal) {
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+  }
 }
 
 function closeEmpModal() {
-  document.getElementById('modalAddEditEmployee').style.display = 'none';
+  const modal = document.getElementById('modalAddEditEmployee');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
 }
 
 function saveEmployeeFromModal(e) {
   e.preventDefault();
   const isEdit = document.getElementById('empIsEdit').value === 'true';
-  const oldNo = document.getElementById('empOldNo').value;
+  const oldNo = document.getElementById('empOldNo').value.trim();
   const empNo = document.getElementById('modalEmpNo').value.trim();
   const name = document.getElementById('modalEmpName').value.trim();
   const dept = document.getElementById('modalEmpDept').value.trim();
@@ -1851,35 +1936,53 @@ function saveEmployeeFromModal(e) {
   const doj = document.getElementById('modalEmpDoj').value.trim();
   const level = document.getElementById('modalEmpLevel').value;
 
-  if (!isEdit && EMPLOYEES.some(e => e.empNo === empNo)) {
+  if (!empNo || !name) {
+    alert('Please enter both Employee ID and Name.');
+    return;
+  }
+
+  if (!isEdit && EMPLOYEES.some(e => String(e.empNo).trim() === empNo)) {
     alert(`Employee ID '${empNo}' already exists in the directory! Please use a unique Employee ID.`);
     return;
   }
 
   if (isEdit) {
-    const idx = EMPLOYEES.findIndex(e => e.empNo === oldNo);
+    const idx = EMPLOYEES.findIndex(e => String(e.empNo).trim() === oldNo);
     if (idx !== -1) {
       EMPLOYEES[idx] = { empNo, name, dept, section, doj, currentLevel: level };
- showToast(`Employee ${empNo} updated successfully!`);
+      showToast(`Employee ${empNo} updated successfully!`);
+    } else {
+      EMPLOYEES.unshift({ empNo, name, dept, section, doj, currentLevel: level });
+      showToast(`Employee ${empNo} saved!`);
     }
   } else {
     EMPLOYEES.unshift({ empNo, name, dept, section, doj, currentLevel: level });
- showToast(`New Employee ${empNo} (${name}) added!`);
+    showToast(`New Employee ${empNo} (${name}) added!`);
   }
 
   saveCustomEmployeesToServer();
   closeEmpModal();
   renderEmployeeDirectory();
+  if (document.getElementById('adminTableBody')) {
+    const searchInput = document.getElementById('adminSearchInput');
+    renderAdminTable(searchInput ? searchInput.value : '');
+  }
+  populateOjtEmployeeSwitcher();
 }
 
 function deleteEmployee(empNo) {
   if (!confirm(`Are you sure you want to delete Employee ${empNo} from the directory?`)) return;
-  const idx = EMPLOYEES.findIndex(e => e.empNo === empNo);
+  const idx = EMPLOYEES.findIndex(e => String(e.empNo).trim() === String(empNo).trim());
   if (idx !== -1) {
     EMPLOYEES.splice(idx, 1);
     saveCustomEmployeesToServer();
- showToast(`Employee ${empNo} deleted from Directory`);
+    showToast(`Employee ${empNo} deleted from Directory`);
     renderEmployeeDirectory();
+    if (document.getElementById('adminTableBody')) {
+      const searchInput = document.getElementById('adminSearchInput');
+      renderAdminTable(searchInput ? searchInput.value : '');
+    }
+    populateOjtEmployeeSwitcher();
   }
 }
 
@@ -3798,7 +3901,30 @@ let activeOjtEmployee = null;
 let activeOjtTemplate = null;
 let activeOjtScores = {};
 
-function openOjtModalForCurrentEmployee() {
+function populateOjtEmployeeSwitcher() {
+  const switcher = document.getElementById('ojtEmployeeSwitcher');
+  if (!switcher) return;
+  const currentVal = switcher.value;
+  switcher.innerHTML = '<option value="">-- Choose Employee to Evaluate --</option>';
+  if (typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES)) {
+    const sorted = [...EMPLOYEES].sort((a, b) => {
+      const secA = (a.section || '').localeCompare(b.section || '');
+      if (secA !== 0) return secA;
+      return String(a.empNo).localeCompare(String(b.empNo));
+    });
+    sorted.forEach(emp => {
+      const opt = document.createElement('option');
+      opt.value = emp.empNo;
+      opt.textContent = `${emp.empNo} - ${emp.name} (${emp.section || emp.dept || 'QA'})`;
+      switcher.appendChild(opt);
+    });
+  }
+  if (currentVal) switcher.value = currentVal;
+}
+
+function openOjtModalQuick() {
+  populateOjtEmployeeSwitcher();
+
   const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
   let session = null;
   try { session = sessionStr ? JSON.parse(sessionStr) : null; } catch (e) {}
@@ -3806,6 +3932,13 @@ function openOjtModalForCurrentEmployee() {
   let targetEmpNo = (currentUser && currentUser.empNo) || 
                     (session && session.empNo) || 
                     window.lastCompletedEmpNo;
+
+  if (!targetEmpNo) {
+    const switcher = document.getElementById('ojtEmployeeSwitcher');
+    if (switcher && switcher.value) {
+      targetEmpNo = switcher.value;
+    }
+  }
 
   if (!targetEmpNo) {
     const records = getStoredRecords();
@@ -3819,13 +3952,20 @@ function openOjtModalForCurrentEmployee() {
     targetEmpNo = EMPLOYEES[0].empNo;
   }
 
-  if (!targetEmpNo) {
-    showToast('Please sign in or select an employee from the directory.');
-    navigateTo('/employee-portal');
-    return;
+  if (targetEmpNo) {
+    openOjtModalForEmployee(targetEmpNo);
+  } else {
+    const modal = document.getElementById('modalOjtEvaluation');
+    if (modal) {
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+      modal.scrollTop = 0;
+    }
   }
+}
 
-  openOjtModalForEmployee(targetEmpNo);
+function openOjtModalForCurrentEmployee() {
+  openOjtModalQuick();
 }
 
 function openOjtModalForEmployee(empNo) {
@@ -3837,6 +3977,14 @@ function openOjtModalForEmployee(empNo) {
 
   activeOjtEmployee = emp;
   activeOjtTemplate = getOjtTemplateForSection(emp.section);
+
+  const switcher = document.getElementById('ojtEmployeeSwitcher');
+  if (switcher) {
+    if (switcher.options.length <= 1) {
+      populateOjtEmployeeSwitcher();
+    }
+    switcher.value = emp.empNo;
+  }
 
   const targetMap = { 'I': 'L', 'L': 'U', 'U': 'O', 'O': 'O' };
   const currLvl = emp.currentLevel || 'I';
@@ -3977,12 +4125,11 @@ function updateOjtTotals() {
     }
   });
 
-  const pct = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
-  const isQualified = pct >= 70;
+  const isQualified = totalScore >= Math.round(maxScore * 0.7);
 
   const totalDisplay = document.getElementById('ojtTotalScoreDisplay');
   if (totalDisplay) {
-    totalDisplay.innerText = `${totalScore} / ${maxScore} (${pct}%)`;
+    totalDisplay.innerText = `${totalScore} / ${maxScore} Marks`;
   }
 
   const badge = document.getElementById('ojtQualificationBadge');
@@ -3994,11 +4141,11 @@ function updateOjtTotals() {
     } else if (isQualified) {
       badge.style.background = '#DCFCE7';
       badge.style.color = '#166534';
-      badge.innerText = `QUALIFIED (${pct}%)`;
+      badge.innerText = `QUALIFIED (${totalScore} / ${maxScore} Marks)`;
     } else {
       badge.style.background = '#FEE2E2';
       badge.style.color = '#B91C1C';
-      badge.innerText = `NOT QUALIFIED (${pct}%)`;
+      badge.innerText = `NOT QUALIFIED (${totalScore} / ${maxScore} Marks)`;
     }
   }
 }

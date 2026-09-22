@@ -1519,6 +1519,38 @@ body {
   border-color: #DC2626;
 }
 
+/* Mobile Responsive Optimization for OJT Form & Security Modals */
+@media (max-width: 768px) {
+  .security-modal-box {
+    padding: 16px 12px !important;
+    margin: 10px auto !important;
+    max-height: 94vh !important;
+    border-radius: 10px !important;
+  }
+  .ojt-table {
+    min-width: 100% !important;
+  }
+  .ojt-table td, .ojt-table th {
+    padding: 8px 6px !important;
+    font-size: 0.8rem !important;
+  }
+  .ojt-score-group {
+    gap: 4px;
+    justify-content: center;
+  }
+  .ojt-score-btn {
+    width: 38px;
+    height: 38px;
+    font-size: 0.95rem;
+    border-radius: 6px;
+  }
+  #btnNavOjtQuick {
+    padding: 4px 8px !important;
+    font-size: 0.76rem !important;
+  }
+}
+
+
 
 
 

@@ -10,7 +10,9 @@
           "app.js",
           "data.js",
           "styles.css",
-          "ojt_evaluations.json"
+          "ojt_evaluations.json",
+          "custom_questions.json",
+          "custom_employees.json"
         ]
       }
     }
