@@ -2719,108 +2719,382 @@ function clearAllQuestions() {
   renderQuestionsManager();
 }
 
-function handleDocxUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
+// ---------------------------------------------------------------------
+// QUESTION BANK FILE UPLOADER & PARSER (.docx, .xlsx, .xls, .json)
+// ---------------------------------------------------------------------
+function parseFilenameInfo(fname) {
+  let level = 'O';
+  if (/L[\s_-]Level|^L[\s_-]|_L_/i.test(fname)) level = 'L';
+  else if (/U[\s_-]Level|^U[\s_-]|_U_/i.test(fname)) level = 'U';
+  else if (/O[\s_-]Level|^O[\s_-]|_O_/i.test(fname)) level = 'O';
 
-  if (!file.name.endsWith('.docx')) {
-    alert('Please select a valid Word Document (.docx) file.');
-    return;
+  let sec = 'Final Finish QA';
+  if (/Final Finish RRO|RRO.*ALT/i.test(fname)) sec = 'Final Finish RRO & ALT QA';
+  else if (/Final Finish/i.test(fname)) sec = 'Final Finish QA';
+  else if (/Tire Building|TBM/i.test(fname)) sec = 'Tire Building QA';
+  else if (/Tire Curing/i.test(fname)) sec = 'Tire Curing QA';
+  else if (/Solid Tire/i.test(fname)) sec = 'Solid Tire QA';
+  else if (/Preparatory/i.test(fname)) sec = 'Preparatory QA';
+  else if (/Warehouse/i.test(fname)) sec = 'Warehouse QA';
+  else if (/FID Inspector/i.test(fname)) sec = 'FID Inspector QA';
+
+  return { level, sec };
+}
+
+function isDocxNoiseLine(txt) {
+  const t = (txt || '').trim();
+  const skip = [
+    'Assessment Questionnaire', 'Marks Classification', 'Parameters',
+    'S.No', 'Question Description', '0 –', '1 –', '2 –',
+    'NAME', 'EMPLOYEE NO', 'DEPARTMENT', 'DOJ', 'SECTION', 'DATE', 'TOTAL MARKS', 'MARK %',
+    'Grand Total', 'Supervisor/Manager'
+  ];
+  if (skip.some(s => t.startsWith(s) || t === s)) return true;
+  if (/^Yes\s*\(/i.test(t)) return true;
+  if (/^\d+[\.\)]\s*Yes\s*\(/i.test(t)) return true;
+  if (/^[a-b][\.\)]\s*(Yes|No)\b/i.test(t)) return true;
+  return false;
+}
+
+function isDocxCategoryHeader(txt) {
+  const u = (txt || '').trim().toUpperCase();
+  return ['SAFETY', 'SAFETY & ENVIRONMENT', 'CI & TPM', 'CI AND TPM', 'TPM', 'PROCESS', 'QUALITY', 'QA & PROCESS', 'QUALITY & PROCESS', 'PROCESS & QUALITY'].includes(u);
+}
+
+function getDocxCategory(txt, current) {
+  const u = (txt || '').trim().toUpperCase();
+  if (u === 'SAFETY' || u.startsWith('SAFETY')) return 'Safety';
+  if (u.includes('CI & TPM') || u.includes('CI AND TPM') || u === 'TPM') return 'CI & TPM';
+  if (u === 'PROCESS' || u === 'QUALITY' || u.includes('QA & PROCESS') || u.includes('QUALITY & PROCESS') || u.includes('PROCESS & QUALITY')) return 'QA & Process';
+  return current || 'Safety';
+}
+
+function parseOptsFromText(text) {
+  if (!text) return null;
+  // Match a. b. c. d. preceded by non-letter, whitespace, or start
+  const optRegex = /(?<=[^a-z\s]|\s|^)([a-d])[\.\)]\s*/i;
+  if (optRegex.test(text)) {
+    const parts = text.split(/(?<=[^a-z\s]|\s|^)([a-d])[\.\)]\s*/i);
+    if (parts.length >= 3) {
+      const qText = parts[0].trim();
+      const opts = [];
+      for (let i = 1; i < parts.length; i += 2) {
+        if (opts.length < 4) {
+          opts.push({
+            key: parts[i].toUpperCase(),
+            text: (parts[i + 1] || '').trim()
+          });
+        }
+      }
+      if (opts.length >= 2) {
+        return { qText, opts };
+      }
+    }
   }
 
-  const filename = file.name;
-  let level_code = 'O';
-  if (filename.includes('L Level') || filename.includes('L_Level') || filename.startsWith('L ')) level_code = 'L';
-  else if (filename.includes('U Level') || filename.includes('U_Level') || filename.startsWith('U ')) level_code = 'U';
-  else if (filename.includes('O Level') || filename.includes('O_Level') || filename.startsWith('O ')) level_code = 'O';
+  // Also check for 1. 2. 3. 4.
+  const numRegex = /(?<=[^\d\s]|\s|^)([1-4])[\.\)]\s*/;
+  if (numRegex.test(text)) {
+    const parts = text.split(/(?<=[^\d\s]|\s|^)([1-4])[\.\)]\s*/);
+    if (parts.length >= 3) {
+      const qText = parts[0].trim();
+      const keys = ['A', 'B', 'C', 'D'];
+      const opts = [];
+      for (let i = 1; i < parts.length; i += 2) {
+        if (opts.length < 4) {
+          opts.push({
+            key: keys[opts.length],
+            text: (parts[i + 1] || '').trim()
+          });
+        }
+      }
+      if (opts.length >= 2) {
+        return { qText, opts };
+      }
+    }
+  }
 
-  let section_name = 'Final Finish QA';
-  if (filename.includes('Final Finish QA')) section_name = 'Final Finish QA';
-  else if (filename.includes('Tire Building')) section_name = 'Tire Building QA';
-  else if (filename.includes('Tire Curing')) section_name = 'Tire Curing QA';
-  else if (filename.includes('Solid Tire')) section_name = 'Solid Tire QA';
-  else if (filename.includes('Preparatory')) section_name = 'Preparatory QA';
-  else if (filename.includes('Warehouse')) section_name = 'Warehouse QA';
-  else if (filename.includes('FID Inspector')) section_name = 'FID Inspector QA';
-  else if (filename.includes('RRO') || filename.includes('ALT')) section_name = 'Final Finish RRO & ALT QA';
+  return null;
+}
 
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const arrayBuffer = e.target.result;
-    if (typeof mammoth === 'undefined') {
-      alert('Mammoth.js library loading... Please try again in a moment.');
-      return;
+function parseDocxText(rawText, filename) {
+  const { level, sec } = parseFilenameInfo(filename);
+  const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  
+  let currentCat = 'Safety';
+  const questions = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Stop at supervisor skill parameter checklist
+    if (line.includes('Parameters – Skill') || line.includes('Parameters - Skill') || line.includes('Marks Classification for Skill parameters')) {
+      break;
     }
 
-    mammoth.extractRawText({ arrayBuffer: arrayBuffer })
-      .then(function(result) {
-        const text = result.value;
-        const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-        
-        let current_cat = 'Safety';
-        let parsed_qs = [];
-        let i = 0;
+    if (isDocxCategoryHeader(line)) {
+      currentCat = getDocxCategory(line, currentCat);
+      i++;
+      continue;
+    }
 
-        while (i < lines.length) {
-          const line = lines[i];
-          const l_upper = line.toUpperCase();
+    if (isDocxNoiseLine(line)) {
+      i++;
+      continue;
+    }
 
-          if (l_upper.includes('SAFETY')) { current_cat = 'Safety'; i++; continue; }
-          if (l_upper.includes('CI & TPM') || l_upper.includes('TPM')) { current_cat = 'CI & TPM'; i++; continue; }
-          if (l_upper.includes('PROCESS') || l_upper.includes('QUALITY') || l_upper.includes('QA')) { current_cat = 'QA & Process'; i++; continue; }
+    // CASE 1: Line itself contains question + embedded options (qText is non-empty)
+    const embedded = parseOptsFromText(line);
+    if (embedded && embedded.qText.length > 3 && embedded.opts.length >= 2) {
+      const cleanQ = embedded.qText.replace(/^\d+[\.\)]\s*/, '').trim();
+      questions.push({
+        id: `${level}_${sec.replace(/\s+/g, '_')}_${questions.length + 1}`,
+        level: level,
+        section: sec,
+        category: currentCat,
+        question: cleanQ,
+        options: embedded.opts,
+        correctAnswer: 'A'
+      });
+      i++;
+      continue;
+    }
 
-          if (line.startsWith('Assessment Questionnaire') || line.startsWith('Marks Classification:')) { i++; continue; }
+    // CASE 2: Line is question, and next line contains all options together
+    if (i + 1 < lines.length) {
+      const nextL = lines[i + 1];
+      const embeddedNext = parseOptsFromText(nextL);
+      if (embeddedNext && embeddedNext.opts.length >= 2) {
+        const cleanQ = (embeddedNext.qText ? (line + ' ' + embeddedNext.qText) : line).replace(/^\d+[\.\)]\s*/, '').trim();
+        let finalOpts = [...embeddedNext.opts];
 
-          // Options check
-          let opts = [];
-          let j = i + 1;
-          while (j < lines.length && j <= i + 4) {
-            const next_line = lines[j];
-            const is_opt = /^([a-d1-4])[\.\)]\s*(.*)/i.test(next_line);
-            if (is_opt) {
-              const match = next_line.match(/^([a-d1-4])[\.\)]\s*(.*)/i);
-              const keys = ['A', 'B', 'C', 'D'];
-              opts.push({ key: keys[opts.length] || 'A', text: match ? match[2] : next_line });
-              j++;
-            } else {
-              break;
-            }
-          }
-
-          if (opts.length >= 2) {
-            parsed_qs.push({
-              id: `${level_code}_${section_name.replace(/\s+/g, '_')}_${parsed_qs.length + 1}`,
-              level: level_code,
-              section: section_name,
-              category: current_cat,
-              question: line,
-              options: opts,
+        // Check if line i+2 has more options (e.g. c and d)
+        if (finalOpts.length === 2 && i + 2 < lines.length) {
+          const nextNextL = lines[i + 2];
+          const embeddedNextNext = parseOptsFromText(nextNextL);
+          if (embeddedNextNext && embeddedNextNext.opts.length >= 2) {
+            finalOpts.push(...embeddedNextNext.opts);
+            questions.push({
+              id: `${level}_${sec.replace(/\s+/g, '_')}_${questions.length + 1}`,
+              level: level,
+              section: sec,
+              category: currentCat,
+              question: cleanQ,
+              options: finalOpts,
               correctAnswer: 'A'
             });
-            i = j;
+            i += 3;
             continue;
           }
-          i++;
         }
 
-        if (parsed_qs.length === 0) {
-          alert(`Could not extract questions from '${filename}'. Make sure options are formatted as a. b. c. d.`);
-          return;
-        }
+        questions.push({
+          id: `${level}_${sec.replace(/\s+/g, '_')}_${questions.length + 1}`,
+          level: level,
+          section: sec,
+          category: currentCat,
+          question: cleanQ,
+          options: finalOpts,
+          correctAnswer: 'A'
+        });
+        i += 2;
+        continue;
+      }
+    }
 
-        if (!QUESTION_BANK[level_code]) QUESTION_BANK[level_code] = [];
-        QUESTION_BANK[level_code].push(...parsed_qs);
+    // CASE 3: Line is question, followed by 4 separate option lines
+    const candidateOpts = [];
+    let j = i + 1;
+    while (j < lines.length && candidateOpts.length < 4) {
+      const nextL = lines[j];
+      if (nextL.includes('Parameters – Skill') || nextL.includes('Parameters - Skill')) break;
+      if (isDocxCategoryHeader(nextL) || isDocxNoiseLine(nextL)) break;
+      if (candidateOpts.length >= 2 && (nextL.includes('?') || /^\d+[\.\)]\s+[A-Za-z]/i.test(nextL))) break;
+      candidateOpts.push(nextL);
+      j++;
+    }
 
-        saveCustomQuestionsToServer();
-        showToast(`Successfully imported ${parsed_qs.length} questions from ${filename}!`);
-        renderQuestionsManager();
-      })
-      .catch(function(err) {
-        alert('Error parsing docx file: ' + err.message);
+    if (candidateOpts.length === 4) {
+      const keys = ['A', 'B', 'C', 'D'];
+      const opts = candidateOpts.map((opt, idx) => ({
+        key: keys[idx],
+        text: opt.replace(/^[a-d1-4][\.\)]\s*/i, '').trim()
+      }));
+
+      const cleanQ = line.replace(/^\d+[\.\)]\s*/, '').trim();
+
+      questions.push({
+        id: `${level}_${sec.replace(/\s+/g, '_')}_${questions.length + 1}`,
+        level: level,
+        section: sec,
+        category: currentCat,
+        question: cleanQ,
+        options: opts,
+        correctAnswer: 'A'
       });
-  };
+      i = j;
+      continue;
+    }
 
-  reader.readAsArrayBuffer(file);
+    i++;
+  }
+
+  return questions;
+}
+
+function parseExcelQuestions(workbook, filename) {
+  const { level: fileLevel, sec: fileSec } = parseFilenameInfo(filename);
+  const questions = [];
+
+  workbook.SheetNames.forEach(sheetName => {
+    let sheetLevel = fileLevel;
+    if (/L[\s_-]Level|^L[\s_-]|_L_/i.test(sheetName)) sheetLevel = 'L';
+    else if (/U[\s_-]Level|^U[\s_-]|_U_/i.test(sheetName)) sheetLevel = 'U';
+    else if (/O[\s_-]Level|^O[\s_-]|_O_/i.test(sheetName)) sheetLevel = 'O';
+
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) return;
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+    rows.forEach(row => {
+      // Find question text
+      const qText = row['Question Text'] || row['Question'] || row['Question Description'] || row['question'] || '';
+      if (!qText || String(qText).trim().length < 3) return;
+
+      const lvl = (row['Level'] || row['level'] || sheetLevel || 'O').toUpperCase();
+      const sec = row['Section'] || row['section'] || fileSec || 'Final Finish QA';
+      const cat = row['Category'] || row['category'] || 'General QA';
+      const ans = String(row['Correct Answer'] || row['Answer'] || row['correctAnswer'] || 'A').trim().toUpperCase().charAt(0) || 'A';
+
+      const optA = row['Option A'] || row['Option 1'] || row['Opt A'] || row['A'] || '';
+      const optB = row['Option B'] || row['Option 2'] || row['Opt B'] || row['B'] || '';
+      const optC = row['Option C'] || row['Option 3'] || row['Opt C'] || row['C'] || '';
+      const optD = row['Option D'] || row['Option 4'] || row['Opt D'] || row['D'] || '';
+
+      const opts = [];
+      if (optA) opts.push({ key: 'A', text: String(optA).trim() });
+      if (optB) opts.push({ key: 'B', text: String(optB).trim() });
+      if (optC) opts.push({ key: 'C', text: String(optC).trim() });
+      if (optD) opts.push({ key: 'D', text: String(optD).trim() });
+
+      if (opts.length >= 2) {
+        questions.push({
+          id: row['Question ID'] || row['id'] || `${lvl}_${sec.replace(/\s+/g, '_')}_${questions.length + 1}`,
+          level: lvl,
+          section: sec,
+          category: cat,
+          question: String(qText).trim(),
+          options: opts,
+          correctAnswer: ['A', 'B', 'C', 'D'].includes(ans) ? ans : 'A'
+        });
+      }
+    });
+  });
+
+  return questions;
+}
+
+async function handleQuestionFileUpload(event) {
+  const files = event.target.files;
+  if (!files || files.length === 0) return;
+
+  let totalImported = 0;
+  let fileCount = 0;
+  const errors = [];
+
+  for (let f = 0; f < files.length; f++) {
+    const file = files[f];
+    const name = file.name;
+
+    try {
+      if (name.endsWith('.docx')) {
+        if (typeof mammoth === 'undefined') {
+          throw new Error('Mammoth.js library is not loaded. Please check internet connection or mammoth.browser.min.js.');
+        }
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+        const qs = parseDocxText(result.value, name);
+        if (qs.length === 0) {
+          errors.push(`${name}: No questions could be extracted.`);
+        } else {
+          qs.forEach(q => {
+            if (!QUESTION_BANK[q.level]) QUESTION_BANK[q.level] = [];
+            QUESTION_BANK[q.level].push(q);
+          });
+          totalImported += qs.length;
+          fileCount++;
+        }
+      } else if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+        if (typeof XLSX === 'undefined') {
+          throw new Error('XLSX library is not loaded.');
+        }
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const qs = parseExcelQuestions(workbook, name);
+        if (qs.length === 0) {
+          errors.push(`${name}: No valid questions found in Excel sheet.`);
+        } else {
+          qs.forEach(q => {
+            if (!QUESTION_BANK[q.level]) QUESTION_BANK[q.level] = [];
+            QUESTION_BANK[q.level].push(q);
+          });
+          totalImported += qs.length;
+          fileCount++;
+        }
+      } else if (name.endsWith('.json')) {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        let qs = [];
+        if (Array.isArray(data)) {
+          qs = data;
+        } else if (data.questionBank) {
+          ['L', 'U', 'O'].forEach(lvl => {
+            if (Array.isArray(data.questionBank[lvl])) qs.push(...data.questionBank[lvl]);
+          });
+        } else if (data.L || data.U || data.O) {
+          ['L', 'U', 'O'].forEach(lvl => {
+            if (Array.isArray(data[lvl])) qs.push(...data[lvl]);
+          });
+        }
+
+        if (qs.length === 0) {
+          errors.push(`${name}: No questions array found in JSON.`);
+        } else {
+          qs.forEach(q => {
+            const lvl = (q.level || 'O').toUpperCase();
+            if (!QUESTION_BANK[lvl]) QUESTION_BANK[lvl] = [];
+            QUESTION_BANK[lvl].push(q);
+          });
+          totalImported += qs.length;
+          fileCount++;
+        }
+      } else {
+        errors.push(`${name}: Unsupported file type (use .docx, .xlsx, .xls, or .json).`);
+      }
+    } catch (err) {
+      console.error('File parse error for ' + name, err);
+      errors.push(`${name}: ${err.message}`);
+    }
+  }
+
+  // Reset file input so user can re-upload same file if desired
+  event.target.value = '';
+
+  if (totalImported > 0) {
+    saveCustomQuestionsToServer();
+    renderQuestionsManager();
+    showToast(`Successfully imported ${totalImported} questions from ${fileCount} file(s)!`);
+  }
+
+  if (errors.length > 0) {
+    alert(`Upload status:\n` + errors.join('\n'));
+  }
+}
+
+// Backward compatibility alias
+function handleDocxUpload(event) {
+  handleQuestionFileUpload(event);
 }
 
 // ---------------------------------------------------------------------
