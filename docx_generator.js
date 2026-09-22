@@ -61,6 +61,120 @@
       .replace(/'/g, '&apos;');
   }
 
+  function normalize(str) {
+    if (!str) return '';
+    return str.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+  }
+
+  function getEnglishPrefix(str) {
+    if (!str) return '';
+    const parts = str.split(/[\/\?\n\r]/);
+    return normalize(parts[0]);
+  }
+
+  function createMarkRun(isCorrect) {
+    const symbol = isCorrect ? '✔  ' : '✘  ';
+    const color = isCorrect ? '166534' : 'B91C1C';
+    return `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:bCs/><w:sz w:val="24"/><w:szCs w:val="24"/><w:color w:val="${color}"/></w:rPr><w:t xml:space="preserve">${symbol}</w:t></w:r>`;
+  }
+
+  function markInlineOptions(xml, corrKey, selKey) {
+    corrKey = (corrKey || 'A').toUpperCase().trim();
+    selKey = (selKey || corrKey).toUpperCase().trim();
+
+    let tickCount = 0;
+    const replaced = xml.replace(/(<w:t(?:\s[^>]*)?>)([\s\S]*?)(<\/w:t>)/g, (fullMatch, openTag, textContent, closeTag) => {
+      const optRegex = /(^|[\s\r\n\t])([a-d])([\.\)])(\s*)/gi;
+      let hasMatches = false;
+      const parts = [];
+      let lastIndex = 0;
+      let m;
+
+      while ((m = optRegex.exec(textContent)) !== null) {
+        hasMatches = true;
+        const prefix = m[1];
+        const optLetter = m[2].toUpperCase();
+        const delimiter = m[3];
+        const trailingSpace = m[4];
+
+        const isCorr = (optLetter === corrKey);
+        const isSel = (optLetter === selKey);
+
+        let markXml = '';
+        if (isCorr) {
+          markXml = createMarkRun(true);
+          tickCount++;
+        } else if (isSel && !isCorr) {
+          markXml = createMarkRun(false);
+          tickCount++;
+        }
+
+        const beforeMatch = textContent.substring(lastIndex, m.index);
+        if (markXml) {
+          parts.push(beforeMatch + prefix);
+          parts.push(`${closeTag}</w:r>${markXml}<w:r>${openTag}${optLetter}${delimiter}${trailingSpace}`);
+        } else {
+          parts.push(beforeMatch + prefix + optLetter + delimiter + trailingSpace);
+        }
+        lastIndex = m.index + m[0].length;
+      }
+
+      if (hasMatches) {
+        parts.push(textContent.substring(lastIndex));
+        return openTag + parts.join('') + closeTag;
+      }
+      return fullMatch;
+    });
+
+    return { xml: replaced, tickCount };
+  }
+
+  function markParagraphStart(pXml, isCorrect) {
+    const markXml = createMarkRun(isCorrect);
+    const pPrMatch = pXml.match(/<w:pPr>[\s\S]*?<\/w:pPr>/);
+    if (pPrMatch) {
+      return pXml.replace(pPrMatch[0], pPrMatch[0] + markXml);
+    } else {
+      const pOpen = pXml.match(/<w:p(?:\s[^>]*)?>/)[0];
+      return pXml.replace(pOpen, pOpen + markXml);
+    }
+  }
+
+  function findQuestionMatch(text, questionsList) {
+    const normText = normalize(text);
+    const textEng = getEnglishPrefix(text);
+    
+    let bestQ = null;
+    let bestScore = 0;
+
+    for (const q of questionsList) {
+      const qNorm = normalize(q.question);
+      const qEng = getEnglishPrefix(q.question);
+
+      if (textEng.length >= 10 && qEng.length >= 10) {
+        if (textEng.includes(qEng) || qEng.includes(textEng)) {
+          return q;
+        }
+      }
+
+      const textTokens = new Set(normText.split(' ').filter(w => w.length > 3));
+      const qTokens = new Set(qNorm.split(' ').filter(w => w.length > 3));
+      if (textTokens.size === 0 || qTokens.size === 0) continue;
+
+      let matchCount = 0;
+      for (const t of textTokens) {
+        if (qTokens.has(t)) matchCount++;
+      }
+      const score = matchCount / Math.max(textTokens.size, qTokens.size);
+      if (score > bestScore && score >= 0.42) {
+        bestScore = score;
+        bestQ = q;
+      }
+    }
+
+    return bestQ;
+  }
+
   async function mapExactTemplate(templateBuf, emp, examRecord, jszipInstance, questionBankList) {
     const JSZip = jszipInstance || (typeof window !== 'undefined' ? window.JSZip : null);
     if (!JSZip) throw new Error('JSZip library is required to map DOCX template');
@@ -73,7 +187,7 @@
     const dept = emp.dept || 'QUALITY CONTROL';
     const section = emp.section || 'Tire building QA';
     const doj = emp.doj || '-';
-    const targetLvl = (examRecord && examRecord.targetLevel) || emp.targetLevel || 'O';
+    const targetLvl = (examRecord && examRecord.targetLevel) || emp.targetLevel || emp.currentLevel || 'O';
     const attemptDate = (examRecord && examRecord.attemptDate) || new Date().toLocaleDateString('en-GB');
 
     const submittedQs = (examRecord && examRecord.submittedQuestions) || [];
@@ -153,94 +267,126 @@
     let partAfterTbl = docXml.substring(tblEndIndex);
 
     // Stop mapping tick marks if supervisor parameters table is reached
-    let cutOffIdx = partAfterTbl.indexOf('Parameters – Skill');
+    let cutOffIdx = partAfterTbl.indexOf('Assessment Questionnaire for Internal');
+    if (cutOffIdx === -1) cutOffIdx = partAfterTbl.indexOf('Parameters – Skill');
     if (cutOffIdx === -1) cutOffIdx = partAfterTbl.indexOf('Parameters - Skill');
     if (cutOffIdx === -1) cutOffIdx = partAfterTbl.indexOf('Marks Classification for Skill');
+    if (cutOffIdx === -1) cutOffIdx = partAfterTbl.indexOf('FTC Associate Observations');
 
     let questionsPart = cutOffIdx !== -1 ? partAfterTbl.substring(0, cutOffIdx) : partAfterTbl;
     const tailPart = cutOffIdx !== -1 ? partAfterTbl.substring(cutOffIdx) : '';
 
-    // Build lookup of questions by normalized text
-    const qLookup = new Map();
+    // Build list of all known questions:
+    // 1. Submitted candidate questions take first precedence (contains user's actual answer & correctness)
+    const allKnownQuestions = [];
+    const seenNormQuestions = new Set();
+
     if (submittedQs && submittedQs.length > 0) {
       submittedQs.forEach(q => {
-        const cleanQ = (q.question || '').replace(/[\s\.\?\/,:;\(\)]+/g, '').toLowerCase().substring(0, 25);
-        if (cleanQ) qLookup.set(cleanQ, q);
+        const normQ = normalize(q.question);
+        if (normQ && !seenNormQuestions.has(normQ)) {
+          seenNormQuestions.add(normQ);
+          allKnownQuestions.push({
+            question: q.question,
+            options: q.options,
+            correctKey: (q.correctKey || q.correctAnswer || 'A').toUpperCase().trim(),
+            selectedKey: (q.selectedKey || q.userAnswer || q.correctKey || q.correctAnswer || 'A').toUpperCase().trim(),
+            isCorrect: Boolean(q.isCorrect || (q.selectedKey && q.selectedKey === q.correctKey))
+          });
+        }
       });
     }
 
-    // Also populate question bank answer keys if provided
+    // 2. Add question bank questions as fallback (ensures every template question is marked even if not in candidate exam)
     if (questionBankList && Array.isArray(questionBankList)) {
-      const secNorm = section.toLowerCase();
-      const relevantQs = questionBankList.filter(q => (q.section || '').toLowerCase().includes(secNorm) || secNorm.includes((q.section || '').toLowerCase()));
-      relevantQs.forEach(q => {
-        const cleanQ = (q.question || '').replace(/[\s\.\?\/,:;\(\)]+/g, '').toLowerCase().substring(0, 25);
-        if (cleanQ && !qLookup.has(cleanQ)) {
-          qLookup.set(cleanQ, {
+      questionBankList.forEach(q => {
+        const normQ = normalize(q.question);
+        if (normQ && !seenNormQuestions.has(normQ)) {
+          seenNormQuestions.add(normQ);
+          allKnownQuestions.push({
             question: q.question,
             options: q.options,
-            correctKey: q.correctAnswer || 'A',
-            selectedKey: q.correctAnswer || 'A',
+            correctKey: (q.correctAnswer || q.correctKey || 'A').toUpperCase().trim(),
+            selectedKey: (q.correctAnswer || q.correctKey || 'A').toUpperCase().trim(),
             isCorrect: true
           });
         }
       });
     }
 
-    let currentActiveQ = null;
-    let optionIndex = 0;
+    let activeQ = null;
+    let activeOptIndex = 0;
 
     const pRegex = /<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g;
     questionsPart = questionsPart.replace(pRegex, (pXml) => {
-      const text = pXml.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-      if (!text) return pXml;
-
-      const textClean = text.replace(/[\s\.\?\/,:;\(\)]+/g, '').toLowerCase();
-
-      // Check if this paragraph is a question
-      for (const [cleanQKey, qData] of qLookup.entries()) {
-        if (textClean.includes(cleanQKey) || cleanQKey.includes(textClean.substring(0, 25))) {
-          currentActiveQ = qData;
-          optionIndex = 0;
-          return pXml;
-        }
+      const text = pXml.replace(/<w:br\s*\/?>/gi, '\n').replace(/<w:tab\s*\/?>/gi, '\t').replace(/<[^>]+>/g, '').replace(/[ \t]+/g, ' ').trim();
+      if (!text || text.includes('MERGEFIELD') || text.toUpperCase().includes('TOTAL MARKS') || text.toUpperCase().includes('MARK %')) {
+        return pXml;
       }
 
-      // If active question, check if this is an option (up to 4 options)
-      if (currentActiveQ && optionIndex < 4) {
-        const isHeader = ['SAFETY', 'CI & TPM', 'TPM', 'PROCESS', 'QUALITY', 'PARAMETERS', 'MARKS CLASSIFICATION'].includes(text.toUpperCase());
-        const isNextQ = text.includes('?') || /^\d+[\.\)]\s+[A-Za-z]/.test(text);
+      const upperText = text.toUpperCase();
+      const isKnownHeader = [
+        'SAFETY', 'CI & TPM', 'TPM', 'PROCESS', 'QUALITY', 'PARAMETERS', 
+        'MARKS CLASSIFICATION', 'QA & PROCESS', 'S.NO', 'QUESTION DESCRIPTION',
+        'ASSESSMENT QUESTIONNAIRE', 'DEPARTMENT', 'DOJ', 'SECTION', 'DATE', 'NAME', 'EMPLOYEE NO'
+      ].some(h => upperText === h || upperText.startsWith(h + ' –') || upperText.startsWith(h + ' -') || upperText.startsWith('ASSESSMENT QUESTIONNAIRE FOR'));
 
-        if (!isHeader && !isNextQ) {
-          const keyChars = ['A', 'B', 'C', 'D'];
-          const optKey = keyChars[optionIndex];
-          optionIndex++;
+      const hasOptions = /(?:^|[\s\r\n\t])([a-d])[\.\)]/i.test(text);
+      const isQuestionLike = text.includes('?') || hasOptions;
 
-          const selKey = (currentActiveQ.selectedKey || '').trim().toUpperCase();
-          const corrKey = (currentActiveQ.correctKey || '').trim().toUpperCase();
-          const isSel = (optKey === selKey);
+      if (isKnownHeader && !hasOptions) {
+        activeQ = null;
+        return pXml;
+      }
+
+      if (!isQuestionLike && !activeQ) {
+        return pXml;
+      }
+
+      // Check if this paragraph is a question
+      const matchedQ = findQuestionMatch(text, allKnownQuestions);
+      if (matchedQ) {
+        activeQ = matchedQ;
+        activeOptIndex = 0;
+
+        // If options are inline in this question paragraph
+        if (hasOptions) {
+          const res = markInlineOptions(pXml, activeQ.correctKey || 'A', activeQ.selectedKey || activeQ.correctKey || 'A');
+          activeQ = null;
+          return res.xml;
+        }
+        return pXml;
+      }
+
+      // If active question is waiting for options
+      if (activeQ) {
+        // Standalone option paragraph with inline options
+        if (hasOptions) {
+          const res = markInlineOptions(pXml, activeQ.correctKey || 'A', activeQ.selectedKey || activeQ.correctKey || 'A');
+          activeQ = null;
+          return res.xml;
+        }
+
+        // Standalone option paragraph without letter prefix (e.g. Tire Curing)
+        if (activeOptIndex < 4) {
+          const optKey = ['A', 'B', 'C', 'D'][activeOptIndex];
+          activeOptIndex++;
+          const corrKey = (activeQ.correctKey || 'A').toUpperCase().trim();
+          const selKey = (activeQ.selectedKey || corrKey).toUpperCase().trim();
           const isCorr = (optKey === corrKey);
+          const isSel = (optKey === selKey);
 
-          let tickXml = '';
+          let modifiedXml = pXml;
           if (isCorr) {
-            // Perfect answer -> TICK MARK ✔ (bold green)
-            tickXml = `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:sz w:val="24"/><w:color w:val="166534"/></w:rPr><w:t xml:space="preserve">✔  </w:t></w:r>`;
+            modifiedXml = markParagraphStart(pXml, true);
           } else if (isSel && !isCorr) {
-            // Candidate selected wrong answer -> ✘ (bold red)
-            tickXml = `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:sz w:val="24"/><w:color w:val="B91C1C"/></w:rPr><w:t xml:space="preserve">✘  </w:t></w:r>`;
+            modifiedXml = markParagraphStart(pXml, false);
           }
 
-          if (tickXml) {
-            const pPrMatch = pXml.match(/<w:pPr>[\s\S]*?<\/w:pPr>/);
-            if (pPrMatch) {
-              return pXml.replace(pPrMatch[0], pPrMatch[0] + tickXml);
-            } else {
-              const pOpen = pXml.match(/<w:p(?:\s[^>]*)?>/)[0];
-              return pXml.replace(pOpen, pOpen + tickXml);
-            }
+          if (activeOptIndex >= 4) {
+            activeQ = null;
           }
-        } else {
-          currentActiveQ = null;
+          return modifiedXml;
         }
       }
 

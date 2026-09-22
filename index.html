@@ -19,12 +19,12 @@
 
   <!-- Top Navigation Header -->
   <header class="navbar">
-    <div class="brand-section" style="cursor: pointer;" onclick="navigateTo('/')">
+    <div class="brand-section" style="cursor: pointer;" onclick="switchRolePortal('employee')">
       <div class="brand-logo">
         <span>YOKOHAMA</span>
-        <span class="brand-badge">ILUO QA</span>
+        <span class="brand-badge">ATC TIRES</span>
       </div>
-      <div class="system-title" id="navbarSystemTitle">Tire Building QA Assessment Portal</div>
+      <div class="system-title" id="navbarSystemTitle">ILUO QA Skill Assessment &amp; Analytics Portal</div>
     </div>
 
     <div class="nav-actions">
@@ -36,52 +36,92 @@
         <div class="user-avatar" id="navAvatar">E</div>
         <span id="navUserName">Employee</span>
       </div>
-      <button class="btn-nav" id="btnSwitchPortal" onclick="togglePortalMode()">Admin Portal</button>
       <button class="btn-nav" id="btnLogout" style="display: none;" onclick="logout()">Sign Out</button>
     </div>
   </header>
 
+  <!-- 4-Role Navigation Bar (ui.pptx) -->
+  <nav class="role-nav-bar" id="roleNavBar">
+    <button class="role-tab-btn active" id="tabRoleEmp" onclick="switchRolePortal('employee')">
+      <span class="tab-icon">👤</span> <span>Employee Portal</span>
+    </button>
+    <button class="role-tab-btn" id="tabRoleSection" onclick="switchRolePortal('section')">
+      <span class="tab-icon">🏢</span> <span>Section Portal</span>
+    </button>
+    <button class="role-tab-btn" id="tabRoleDept" onclick="switchRolePortal('department')">
+      <span class="tab-icon">🏛️</span> <span>Department / HOD</span>
+    </button>
+    <button class="role-tab-btn" id="tabRoleAdmin" onclick="switchRolePortal('admin')">
+      <span class="tab-icon">⚙️</span> <span>HR Admin Portal</span>
+    </button>
+    <button class="role-tab-btn" id="tabRoleSop" onclick="openSopModal()" style="border-color: #059669; color: #059669;">
+      <span class="tab-icon">📖</span> <span>ILUO Definitions &amp; SOP</span>
+    </button>
+  </nav>
+
   <!-- App Container -->
   <main class="app-container">
 
-    <!-- VIEW 0: Public Website Landing Page (/) -->
+    <!-- VIEW 0: Role-Based Portal Hub Landing (ui.pptx) -->
     <section class="view-section active" id="viewPublicLanding">
-      <div class="public-hero-card">
-        <div class="public-hero-badge">YOKOHAMA OFF-HIGHWAY TIRES</div>
-        <h1 class="public-hero-title">Tire Building QA Skill Assessment Portal</h1>
-        <p class="public-hero-sub">Official ILUO Quality Assurance skill assessment and analytics platform. Select a portal below to sign in.</p>
+      <div style="text-align: center; margin-bottom: 28px;">
+        <div style="font-size: 0.85rem; font-weight: 800; color: var(--accent-red); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px;">Yokohama ATC Tires ILUO Portal</div>
+        <h1 style="font-size: 1.9rem; color: var(--primary-dark); font-weight: 800; margin-bottom: 8px;">Quality Assurance Skill Assessment &amp; Development</h1>
+        <p style="color: var(--text-muted); font-size: 0.95rem; max-width: 650px; margin: 0 auto;">Select your role below to access your customized skill assessment, ILUO tracking, and evaluation reports.</p>
+      </div>
 
-        <div class="portal-cards-grid">
-          <!-- Employee Portal Card -->
-          <div class="portal-card emp-portal-card" onclick="navigateTo('/employee-portal')">
-            <div class="portal-card-icon" style="color: #005B9E;">
-              <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-            </div>
-            <h3>Employee Portal</h3>
-            <p>Access assigned skill assessments, complete 45-min MCQ tests, and view your evaluation results.</p>
-            <div class="portal-card-link">Enter Employee Portal &raquo;</div>
+      <div class="portal-cards-grid" style="grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; margin-bottom: 30px;">
+        <!-- Employee Portal Card -->
+        <div class="portal-card" onclick="switchRolePortal('employee')" style="border-top: 4px solid #005B9E; cursor: pointer;">
+          <div class="portal-card-icon" style="color: #005B9E;">
+            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
           </div>
+          <h3>Employee Portal</h3>
+          <p>View profile, launch assigned 45-min Knowledge Tests, access OJT practical evaluations, and download qualification DOCX reports.</p>
+          <div class="portal-card-link" style="color: #005B9E; font-weight: 700;">Enter Employee Portal &raquo;</div>
+        </div>
 
-          <!-- Practical OJT Evaluation Card (Mobile & Shop-floor Fast Access) -->
-          <div class="portal-card ojt-portal-card" onclick="openOjtModalQuick()" style="border-top: 4px solid #059669; cursor: pointer;">
-            <div class="portal-card-icon" style="color: #059669;">
-              <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-            </div>
-            <h3>Practical OJT Evaluation</h3>
-            <p>Direct mobile access for supervisors &amp; evaluators to score practical checkpoints and save evaluations instantly.</p>
-            <div class="portal-card-link" style="color: #059669; font-weight: 700;">Open OJT Form &raquo;</div>
+        <!-- Section Portal Card -->
+        <div class="portal-card" onclick="switchRolePortal('section')" style="border-top: 4px solid #0284C7; cursor: pointer;">
+          <div class="portal-card-icon" style="color: #0284C7;">
+            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
           </div>
+          <h3>Section Portal</h3>
+          <p>Section-wise employee roster, ILUO summary metrics (I, L, U, O), assessment completion status, and section training requirements.</p>
+          <div class="portal-card-link" style="color: #0284C7; font-weight: 700;">Enter Section Portal &raquo;</div>
+        </div>
 
-          <!-- Secure Control Admin Card -->
-          <div class="portal-card admin-portal-card" onclick="navigateTo('/secure-control')">
-            <div class="portal-card-icon" style="color: #E31B23;">
-              <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-            </div>
-            <h3>Secure Control Center</h3>
-            <p>Authorized Admin portal for real-time analytics, question bank manager, master results database &amp; Excel export.</p>
-            <div class="portal-card-link">Enter Secure Control &raquo;</div>
+        <!-- Department / HOD Portal Card -->
+        <div class="portal-card" onclick="switchRolePortal('department')" style="border-top: 4px solid #8B5CF6; cursor: pointer;">
+          <div class="portal-card-icon" style="color: #8B5CF6;">
+            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+          </div>
+          <h3>Department / HOD</h3>
+          <p>Executive QA overview, section-wise comparative ILUO distribution, qualification rates, and department training action plan.</p>
+          <div class="portal-card-link" style="color: #8B5CF6; font-weight: 700;">Enter Department View &raquo;</div>
+        </div>
+
+        <!-- HR Admin Portal Card -->
+        <div class="portal-card" onclick="switchRolePortal('admin')" style="border-top: 4px solid #E31B23; cursor: pointer;">
+          <div class="portal-card-icon" style="color: #E31B23;">
+            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          </div>
+          <h3>HR Admin Portal</h3>
+          <p>Manage Employee Directory (Add, Edit, Delete), Question Bank Manager, Master Results Database, and Excel Export.</p>
+          <div class="portal-card-link" style="color: #E31B23; font-weight: 700;">Enter HR Admin &raquo;</div>
+        </div>
+      </div>
+
+      <!-- Quick ILUO Definitions Teaser Banner -->
+      <div style="background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; padding: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; box-shadow: var(--shadow-sm);">
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <span style="font-size: 2rem;">📖</span>
+          <div>
+            <div style="font-weight: 700; color: var(--primary-dark); font-size: 1.05rem;">Yokohama ATC Tires ILUO Skill Definitions &amp; SOP</div>
+            <div style="font-size: 0.85rem; color: var(--text-muted);">Understand the 4 skill stages: I (Beginner), L (Learner), U (Executor), O (Expert) &amp; Induction Training SOP.</div>
           </div>
         </div>
+        <button class="btn-secondary" onclick="openSopModal()" style="font-weight: 700; border-color: var(--primary-color); color: var(--primary-color);">View ILUO Standards &amp; SOP &raquo;</button>
       </div>
     </section>
 
@@ -91,18 +131,32 @@
         <div class="login-card">
           <div class="login-header">
             <h2>Employee Portal Login</h2>
-            <p>Enter your Employee ID to access your ILUO QA assessment</p>
+            <p>Enter your Employee ID &amp; Password to access your assessments and profile</p>
           </div>
           <div class="login-body">
             <form onsubmit="handleEmpLogin(event)">
               <div class="form-group">
-                <label for="empIdInput">Employee ID / Code</label>
-                <input type="text" id="empIdInput" class="form-control" placeholder="e.g. 900262, 900445" required autofocus>
+                <label for="empIdInput">Employee ID / No</label>
+                <input type="text" id="empIdInput" class="form-control" placeholder="e.g. LN0770, 900262, 900445" required autofocus>
               </div>
-              <button type="submit" class="btn-primary">Verify &amp; Sign In</button>
+              <div class="form-group">
+                <label for="empPasswordInput">Password</label>
+                <input type="password" id="empPasswordInput" class="form-control" placeholder="Enter password (default: 1234 or emp ID)" value="1234">
+              </div>
+
+              <!-- Quick Demo Selector -->
+              <div style="margin-bottom: 16px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px;">
+                <div style="font-size: 0.76rem; font-weight: 700; color: #64748B; margin-bottom: 6px;">QUICK DEMO ACCOUNTS:</div>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                  <button type="button" class="btn-sm" style="background: #EFF6FF; border: 1px solid #BFDBFE; color: #1D4ED8; font-weight: 600; font-size: 0.78rem; padding: 4px 10px; border-radius: 4px; cursor: pointer;" onclick="document.getElementById('empIdInput').value='LN0770';">PRADEEPA T (LN0770)</button>
+                  <button type="button" class="btn-sm" style="background: #EFF6FF; border: 1px solid #BFDBFE; color: #1D4ED8; font-weight: 600; font-size: 0.78rem; padding: 4px 10px; border-radius: 4px; cursor: pointer;" onclick="document.getElementById('empIdInput').value='LN0771';">MAHADEVI (LN0771)</button>
+                </div>
+              </div>
+
+              <button type="submit" class="btn-primary" style="width: 100%; padding: 12px; font-weight: 700;">Sign In to Employee Portal</button>
             </form>
             <div class="login-toggle-text">
-              Are you an Administrator? <span class="login-toggle-link" onclick="navigateTo('/secure-control')">Admin Secure Control</span>
+              Switch role? <span class="login-toggle-link" onclick="switchRolePortal('section')">Section Portal</span> &bull; <span class="login-toggle-link" onclick="switchRolePortal('department')">Department HOD</span> &bull; <span class="login-toggle-link" onclick="switchRolePortal('admin')">HR Admin</span>
             </div>
           </div>
         </div>
@@ -164,10 +218,17 @@
         <a class="subnav-link" onclick="navigateTo('/employee/profile')">My Profile</a>
       </div>
 
-      <div class="instruction-card">
-        <h2 style="font-size: 1.4rem; color: var(--primary-dark);">Employee Assessment Portal</h2>
+      <!-- Employee Profile Card (ui.pptx) -->
+      <div class="instruction-card" style="margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+          <h2 style="font-size: 1.3rem; color: var(--primary-dark); margin: 0;">Employee Skill Assessment Profile</h2>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600;">CURRENT SKILL:</span>
+            <span id="infoCurrentLevelBadge" class="iluo-badge iluo-badge-l" style="width: 32px; height: 32px; font-size: 1rem;">L</span>
+          </div>
+        </div>
 
-        <div class="info-grid">
+        <div class="info-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
           <div class="info-item">
             <div class="label">Employee ID</div>
             <div class="value" id="infoEmpNo">-</div>
@@ -177,32 +238,132 @@
             <div class="value" id="infoEmpName">-</div>
           </div>
           <div class="info-item">
-            <div class="label">Department / Section</div>
-            <div class="value" id="infoEmpDept">-</div>
-          </div>
-          <div class="info-item">
             <div class="label">Date of Joining (DOJ)</div>
             <div class="value" id="infoEmpDoj">-</div>
           </div>
           <div class="info-item">
-            <div class="label">Target Skill Assessment</div>
-            <div class="value" id="infoTargetLevel" style="color: var(--accent-red);">-</div>
+            <div class="label">QA Section</div>
+            <div class="value" id="infoEmpDept">-</div>
+          </div>
+          <div class="info-item">
+            <div class="label">Current Skill Level</div>
+            <div class="value" id="infoCurrentLevelText">-</div>
+          </div>
+          <div class="info-item">
+            <div class="label">Re-Assessment Due Date</div>
+            <div class="value" id="infoDueDate" style="color: #0284C7; font-weight: 700;">-</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2 Core Assessment Cards: Knowledge Test & Practical OJT -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 20px;">
+        <!-- Knowledge Test Card -->
+        <div style="background: #FFFFFF; border-radius: 12px; border: 2px solid #005B9E; padding: 20px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div style="font-size: 0.8rem; font-weight: 800; color: #005B9E; letter-spacing: 1px; text-transform: uppercase;">MCQ ASSESSMENT</div>
+              <span id="empKnowledgeStatusBadge" style="background: #EFF6FF; color: #1D4ED8; font-size: 0.76rem; font-weight: 700; padding: 3px 8px; border-radius: 4px;">Pending</span>
+            </div>
+            <h3 style="color: var(--primary-dark); margin-bottom: 6px; font-size: 1.15rem;">Knowledge Test</h3>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">45-min timed technical MCQ assessment covering Safety, 5S, TPM, and QA Process parameters.</p>
+            <div style="background: #F8FAFC; border-radius: 6px; padding: 8px 12px; margin-bottom: 16px;">
+              <div style="font-size: 0.78rem; color: #64748B;">Score: <strong id="empKnowledgeScoreText" style="color: #0F172A; font-size: 0.95rem;">Pending Exam</strong></div>
+              <div style="font-size: 0.78rem; color: #64748B;">Target Assessment: <strong id="infoTargetLevel" style="color: var(--accent-red);">-</strong></div>
+            </div>
+          </div>
+          <button class="btn-primary" style="width: 100%; padding: 12px; font-weight: 700;" onclick="startOrResumeExam()">
+            Start Knowledge Test (45 Mins) &raquo;
+          </button>
+        </div>
+
+        <!-- Skill Assessment (OJT) Card -->
+        <div style="background: #FFFFFF; border-radius: 12px; border: 2px solid #059669; padding: 20px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div style="font-size: 0.8rem; font-weight: 800; color: #059669; letter-spacing: 1px; text-transform: uppercase;">SHOP-FLOOR PRACTICAL</div>
+              <span id="empOjtStatusBadge" style="background: #ECFDF5; color: #059669; font-size: 0.76rem; font-weight: 700; padding: 3px 8px; border-radius: 4px;">Pending</span>
+            </div>
+            <h3 style="color: #065F46; margin-bottom: 6px; font-size: 1.15rem;">Skill Assessment (OJT)</h3>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">Shop-floor practical evaluation scored by supervisor on machine inspection, parameters, and defect detection.</p>
+            <div style="background: #F8FAFC; border-radius: 6px; padding: 8px 12px; margin-bottom: 16px;">
+              <div style="font-size: 0.78rem; color: #64748B;">Score: <strong id="empOjtScoreText" style="color: #0F172A; font-size: 0.95rem;">Pending Evaluation</strong></div>
+              <div style="font-size: 0.78rem; color: #64748B;">Checkpoints: <strong>10 Evaluation Parameters</strong></div>
+            </div>
+          </div>
+          <button class="btn-primary" style="background: #059669; border-color: #059669; width: 100%; padding: 12px; font-weight: 700;" onclick="openOjtModalForCurrentEmployee()">
+            Open Skill Assessment (OJT) &raquo;
+          </button>
+        </div>
+      </div>
+
+      <!-- Result & Promoted Skill Level Card (ui.pptx) -->
+      <div style="background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; padding: 20px; margin-bottom: 20px; box-shadow: var(--shadow-sm); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+        <div>
+          <div style="font-size: 0.8rem; font-weight: 800; color: #64748B; text-transform: uppercase;">ASSESSMENT RESULT &amp; PROMOTION STATUS</div>
+          <div style="display: flex; align-items: center; gap: 10px; margin-top: 6px;">
+            <span style="font-size: 1.3rem; font-weight: 800; color: #0F172A;" id="empOverallStatusText">Evaluation Pending</span>
+            <span id="empPromotedSkillBadge" style="background: #ECFDF5; color: #166534; font-weight: 700; font-size: 0.82rem; padding: 4px 10px; border-radius: 6px; display: none;">Promoted</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn-primary" style="background: #1E3A8A; border-color: #1E3A8A; font-weight: 700; display: flex; align-items: center; gap: 8px; padding: 10px 18px;" onclick="downloadCurrentEmployeeDocx()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span>Download Official DOCX Report</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Training Plan (Schedule vs Actual) (ui.pptx) -->
+      <div class="training-plan-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <h3 style="margin: 0; color: var(--primary-dark); font-size: 1.15rem;">Training Plan: Schedule vs. Actual Progress</h3>
+            <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">Progression across Yokohama ATC Tires ILUO skill qualification milestones</div>
           </div>
         </div>
 
-        <div class="rules-box">
-          <h4>Critical Exam Instructions &amp; Security Rules:</h4>
-          <ul>
-            <li><strong>Timer Limit:</strong> Exactly <strong>45 Minutes</strong> total allowed for this assessment.</li>
-            <li><strong>Single Attempt Rule:</strong> You are allowed <strong>ONE attempt only</strong>. Once submitted or time expires, you cannot retake the test.</li>
-            <li><strong>Strict Navigation Rule:</strong> <strong>NO PREVIOUS BUTTON - ONLY FORWARD NAVIGATION.</strong> You cannot return to previous questions after clicking "Next".</li>
-            <li><strong>Security &amp; Copy-Paste Prohibition:</strong> Copying, pasting, right-clicking, and text selection are strictly disabled during the assessment.</li>
-            <li><strong>Tab Switch Detection (Max 3 Allowed):</strong> Switching tabs or leaving the exam window is automatically monitored. <strong>Exceeding 3 tab switches will automatically terminate and submit your assessment!</strong></li>
-            <li><strong>Disconnection Resiliency:</strong> If your internet drops or browser closes, log back in with your Employee ID to <strong>resume from your exact question with remaining time intact</strong>.</li>
-          </ul>
-        </div>
+        <div class="timeline-track">
+          <!-- Step I -->
+          <div class="timeline-step completed" id="planStepI">
+            <div class="timeline-step-header">
+              <span class="timeline-step-title">Level I: Beginner</span>
+              <span class="iluo-badge iluo-badge-i" style="width: 22px; height: 22px; font-size: 0.72rem;">I</span>
+            </div>
+            <div class="timeline-date-row"><strong>Schedule:</strong> Month 1</div>
+            <div class="timeline-date-row"><strong>Actual:</strong> Completed &check;</div>
+          </div>
 
-        <button class="btn-primary" style="padding: 16px; font-size: 1.1rem;" onclick="startOrResumeExam()">Start Assessment (45 Mins)</button>
+          <!-- Step L -->
+          <div class="timeline-step" id="planStepL">
+            <div class="timeline-step-header">
+              <span class="timeline-step-title">Level L: Learner</span>
+              <span class="iluo-badge iluo-badge-l" style="width: 22px; height: 22px; font-size: 0.72rem;">L</span>
+            </div>
+            <div class="timeline-date-row"><strong>Schedule:</strong> Month 3</div>
+            <div class="timeline-date-row" id="planActualL"><strong>Actual:</strong> In Progress</div>
+          </div>
+
+          <!-- Step U -->
+          <div class="timeline-step" id="planStepU">
+            <div class="timeline-step-header">
+              <span class="timeline-step-title">Level U: Executor</span>
+              <span class="iluo-badge iluo-badge-u" style="width: 22px; height: 22px; font-size: 0.72rem;">U</span>
+            </div>
+            <div class="timeline-date-row"><strong>Schedule:</strong> Month 6</div>
+            <div class="timeline-date-row" id="planActualU"><strong>Actual:</strong> Scheduled</div>
+          </div>
+
+          <!-- Step O -->
+          <div class="timeline-step" id="planStepO">
+            <div class="timeline-step-header">
+              <span class="timeline-step-title">Level O: Expert</span>
+              <span class="iluo-badge iluo-badge-o" style="width: 22px; height: 22px; font-size: 0.72rem;">O</span>
+            </div>
+            <div class="timeline-date-row"><strong>Schedule:</strong> Month 12</div>
+            <div class="timeline-date-row" id="planActualO"><strong>Actual:</strong> Future Goal</div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -346,6 +507,274 @@
         <h2 style="font-size: 1.3rem; color: var(--primary-dark); margin-bottom: 16px;">Employee Profile Details</h2>
         <div class="info-grid" id="profInfoGrid">
           <!-- Rendered dynamically -->
+        </div>
+      </div>
+    <!-- VIEW: SECTION PORTAL (/section) (ui.pptx) -->
+    <section class="view-section" id="viewSectionPortal">
+      <!-- Section Login Card (when not signed in as Section) -->
+      <div class="login-wrapper" id="sectionLoginWrapper">
+        <div class="login-card" style="border-top: 4px solid #0284C7;">
+          <div class="login-header" style="background: linear-gradient(135deg, #0284C7 0%, #003D6B 100%);">
+            <h2>Section Portal Sign In</h2>
+            <p>Select your QA Section to access employee roster &amp; ILUO metrics</p>
+          </div>
+          <div class="login-body">
+            <form onsubmit="handleSectionLogin(event)">
+              <div class="form-group">
+                <label for="secSelectInput">Select QA Section</label>
+                <select id="secSelectInput" class="form-control" required style="font-weight: 600;">
+                  <option value="Tire building QA">Tire building QA</option>
+                  <option value="Final Finish QA">Final Finish QA</option>
+                  <option value="Final Finish RRO & ALT QA">Final Finish RRO &amp; ALT QA</option>
+                  <option value="Tire curing QA">Tire curing QA</option>
+                  <option value="Solid tire QA">Solid tire QA</option>
+                  <option value="Preparatory QA">Preparatory QA</option>
+                  <option value="Warehouse QA">Warehouse QA</option>
+                  <option value="FID inspector QA">FID inspector QA</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="secPasswordInput">Section Password</label>
+                <input type="password" id="secPasswordInput" class="form-control" placeholder="Enter password (default: section123)" value="section123" required>
+              </div>
+              <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #0284C7 0%, #003D6B 100%); width: 100%; padding: 12px; font-weight: 700;">
+                Access Section Dashboard
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section Dashboard (when signed in) -->
+      <div id="sectionDashboardWrapper" style="display: none;">
+        <!-- Section Header -->
+        <div style="background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; padding: 20px 24px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; box-shadow: var(--shadow-sm);">
+          <div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 1.8rem;">🏢</span>
+              <div>
+                <h2 style="margin: 0; color: var(--primary-dark); font-size: 1.4rem;" id="secDashboardTitle">Tire building QA</h2>
+                <div style="font-size: 0.85rem; color: var(--text-muted);">Quality Assurance Section &bull; Department: QUALITY CONTROL</div>
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <select id="secSwitchDropdown" class="form-control" style="width: auto; font-weight: 600;" onchange="switchSectionView(this.value)">
+              <option value="Tire building QA">Tire building QA</option>
+              <option value="Final Finish QA">Final Finish QA</option>
+              <option value="Final Finish RRO & ALT QA">Final Finish RRO &amp; ALT QA</option>
+              <option value="Tire curing QA">Tire curing QA</option>
+              <option value="Solid tire QA">Solid tire QA</option>
+              <option value="Preparatory QA">Preparatory QA</option>
+              <option value="Warehouse QA">Warehouse QA</option>
+              <option value="FID inspector QA">FID inspector QA</option>
+            </select>
+            <button class="btn-secondary" onclick="logoutSection()" style="font-size: 0.85rem; padding: 8px 14px;">Switch Section</button>
+          </div>
+        </div>
+
+        <!-- ILUO Summary Cards -->
+        <div class="iluo-card-grid">
+          <div class="iluo-metric-card">
+            <div class="iluo-metric-icon iluo-badge-i">I</div>
+            <div>
+              <div class="iluo-metric-val" id="secCountI">0</div>
+              <div class="iluo-metric-label">Beginner (Level I)</div>
+            </div>
+          </div>
+          <div class="iluo-metric-card">
+            <div class="iluo-metric-icon iluo-badge-l">L</div>
+            <div>
+              <div class="iluo-metric-val" id="secCountL">0</div>
+              <div class="iluo-metric-label">Learner (Level L)</div>
+            </div>
+          </div>
+          <div class="iluo-metric-card">
+            <div class="iluo-metric-icon iluo-badge-u">U</div>
+            <div>
+              <div class="iluo-metric-val" id="secCountU">0</div>
+              <div class="iluo-metric-label">Executor (Level U)</div>
+            </div>
+          </div>
+          <div class="iluo-metric-card">
+            <div class="iluo-metric-icon iluo-badge-o">O</div>
+            <div>
+              <div class="iluo-metric-val" id="secCountO">0</div>
+              <div class="iluo-metric-label">Expert (Level O)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section Employee Assessment Roster -->
+        <div class="instruction-card" style="margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+            <h3 style="margin: 0; color: var(--primary-dark); font-size: 1.15rem;">Section Employee Roster &amp; Skill Assessments</h3>
+            <div style="display: flex; gap: 10px;">
+              <input type="text" id="secEmpSearchInput" class="form-control" placeholder="Search by name or emp ID..." style="width: 220px; font-size: 0.85rem;" oninput="filterSectionTable()">
+              <select id="secLevelFilter" class="form-control" style="width: 130px; font-size: 0.85rem;" onchange="filterSectionTable()">
+                <option value="ALL">All Levels</option>
+                <option value="I">Level I</option>
+                <option value="L">Level L</option>
+                <option value="U">Level U</option>
+                <option value="O">Level O</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="overflow-x: auto;">
+            <table class="admin-table" style="width: 100%; min-width: 750px;">
+              <thead>
+                <tr>
+                  <th>Emp No</th>
+                  <th>Employee Name</th>
+                  <th>Current Skill</th>
+                  <th>Target Skill</th>
+                  <th>Knowledge Test</th>
+                  <th>Skill Assessment (OJT)</th>
+                  <th>Overall Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="secEmpTableBody">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Section Training Requirements -->
+        <div class="instruction-card" style="border-left: 4px solid #F59E0B;">
+          <h3 style="margin-top: 0; color: #B45309; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+            <span>⚠️</span> Section Training &amp; Re-assessment Requirements
+          </h3>
+          <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 12px;">
+            The following employees require scheduled training, re-assessment, or skill level up-gradation:
+          </p>
+          <div id="secTrainingReqContainer">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW: DEPARTMENT / HOD PORTAL (/department) (ui.pptx) -->
+    <section class="view-section" id="viewDepartmentPortal">
+      <!-- Department Login Card -->
+      <div class="login-wrapper" id="deptLoginWrapper">
+        <div class="login-card" style="border-top: 4px solid #8B5CF6;">
+          <div class="login-header" style="background: linear-gradient(135deg, #6D28D9 0%, #003D6B 100%);">
+            <h2>Department / HOD Sign In</h2>
+            <p>Quality Assurance Department &bull; Executive ILUO Overview</p>
+          </div>
+          <div class="login-body">
+            <form onsubmit="handleDeptLogin(event)">
+              <div class="form-group">
+                <label for="deptSelectInput">Department</label>
+                <input type="text" id="deptSelectInput" class="form-control" value="QUALITY CONTROL" readonly style="font-weight: 700; background: #F8FAFC;">
+              </div>
+              <div class="form-group">
+                <label for="deptPasswordInput">HOD Password</label>
+                <input type="password" id="deptPasswordInput" class="form-control" placeholder="Enter password (default: hod123)" value="hod123" required>
+              </div>
+              <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #6D28D9 0%, #003D6B 100%); width: 100%; padding: 12px; font-weight: 700;">
+                Access Department HOD Dashboard
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Department Dashboard (when signed in) -->
+      <div id="deptDashboardWrapper" style="display: none;">
+        <!-- Executive Header -->
+        <div style="background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; padding: 20px 24px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; box-shadow: var(--shadow-sm);">
+          <div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 1.8rem;">🏛️</span>
+              <div>
+                <h2 style="margin: 0; color: var(--primary-dark); font-size: 1.4rem;">Quality Control Department - HOD Executive Dashboard</h2>
+                <div style="font-size: 0.85rem; color: var(--text-muted);">Yokohama ATC Tires &bull; Overall ILUO Skill Matrices &amp; Section Analytics</div>
+              </div>
+            </div>
+          </div>
+          <button class="btn-secondary" onclick="logoutDept()" style="font-size: 0.85rem; padding: 8px 14px;">Sign Out HOD</button>
+        </div>
+
+        <!-- Department Total ILUO Metrics -->
+        <div class="iluo-card-grid">
+          <div class="iluo-metric-card">
+            <div class="iluo-metric-icon" style="background: #003D6B;">👥</div>
+            <div>
+              <div class="iluo-metric-val" id="deptTotalStaff">0</div>
+              <div class="iluo-metric-label">Total QA Headcount</div>
+            </div>
+          </div>
+          <div class="iluo-metric-card">
+            <div class="iluo-metric-icon iluo-badge-i">I</div>
+            <div>
+              <div class="iluo-metric-val" id="deptCountI">0</div>
+              <div class="iluo-metric-label">Level I (Beginner)</div>
+            </div>
+          </div>
+          <div class="iluo-metric-card">
+            <div class="iluo-metric-icon iluo-badge-l">L</div>
+            <div>
+              <div class="iluo-metric-val" id="deptCountL">0</div>
+              <div class="iluo-metric-label">Level L (Learner)</div>
+            </div>
+          </div>
+          <div class="iluo-metric-card">
+            <div class="iluo-metric-icon iluo-badge-u">U</div>
+            <div>
+              <div class="iluo-metric-val" id="deptCountU">0</div>
+              <div class="iluo-metric-label">Level U (Executor)</div>
+            </div>
+          </div>
+          <div class="iluo-metric-card">
+            <div class="iluo-metric-icon iluo-badge-o">O</div>
+            <div>
+              <div class="iluo-metric-val" id="deptCountO">0</div>
+              <div class="iluo-metric-label">Level O (Expert)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section-Wise Summary Table -->
+        <div class="instruction-card" style="margin-bottom: 24px;">
+          <h3 style="margin-top: 0; color: var(--primary-dark); font-size: 1.15rem; margin-bottom: 16px;">
+            Section-Wise ILUO Distribution &amp; Assessment Completion Summary
+          </h3>
+          <div style="overflow-x: auto;">
+            <table class="admin-table" style="width: 100%; min-width: 800px;">
+              <thead>
+                <tr>
+                  <th>QA Section Name</th>
+                  <th>Total Staff</th>
+                  <th>Level I</th>
+                  <th>Level L</th>
+                  <th>Level U</th>
+                  <th>Level O</th>
+                  <th>Knowledge Assessed</th>
+                  <th>OJT Assessed</th>
+                  <th>Training Needed</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="deptSectionTableBody">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Department Training Requirements & Gap Analysis -->
+        <div class="instruction-card" style="border-left: 4px solid #8B5CF6;">
+          <h3 style="margin-top: 0; color: #6D28D9; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+            <span>🎯</span> Department Skill Gap &amp; Training Action Plan
+          </h3>
+          <div id="deptTrainingPlanContainer">
+            <!-- Populated dynamically -->
+          </div>
         </div>
       </div>
     </section>
@@ -1143,21 +1572,47 @@
 
   </main>
 
-  <!-- Security Warning Modal -->
-  <div class="modal-overlay" id="securityWarningModal">
-    <div class="security-modal-box">
-      <div class="security-icon" style="color: var(--accent-red); display: flex; justify-content: center; margin-bottom: 12px;">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+  <!-- ILUO Definitions & SOP Modal (ui.pptx) -->
+  <div class="modal-overlay" id="modalIluoStandards" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.85); z-index: 99999; overflow-y: auto; padding: 20px; align-items: center; justify-content: center;">
+    <div style="background: #FFFFFF; border-radius: 16px; max-width: 900px; width: 100%; margin: 30px auto; padding: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); max-height: 90vh; overflow-y: auto;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #E2E8F0; padding-bottom: 14px; margin-bottom: 20px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.6rem;">📖</span>
+          <h3 style="margin: 0; color: var(--primary-dark); font-size: 1.3rem;">Yokohama ATC Tires: ILUO Definitions &amp; Induction SOP</h3>
+        </div>
+        <button onclick="closeSopModal()" style="background: none; border: none; font-size: 1.6rem; cursor: pointer; color: #64748B;">&times;</button>
       </div>
-      <div class="security-title" id="secModalTitle">SECURITY WARNING: TAB SWITCH DETECTED</div>
-      <div class="security-text" id="secModalBody">
-        You switched tabs or left the assessment window. Switching tabs is strictly monitored!
-        <br><br>
-        <strong>Warning <span id="secWarningNum">1</span> of 3</strong>
-        <br>
-        <span style="color: var(--accent-red); font-size: 0.88rem;">If you switch tabs more than 3 times, your exam will be automatically terminated and submitted!</span>
+
+      <!-- ILUO Definitions Infographic -->
+      <div style="margin-bottom: 28px;">
+        <h4 style="color: #005B9E; margin-bottom: 12px; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+          <span>🎯</span> Official Definition of ILUO
+        </h4>
+        <div style="text-align: center; background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 8px; padding: 12px;">
+          <img src="assets/image8.png" alt="Definition of ILUO" style="max-width: 100%; height: auto; border-radius: 6px;" onerror="this.src='assets/image5.png'">
+        </div>
       </div>
-      <button class="btn-primary" onclick="closeSecurityWarningModal()">I Understand &amp; Resume Exam</button>
+
+      <!-- SOP Flowchart -->
+      <div>
+        <h4 style="color: #005B9E; margin-bottom: 12px; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+          <span>📋</span> SOP for Induction Training &amp; Skill Development Process
+        </h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+          <div style="background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 8px; padding: 10px; text-align: center;">
+            <div style="font-size: 0.8rem; font-weight: 700; color: #475569; margin-bottom: 6px;">Induction Process Flow (Part 1)</div>
+            <img src="assets/image6.JPG" alt="Induction Training SOP Flow 1" style="max-width: 100%; height: auto; border-radius: 6px;">
+          </div>
+          <div style="background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 8px; padding: 10px; text-align: center;">
+            <div style="font-size: 0.8rem; font-weight: 700; color: #475569; margin-bottom: 6px;">Skill Assessment Matrix (Part 2)</div>
+            <img src="assets/image7.JPG" alt="Induction Training SOP Flow 2" style="max-width: 100%; height: auto; border-radius: 6px;">
+          </div>
+        </div>
+      </div>
+
+      <div style="text-align: right; margin-top: 24px; padding-top: 16px; border-top: 1px solid #E2E8F0;">
+        <button class="btn-primary" onclick="closeSopModal()" style="padding: 8px 24px;">Close Standards</button>
+      </div>
     </div>
   </div>
 

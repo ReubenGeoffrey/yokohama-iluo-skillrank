@@ -1550,9 +1550,213 @@ body {
   }
 }
 
+/* 4-Role Navigation & Portal System (ui.pptx) */
+.role-nav-bar {
+  background: #FFFFFF;
+  border-bottom: 2px solid #E2E8F0;
+  padding: 8px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+  position: sticky;
+  top: 64px;
+  z-index: 90;
+  overflow-x: auto;
+}
 
+.role-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: 1px solid #CBD5E1;
+  background: #F8FAFC;
+  color: #334155;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+}
 
+.role-tab-btn:hover {
+  background: #EFF6FF;
+  border-color: #005B9E;
+  color: #005B9E;
+}
 
+.role-tab-btn.active {
+  background: linear-gradient(135deg, #003D6B 0%, #005B9E 100%);
+  color: #FFFFFF;
+  border-color: #003D6B;
+  box-shadow: 0 4px 10px rgba(0, 91, 158, 0.25);
+}
 
+.role-tab-btn .tab-icon {
+  font-size: 1.05rem;
+}
 
+/* ILUO Level Badges */
+.iluo-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-weight: 800;
+  font-size: 0.85rem;
+  color: #FFFFFF;
+}
 
+.iluo-badge-i { background: #EAB308; } /* Beginner - Yellow */
+.iluo-badge-l { background: #0284C7; } /* Learner - Blue */
+.iluo-badge-u { background: #10B981; } /* Executor - Green */
+.iluo-badge-o { background: #8B5CF6; } /* Expert - Purple */
+
+.iluo-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.iluo-metric-card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  padding: 18px;
+  border: 1px solid #E2E8F0;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: var(--transition);
+}
+
+.iluo-metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.iluo-metric-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.4rem;
+  color: #FFFFFF;
+}
+
+.iluo-metric-val {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #0F172A;
+  line-height: 1.1;
+}
+
+.iluo-metric-label {
+  font-size: 0.8rem;
+  color: #64748B;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Training Plan Roadmap */
+.training-plan-card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+  padding: 24px;
+  margin-top: 24px;
+}
+
+.timeline-track {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+  position: relative;
+}
+
+.timeline-step {
+  background: #F8FAFC;
+  border: 1px solid #CBD5E1;
+  border-radius: 8px;
+  padding: 14px;
+  position: relative;
+}
+
+.timeline-step.completed {
+  border-color: #10B981;
+  background: #ECFDF5;
+}
+
+.timeline-step.current {
+  border-color: #005B9E;
+  background: #EFF6FF;
+  box-shadow: 0 0 0 2px rgba(0, 91, 158, 0.2);
+}
+
+.timeline-step-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.timeline-step-title {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: #0F172A;
+}
+
+.timeline-date-row {
+  font-size: 0.78rem;
+  color: #64748B;
+  line-height: 1.4;
+}
+
+/* SOP Infographic Viewer */
+.sop-preview-box {
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+  padding: 20px;
+  text-align: center;
+  margin-top: 24px;
+}
+
+.sop-preview-img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid #CBD5E1;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.sop-preview-img:hover {
+  transform: scale(1.01);
+  box-shadow: var(--shadow-lg);
+}
+
+@media (max-width: 768px) {
+  .role-nav-bar {
+    justify-content: flex-start;
+    padding: 8px 12px;
+  }
+  .role-tab-btn {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+  }
+  .timeline-track {
+    grid-template-columns: 1fr;
+  }
+}
