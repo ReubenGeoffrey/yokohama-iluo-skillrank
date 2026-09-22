@@ -16,6 +16,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "jszip": "^3.10.2",
     "mongodb": "^7.5.0",
     "nodemailer": "^9.0.4"
   }

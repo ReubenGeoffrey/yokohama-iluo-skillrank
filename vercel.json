@@ -5,15 +5,20 @@
       "src": "server.js",
       "use": "@vercel/node",
       "config": {
-        "includeFiles": [
-          "index.html",
-          "app.js",
-          "data.js",
-          "styles.css",
-          "ojt_evaluations.json",
-          "custom_questions.json",
-          "custom_employees.json"
-        ]
+          "includeFiles": [
+            "index.html",
+            "app.js",
+            "data.js",
+            "styles.css",
+            "ojt_evaluations.json",
+            "custom_questions.json",
+            "custom_employees.json",
+            "docx_generator.js",
+            "jszip.min.js",
+            "yokohama_logo.png",
+            "mammoth.browser.min.js",
+            "xlsx.full.min.js"
+          ]
       }
     }
   ],

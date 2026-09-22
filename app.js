@@ -2442,7 +2442,7 @@ function downloadEmployeePDF(empNo) {
   }
 }
 
-// Download Official DOCX Evaluation Report for Employee Assessment
+// Download Official DOCX Evaluation Report for Employee Assessment (Universal Client + Server)
 async function downloadEmployeeDocx(empNo) {
   if (!empNo) return alert('Employee ID is required.');
   showToast(`Generating official Word Document (.docx) report for Employee ${empNo}...`);
@@ -2451,18 +2451,24 @@ async function downloadEmployeeDocx(empNo) {
     const records = getStoredRecords();
     const recordData = records[empNo] || null;
 
-    let res = await fetch('/api/generate-docx', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ empNo: String(empNo), recordData })
-    });
+    let res = null;
+    try {
+      res = await fetch('/api/generate-docx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empNo: String(empNo), recordData })
+      });
 
-    if (!res.ok) {
-      // Fallback to GET endpoint
-      res = await fetch(`/api/employee-docx/${encodeURIComponent(empNo)}`);
+      if (!res.ok) {
+        // Fallback to GET endpoint
+        res = await fetch(`/api/employee-docx/${encodeURIComponent(empNo)}`);
+      }
+    } catch (netErr) {
+      console.warn('Server DOCX generation unreachable, using client-side fallback:', netErr.message);
+      res = null;
     }
 
-    if (res.ok) {
+    if (res && res.ok) {
       const blob = await res.blob();
       const contentDisp = res.headers.get('Content-Disposition') || '';
       let filename = `Yokohama_ILUO_Report_${empNo}.docx`;
@@ -2480,14 +2486,77 @@ async function downloadEmployeeDocx(empNo) {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
       showToast(`Official DOCX report for Employee ${empNo} downloaded successfully!`);
-    } else {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.message || 'Server returned status ' + res.status);
+      return;
     }
+
+    // Client-Side Generation Fallback (runs in browser when on Vercel / serverless / offline)
+    console.log('Generating DOCX on client-side for Employee', empNo);
+    await generateClientSideDocx(empNo, recordData);
+
   } catch (err) {
     console.error('DOCX Download error:', err);
-    showToast(`Could not generate DOCX: ${err.message}. Please verify local server is running.`);
+    try {
+      const records = getStoredRecords();
+      await generateClientSideDocx(empNo, records[empNo] || null);
+    } catch (clientErr) {
+      console.error('Client-side DOCX fallback error:', clientErr);
+      showToast(`Could not generate DOCX: ${clientErr.message}`);
+    }
   }
+}
+
+async function generateClientSideDocx(empNo, recordData) {
+  if (typeof window.YokohamaDocxGenerator === 'undefined' || typeof window.JSZip === 'undefined') {
+    throw new Error('DOCX generator library is loading. Please try again in a moment.');
+  }
+
+  const allEmps = (typeof EMPLOYEES !== 'undefined') ? EMPLOYEES : [];
+  const emp = allEmps.find(e => String(e.empNo).trim() === String(empNo).trim()) || {
+    empNo: empNo,
+    name: `Employee ${empNo}`,
+    dept: 'QUALITY CONTROL',
+    section: 'Tire building QA',
+    doj: '-',
+    targetLevel: 'O'
+  };
+
+  const examRecord = recordData || (getStoredRecords()[empNo] || null);
+  const allOjt = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
+  const ojtRecord = allOjt[empNo] || null;
+
+  // Try to load logo
+  let logoArrayBuffer = null;
+  try {
+    const logoRes = await fetch('yokohama_logo.png');
+    if (logoRes.ok) {
+      logoArrayBuffer = await logoRes.arrayBuffer();
+    }
+  } catch (e) {}
+
+  const zip = await window.YokohamaDocxGenerator.createDocxZip(
+    { emp, examRecord, ojtRecord },
+    window.JSZip,
+    logoArrayBuffer
+  );
+
+  const blob = await zip.generateAsync({
+    type: 'blob',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  });
+
+  const safeName = (emp.name || empNo).replace(/[\s\\/]+/g, '_');
+  const filename = `Yokohama_ILUO_Report_${empNo}_${safeName}.docx`;
+
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+
+  showToast(`Official DOCX report for Employee ${empNo} downloaded successfully!`);
 }
 
 function confirmAndResetExam(empNo, empName) {

@@ -482,40 +482,62 @@ app.delete('/api/records/:empNo', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------
-// INDIVIDUAL EMPLOYEE DOCX QUALIFICATION REPORT GENERATOR
 // ---------------------------------------------------------------------
-app.get('/api/employee-docx/:empNo', async (req, res) => {
-  const empNo = String(req.params.empNo).trim();
-  const scriptPath = path.join(__dirname, 'generate_employee_docx.py');
+// INDIVIDUAL EMPLOYEE DOCX QUALIFICATION REPORT GENERATOR (Pure Node.js)
+// ---------------------------------------------------------------------
+const { createDocxZip } = require('./docx_generator.js');
+let JSZipLib = null;
+try {
+  JSZipLib = require('./jszip.min.js');
+} catch (e) {
+  try { JSZipLib = require('jszip'); } catch (err) {}
+}
 
-  if (!fs.existsSync(scriptPath)) {
-    return res.status(500).json({ success: false, message: 'DOCX generator script not found on server.' });
+async function buildDocxBufferForEmployee(empNo, optionalRecordData) {
+  let emp = null;
+  if (customEmployeesMemory && Array.isArray(customEmployeesMemory)) {
+    emp = customEmployeesMemory.find(e => String(e.empNo).trim() === String(empNo).trim());
+  }
+  if (!emp && fs.existsSync(EMPLOYEES_JSON_FILE)) {
+    try {
+      const emps = JSON.parse(fs.readFileSync(EMPLOYEES_JSON_FILE, 'utf-8'));
+      emp = emps.find(e => String(e.empNo).trim() === String(empNo).trim());
+    } catch (e) {}
+  }
+  if (!emp) {
+    emp = {
+      empNo: empNo,
+      name: `Employee ${empNo}`,
+      dept: 'QUALITY CONTROL',
+      section: 'Tire building QA',
+      doj: '-',
+      targetLevel: 'O'
+    };
   }
 
-  execFile('python', [scriptPath, '--emp', empNo], { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
-    if (err) {
-      console.error(`DOCX generation error for ${empNo}:`, err.message, stderr);
-      return res.status(500).json({ success: false, message: 'Failed to generate DOCX', error: stderr || err.message });
-    }
+  const examRecord = optionalRecordData || globalAssessmentRecords.get(String(empNo)) || null;
+  const ojtRecord = globalOjtEvaluations.get(String(empNo)) || null;
 
-    const match = stdout.match(/SUCCESS: Generated DOCX for Employee \S+ -> (.+)/);
-    let filePath = match ? match[1].trim() : null;
+  const logoPath = path.join(__dirname, 'yokohama_logo.png');
+  const logoBuf = fs.existsSync(logoPath) ? fs.readFileSync(logoPath) : null;
 
-    if (!filePath || !fs.existsSync(filePath)) {
-      const outDir = path.join(__dirname, 'output_docx');
-      if (fs.existsSync(outDir)) {
-        const files = fs.readdirSync(outDir).filter(f => f.includes(`Report_${empNo}_`) && f.endsWith('.docx'));
-        if (files.length > 0) filePath = path.join(outDir, files[0]);
-      }
-    }
+  const zip = await createDocxZip({ emp, examRecord, ojtRecord }, JSZipLib, logoBuf);
+  return await zip.generateAsync({ type: 'nodebuffer' });
+}
 
-    if (filePath && fs.existsSync(filePath)) {
-      const fileName = path.basename(filePath);
-      return res.download(filePath, fileName);
-    } else {
-      return res.status(404).json({ success: false, message: 'Generated DOCX file could not be located.' });
-    }
-  });
+app.get('/api/employee-docx/:empNo', async (req, res) => {
+  const empNo = String(req.params.empNo).trim();
+  try {
+    const docxBuf = await buildDocxBufferForEmployee(empNo);
+    const fileName = `Yokohama_ILUO_Report_${empNo}.docx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', docxBuf.length);
+    return res.send(docxBuf);
+  } catch (err) {
+    console.error(`DOCX generation error for ${empNo}:`, err.message);
+    return res.status(500).json({ success: false, message: 'Failed to generate DOCX', error: err.message });
+  }
 });
 
 app.post('/api/generate-docx', async (req, res) => {
@@ -524,57 +546,25 @@ app.post('/api/generate-docx', async (req, res) => {
     return res.status(400).json({ success: false, message: 'empNo is required' });
   }
 
-  const scriptPath = path.join(__dirname, 'generate_employee_docx.py');
-  if (!fs.existsSync(scriptPath)) {
-    return res.status(500).json({ success: false, message: 'DOCX generator script not found on server.' });
-  }
-
-  let tempRecordFile = null;
-  const args = [scriptPath, '--emp', String(empNo)];
-
+  const strEmpNo = String(empNo).trim();
   if (recordData) {
-    globalAssessmentRecords.set(String(empNo), recordData);
+    globalAssessmentRecords.set(strEmpNo, recordData);
     try {
       fs.writeFileSync(RECORDS_JSON_FILE, JSON.stringify(Object.fromEntries(globalAssessmentRecords), null, 2), 'utf-8');
     } catch (e) {}
-
-    try {
-      const tmpDir = path.join(__dirname, 'scratch');
-      if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-      tempRecordFile = path.join(tmpDir, `rec_${empNo}_${Date.now()}.json`);
-      fs.writeFileSync(tempRecordFile, JSON.stringify(recordData), 'utf-8');
-      args.push('--record-file', tempRecordFile);
-    } catch (e) {}
   }
 
-  execFile('python', args, { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
-    if (tempRecordFile && fs.existsSync(tempRecordFile)) {
-      try { fs.unlinkSync(tempRecordFile); } catch (e) {}
-    }
-
-    if (err) {
-      console.error(`DOCX generation error for ${empNo}:`, err.message, stderr);
-      return res.status(500).json({ success: false, message: 'Failed to generate DOCX', error: stderr || err.message });
-    }
-
-    const match = stdout.match(/SUCCESS: Generated DOCX for Employee \S+ -> (.+)/);
-    let filePath = match ? match[1].trim() : null;
-
-    if (!filePath || !fs.existsSync(filePath)) {
-      const outDir = path.join(__dirname, 'output_docx');
-      if (fs.existsSync(outDir)) {
-        const files = fs.readdirSync(outDir).filter(f => f.includes(`Report_${empNo}_`) && f.endsWith('.docx'));
-        if (files.length > 0) filePath = path.join(outDir, files[0]);
-      }
-    }
-
-    if (filePath && fs.existsSync(filePath)) {
-      const fileName = path.basename(filePath);
-      return res.download(filePath, fileName);
-    } else {
-      return res.status(404).json({ success: false, message: 'Generated DOCX file could not be located.' });
-    }
-  });
+  try {
+    const docxBuf = await buildDocxBufferForEmployee(strEmpNo, recordData);
+    const fileName = `Yokohama_ILUO_Report_${strEmpNo}.docx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', docxBuf.length);
+    return res.send(docxBuf);
+  } catch (err) {
+    console.error(`DOCX generation error for ${empNo}:`, err.message);
+    return res.status(500).json({ success: false, message: 'Failed to generate DOCX', error: err.message });
+  }
 });
 
 // ---------------------------------------------------------------------
