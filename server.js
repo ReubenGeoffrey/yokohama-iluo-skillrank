@@ -370,9 +370,23 @@ app.post('/api/auth/admin/logout', (req, res) => {
 });
 
 // ---------------------------------------------------------------------
-// CLOUD RECORD PERSISTENCE ENGINE (Multi-Device Global Sync)
+// CLOUD RECORD PERSISTENCE ENGINE (Multi-Device Global Sync & Disk Backup)
 // ---------------------------------------------------------------------
+const fs = require('fs');
+const { execFile } = require('child_process');
+const RECORDS_JSON_FILE = path.join(__dirname, 'assessment_records.json');
 const globalAssessmentRecords = new Map();
+
+try {
+  if (fs.existsSync(RECORDS_JSON_FILE)) {
+    const raw = fs.readFileSync(RECORDS_JSON_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    Object.entries(parsed).forEach(([k, v]) => globalAssessmentRecords.set(String(k), v));
+    console.log(`📋 Loaded ${globalAssessmentRecords.size} assessment records from disk.`);
+  }
+} catch (e) {
+  console.error('Error loading assessment records from disk:', e.message);
+}
 
 const kvUrl = process.env.UPSTASH_REDIS_REST_URL;
 const kvToken = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -430,11 +444,17 @@ app.post('/api/records', async (req, res) => {
     return res.status(400).json({ success: false, message: 'empNo and recordData required' });
   }
 
-  const existing = globalAssessmentRecords.get(empNo) || {};
+  const existing = globalAssessmentRecords.get(String(empNo)) || {};
   const updated = { ...existing, ...recordData };
-  globalAssessmentRecords.set(empNo, updated);
+  globalAssessmentRecords.set(String(empNo), updated);
 
   const recordsObj = Object.fromEntries(globalAssessmentRecords);
+  try {
+    fs.writeFileSync(RECORDS_JSON_FILE, JSON.stringify(recordsObj, null, 2), 'utf-8');
+  } catch (err) {
+    // Non-fatal on read-only environments
+  }
+
   if (kvUrl && kvToken) {
     await syncWithCloudKv('SET', 'yokohama_records', recordsObj);
   }
@@ -445,9 +465,14 @@ app.post('/api/records', async (req, res) => {
 // API ROUTE: DELETE /api/records/:empNo (Reset specific employee exam)
 app.delete('/api/records/:empNo', async (req, res) => {
   const { empNo } = req.params;
-  if (globalAssessmentRecords.has(empNo)) {
-    globalAssessmentRecords.delete(empNo);
+  if (globalAssessmentRecords.has(String(empNo))) {
+    globalAssessmentRecords.delete(String(empNo));
     const recordsObj = Object.fromEntries(globalAssessmentRecords);
+    try {
+      fs.writeFileSync(RECORDS_JSON_FILE, JSON.stringify(recordsObj, null, 2), 'utf-8');
+    } catch (err) {
+      // Non-fatal on read-only environments
+    }
     if (kvUrl && kvToken) {
       await syncWithCloudKv('SET', 'yokohama_records', recordsObj);
     }
@@ -456,12 +481,104 @@ app.delete('/api/records/:empNo', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------
-// ON-THE-JOB TRAINING EVALUATION (OJT) CLOUD PERSISTENCE
+// INDIVIDUAL EMPLOYEE DOCX QUALIFICATION REPORT GENERATOR
+// ---------------------------------------------------------------------
+app.get('/api/employee-docx/:empNo', async (req, res) => {
+  const empNo = String(req.params.empNo).trim();
+  const scriptPath = path.join(__dirname, 'generate_employee_docx.py');
+
+  if (!fs.existsSync(scriptPath)) {
+    return res.status(500).json({ success: false, message: 'DOCX generator script not found on server.' });
+  }
+
+  execFile('python', [scriptPath, '--emp', empNo], { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+    if (err) {
+      console.error(`DOCX generation error for ${empNo}:`, err.message, stderr);
+      return res.status(500).json({ success: false, message: 'Failed to generate DOCX', error: stderr || err.message });
+    }
+
+    const match = stdout.match(/SUCCESS: Generated DOCX for Employee \S+ -> (.+)/);
+    let filePath = match ? match[1].trim() : null;
+
+    if (!filePath || !fs.existsSync(filePath)) {
+      const outDir = path.join(__dirname, 'output_docx');
+      if (fs.existsSync(outDir)) {
+        const files = fs.readdirSync(outDir).filter(f => f.includes(`Report_${empNo}_`) && f.endsWith('.docx'));
+        if (files.length > 0) filePath = path.join(outDir, files[0]);
+      }
+    }
+
+    if (filePath && fs.existsSync(filePath)) {
+      const fileName = path.basename(filePath);
+      return res.download(filePath, fileName);
+    } else {
+      return res.status(404).json({ success: false, message: 'Generated DOCX file could not be located.' });
+    }
+  });
+});
+
+app.post('/api/generate-docx', async (req, res) => {
+  const { empNo, recordData } = req.body;
+  if (!empNo) {
+    return res.status(400).json({ success: false, message: 'empNo is required' });
+  }
+
+  const scriptPath = path.join(__dirname, 'generate_employee_docx.py');
+  if (!fs.existsSync(scriptPath)) {
+    return res.status(500).json({ success: false, message: 'DOCX generator script not found on server.' });
+  }
+
+  let tempRecordFile = null;
+  const args = [scriptPath, '--emp', String(empNo)];
+
+  if (recordData) {
+    globalAssessmentRecords.set(String(empNo), recordData);
+    try {
+      fs.writeFileSync(RECORDS_JSON_FILE, JSON.stringify(Object.fromEntries(globalAssessmentRecords), null, 2), 'utf-8');
+    } catch (e) {}
+
+    try {
+      const tmpDir = path.join(__dirname, 'scratch');
+      if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+      tempRecordFile = path.join(tmpDir, `rec_${empNo}_${Date.now()}.json`);
+      fs.writeFileSync(tempRecordFile, JSON.stringify(recordData), 'utf-8');
+      args.push('--record-file', tempRecordFile);
+    } catch (e) {}
+  }
+
+  execFile('python', args, { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+    if (tempRecordFile && fs.existsSync(tempRecordFile)) {
+      try { fs.unlinkSync(tempRecordFile); } catch (e) {}
+    }
+
+    if (err) {
+      console.error(`DOCX generation error for ${empNo}:`, err.message, stderr);
+      return res.status(500).json({ success: false, message: 'Failed to generate DOCX', error: stderr || err.message });
+    }
+
+    const match = stdout.match(/SUCCESS: Generated DOCX for Employee \S+ -> (.+)/);
+    let filePath = match ? match[1].trim() : null;
+
+    if (!filePath || !fs.existsSync(filePath)) {
+      const outDir = path.join(__dirname, 'output_docx');
+      if (fs.existsSync(outDir)) {
+        const files = fs.readdirSync(outDir).filter(f => f.includes(`Report_${empNo}_`) && f.endsWith('.docx'));
+        if (files.length > 0) filePath = path.join(outDir, files[0]);
+      }
+    }
+
+    if (filePath && fs.existsSync(filePath)) {
+      const fileName = path.basename(filePath);
+      return res.download(filePath, fileName);
+    } else {
+      return res.status(404).json({ success: false, message: 'Generated DOCX file could not be located.' });
+    }
+  });
+});
+
 // ---------------------------------------------------------------------
 // ON-THE-JOB TRAINING EVALUATION (OJT) CLOUD & EXCEL PERSISTENCE
 // ---------------------------------------------------------------------
-const fs = require('fs');
-const { execFile } = require('child_process');
 const OJT_JSON_FILE = path.join(__dirname, 'ojt_evaluations.json');
 const globalOjtEvaluations = new Map();
 

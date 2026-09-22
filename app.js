@@ -703,7 +703,7 @@ function showEmpExamsView() {
     container.innerHTML = `
       <div class="info-item" style="border-left: 4px solid var(--success-color);">
         <div style="font-weight: 700; font-size: 1.1rem;">Level ${targetLevel} MCQ Assessment</div>
-        <div style="font-size: 0.88rem; color: var(--text-muted); margin: 6px 0;">Status: <strong>${rec.status}</strong> | Score: ${rec.totalMark} Marks (${rec.markPct}%)</div>
+        <div style="font-size: 0.88rem; color: var(--text-muted); margin: 6px 0;">Status: <strong>${rec.status}</strong> | Score: <strong>${rec.totalMark !== undefined ? rec.totalMark : 0} Marks</strong></div>
         <div style="font-size: 0.8rem; color: var(--success-color); font-weight: 600;">✔ Completed on ${rec.attemptDate}</div>
       </div>
     `;
@@ -1099,10 +1099,11 @@ function showResultView(record, isImmediateCompletion = false) {
  if (resMarksEl) resMarksEl.innerText = `${totalMarks} / ${qCount} Marks`;
 
   const resPctEl = document.getElementById('resPct');
- if (resPctEl) resPctEl.innerText = `${record.markPct !== undefined ? record.markPct + '%' : '-'}`;
+  const minPassBenchmark = Math.ceil(qCount * 0.7);
+  if (resPctEl) resPctEl.innerText = `${minPassBenchmark} / ${qCount} Marks`;
 
   const statusEl = document.getElementById('resStatus');
- statusEl.innerText = record.status || 'Completed';
+  statusEl.innerText = record.status || 'Completed';
   
   if (record.status && record.status.includes('Terminated')) {
     statusEl.style.color = 'var(--accent-red)';
@@ -1115,38 +1116,34 @@ function showResultView(record, isImmediateCompletion = false) {
   if (reviewContainer) {
     reviewContainer.innerHTML = '';
     
-    // Only show full question-by-question breakdown right after completing the exam!
-    if (isImmediateCompletion && record.submittedQuestions && record.submittedQuestions.length > 0) {
-      const qList = record.submittedQuestions;
-
+    if (record.submittedQuestions && record.submittedQuestions.length > 0) {
       let html = `
-        <div style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px; padding: 14px; margin-bottom: 20px; font-size: 0.85rem; color: #92400E; display: flex; align-items: center; gap: 10px;">
-          <span style="font-size: 1.2rem;">⏱️</span>
-          <div><strong>ONE-TIME RESULT AUDIT VIEW:</strong> This detailed question-by-question breakdown of your correct and wrong answers is displayed <strong>ONLY ONCE</strong> upon completing your assessment. Once you leave this page, only your total score will be saved in your profile.</div>
-        </div>
-
-        <h3 style="font-size: 1.2rem; color: var(--primary-dark); margin-bottom: 16px; border-bottom: 2px solid var(--border-color); padding-bottom: 8px;">
-          📋 Immediate Question &amp; Answer Review
+        <h3 style="font-size: 1.1rem; color: var(--primary-dark); margin-bottom: 12px; border-bottom: 1.5px solid var(--border-color); padding-bottom: 6px;">
+          Question Review &amp; Official Key Audit
         </h3>
       `;
 
-      qList.forEach((q, idx) => {
+      record.submittedQuestions.forEach((q, idx) => {
         const isCorr = q.isCorrect;
+        const borderCol = isCorr ? 'var(--success-color)' : 'var(--accent-red)';
+        const badgeBg = isCorr ? '#ECFDF5' : '#FEF2F2';
+        const badgeCol = isCorr ? '#065F46' : '#991B1B';
+
         html += `
-          <div style="background: ${isCorr ? '#F0FDF4' : '#FEF2F2'}; border: 1px solid ${isCorr ? '#BBF7D0' : '#FCA5A5'}; border-radius: 8px; padding: 14px; margin-bottom: 14px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-weight: 700; font-size: 0.85rem; color: var(--text-muted);">Q${idx + 1}. [${q.category}]</span>
-              <span style="font-weight: 800; padding: 3px 10px; border-radius: 12px; font-size: 0.78rem; background: ${isCorr ? '#DCFCE7' : '#FEE2E2'}; color: ${isCorr ? '#15803D' : '#B91C1C'};">
-                ${isCorr ? '✔ Correct Answer' : '✖ Incorrect Answer'}
+          <div style="background: #FFFFFF; border: 1px solid var(--border-color); border-left: 4px solid ${borderCol}; border-radius: 6px; padding: 12px 14px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+              <div style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);">
+                <span style="color: var(--primary-color);">Q${idx + 1}.</span> [${q.category || 'QA'}] ${q.question}
+              </div>
+              <span style="font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: ${badgeBg}; color: ${badgeCol};">
+                ${isCorr ? 'Correct (1 Mark)' : 'Incorrect (0 Marks)'}
               </span>
             </div>
-            <div style="font-size: 0.95rem; font-weight: 700; color: var(--primary-dark); margin-bottom: 10px;">${q.question}</div>
-            
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.85rem;">
-              <div style="background: ${isCorr ? '#DCFCE7' : '#FEE2E2'}; border: 1px solid ${isCorr ? '#86EFAC' : '#FCA5A5'}; padding: 8px 12px; border-radius: 6px; color: ${isCorr ? '#166534' : '#991B1B'};">
-                <strong>Your Choice:</strong> [${q.selectedKey}] ${q.selectedText}
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.85rem; margin-top: 6px;">
+              <div style="background: ${isCorr ? '#F0FDF4' : '#FFF1F2'}; padding: 6px 10px; border-radius: 4px;">
+                <strong>Your Answer:</strong> [${q.selectedKey}] ${q.selectedText}
               </div>
-              <div style="background: #FFFFFF; border: 1px solid #CBD5E1; padding: 8px 12px; border-radius: 6px; color: #1E293B;">
+              <div style="background: #F8FAFC; padding: 6px 10px; border-radius: 4px;">
                 <strong>Correct Key:</strong> [${q.correctKey}] ${q.correctText}
               </div>
             </div>
@@ -1166,6 +1163,13 @@ function downloadCurrentEmployeePDF() {
   const session = sessionStr ? JSON.parse(sessionStr) : null;
   if (!session || !session.empNo) return alert('Session expired or employee not logged in.');
   downloadEmployeePDF(session.empNo);
+}
+
+function downloadCurrentEmployeeDocx() {
+  const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
+  const session = sessionStr ? JSON.parse(sessionStr) : null;
+  if (!session || !session.empNo) return alert('Session expired or employee not logged in.');
+  downloadEmployeeDocx(session.empNo);
 }
 
 // ---------------------------------------------------------------------
@@ -1438,7 +1442,8 @@ function filterModalEmployees(type) {
       <td>${statusHtml}</td>
       <td style="text-align: center;">
         <div style="display: flex; gap: 4px; justify-content: center;">
-          ${hasExam ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.72rem; background: #0284C7; border-color: #0284C7;" onclick="downloadEmployeePDF('${emp.empNo}')">PDF</button>` : ''}
+          ${hasExam ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.72rem; background: #0284C7; border-color: #0284C7;" onclick="downloadEmployeePDF('${emp.empNo}')" title="Download PDF Report">PDF</button>` : ''}
+          ${hasExam ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.72rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">DOCX</button>` : ''}
           <button class="btn-primary" style="padding: 3px 8px; font-size: 0.72rem; background: #059669; border-color: #059669;" onclick="closeSectionCompletedModal(); openOjtModalForEmployee('${emp.empNo}')">OJT</button>
         </div>
       </td>
@@ -1912,15 +1917,16 @@ function renderAdminTable(query) {
       : `<span style="color: #94A3B8;">Not Started</span>`;
 
     const hasOjt = ojt.totalScore !== undefined || ojt.scorePct !== undefined;
-    const isOjtQualified = ojt.qualificationStatus === 'Qualified' || (ojt.scorePct !== undefined && ojt.scorePct >= 70);
+    const isOjtQualified = ojt.qualificationStatus === 'Qualified' || (ojt.totalScore !== undefined && ojt.totalScore >= 35);
     const ojtBadge = hasOjt
-      ? `<span class="${isOjtQualified ? 'badge-pass' : 'badge-fail'}" style="cursor: pointer; display: inline-block; font-size: 0.78rem;" onclick="openOjtModalForEmployee('${emp.empNo}')" title="Total Score: ${ojt.totalScore}/${ojt.maxScore || 50} (${ojt.scorePct}%) - Click to open">${ojt.qualificationStatus || (isOjtQualified ? 'Qualified' : 'Not Qualified')} (${ojt.scorePct}%)</span>`
+      ? `<span class="${isOjtQualified ? 'badge-pass' : 'badge-fail'}" style="cursor: pointer; display: inline-block; font-size: 0.78rem;" onclick="openOjtModalForEmployee('${emp.empNo}')" title="Total Score: ${ojt.totalScore || 0}/${ojt.maxScore || 50} Marks - Click to open">${ojt.qualificationStatus || (isOjtQualified ? 'Qualified' : 'Not Qualified')} (${ojt.totalScore || 0}/${ojt.maxScore || 50} Marks)</span>`
       : `<span style="color: #94A3B8; font-size: 0.8rem; cursor: pointer; text-decoration: underline dotted;" onclick="openOjtModalForEmployee('${emp.empNo}')" title="Click to open OJT evaluation">Pending</span>`;
 
     const hasRecord = rec.isCompleted || rec.inProgress;
     const actionBtn = `
       <div style="display: flex; gap: 5px; flex-wrap: wrap;">
-        ${hasRecord ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #0284C7; border-color: #0284C7;" onclick="downloadEmployeePDF('${emp.empNo}')">PDF Report</button>` : ''}
+        ${hasRecord ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #0284C7; border-color: #0284C7;" onclick="downloadEmployeePDF('${emp.empNo}')" title="Download PDF Report">PDF</button>` : ''}
+        ${hasRecord ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">DOCX</button>` : ''}
         <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #059669; border-color: #059669;" onclick="openOjtModalForEmployee('${emp.empNo}')">OJT Form</button>
         ${hasRecord ? `<button class="btn-reset" style="padding: 3px 8px; font-size: 0.75rem;" onclick="confirmAndResetExam('${emp.empNo}', '${emp.name.replace(/'/g, "\\'")}')">Reset</button>` : ''}
       </div>
@@ -1937,7 +1943,7 @@ function renderAdminTable(query) {
       <td>${rec.lMark !== undefined ? rec.lMark : '-'}</td>
       <td>${rec.oMark !== undefined ? rec.oMark : '-'}</td>
       <td><strong>${rec.totalMark !== undefined ? rec.totalMark : '-'}</strong></td>
-      <td>${rec.markPct !== undefined ? rec.markPct + '%' : '-'}</td>
+      <td>${rec.totalMark !== undefined ? (rec.totalMark >= 21 ? 'Pass (≥21)' : 'Retest (<21)') : '-'}</td>
       <td>${statusBadge}</td>
       <td>${ojtBadge}</td>
       <td>${rec.attemptDate || '-'}</td>
@@ -2333,6 +2339,54 @@ function downloadEmployeePDF(empNo) {
   }
 }
 
+// Download Official DOCX Evaluation Report for Employee Assessment
+async function downloadEmployeeDocx(empNo) {
+  if (!empNo) return alert('Employee ID is required.');
+  showToast(`Generating official Word Document (.docx) report for Employee ${empNo}...`);
+
+  try {
+    const records = getStoredRecords();
+    const recordData = records[empNo] || null;
+
+    let res = await fetch('/api/generate-docx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ empNo: String(empNo), recordData })
+    });
+
+    if (!res.ok) {
+      // Fallback to GET endpoint
+      res = await fetch(`/api/employee-docx/${encodeURIComponent(empNo)}`);
+    }
+
+    if (res.ok) {
+      const blob = await res.blob();
+      const contentDisp = res.headers.get('Content-Disposition') || '';
+      let filename = `Yokohama_ILUO_Report_${empNo}.docx`;
+      const fnMatch = contentDisp.match(/filename="?([^"]+)"?/);
+      if (fnMatch && fnMatch[1]) {
+        filename = fnMatch[1];
+      }
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      showToast(`Official DOCX report for Employee ${empNo} downloaded successfully!`);
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.message || 'Server returned status ' + res.status);
+    }
+  } catch (err) {
+    console.error('DOCX Download error:', err);
+    showToast(`Could not generate DOCX: ${err.message}. Please verify local server is running.`);
+  }
+}
+
 function confirmAndResetExam(empNo, empName) {
   if (confirm(`Are you sure you want to RESET the assessment for Employee ${empNo} (${empName})?\n\nThis will clear all previous answers, marks, tab switch warnings, and status so they can take the test again.`)) {
     const records = getStoredRecords();
@@ -2537,6 +2591,16 @@ function generateSelectedEmployeePDF() {
     return;
   }
   downloadEmployeePDF(empNo);
+}
+
+function generateSelectedEmployeeDocx() {
+  const selectEl = document.getElementById('reportEmpSelect');
+  const empNo = selectEl ? selectEl.value : '';
+  if (!empNo) {
+    showToast('Please select an employee from the dropdown list first.');
+    return;
+  }
+  downloadEmployeeDocx(empNo);
 }
 
 // Bulk Clear & Docx Upload Parser
@@ -2880,7 +2944,8 @@ function filterSectionEmployees() {
     const hasRecord = rec.isCompleted || rec.inProgress;
     const actionBtn = `
       <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-        ${hasRecord ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #0284C7; border-color: #0284C7;" onclick="downloadEmployeePDF('${emp.empNo}')">PDF</button>` : ''}
+        ${hasRecord ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #0284C7; border-color: #0284C7;" onclick="downloadEmployeePDF('${emp.empNo}')" title="Download PDF Report">PDF</button>` : ''}
+        ${hasRecord ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">DOCX</button>` : ''}
         <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #059669; border-color: #059669;" onclick="openOjtModalForEmployee('${emp.empNo}')">OJT Form</button>
         ${hasRecord ? `<button class="btn-reset" style="padding: 3px 8px; font-size: 0.75rem;" onclick="confirmAndResetExam('${emp.empNo}', '${emp.name.replace(/'/g, "\\'")}')">Reset</button>` : ''}
       </div>
@@ -2896,7 +2961,7 @@ function filterSectionEmployees() {
       <td>${rec.lMark !== undefined ? rec.lMark : '-'}</td>
       <td>${rec.oMark !== undefined ? rec.oMark : '-'}</td>
       <td><strong style="color: var(--text-main); font-size: 0.95rem;">${rec.totalMark !== undefined ? rec.totalMark : '-'}</strong></td>
-      <td><strong>${rec.markPct !== undefined ? rec.markPct + '%' : '-'}</strong></td>
+      <td><strong>${rec.totalMark !== undefined ? (rec.totalMark >= 21 ? 'Pass (≥21)' : 'Retest (<21)') : '-'}</strong></td>
       <td>${statusBadge}</td>
       <td>${rec.attemptDate || '-'}</td>
       <td>${actionBtn}</td>
