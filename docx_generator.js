@@ -438,227 +438,179 @@
 
     const tblBorders = `
       <w:tblBorders>
-        <w:top w:val="single" w:sz="8" w:space="0" w:color="005B9E"/>
-        <w:left w:val="single" w:sz="8" w:space="0" w:color="005B9E"/>
-        <w:bottom w:val="single" w:sz="8" w:space="0" w:color="005B9E"/>
-        <w:right w:val="single" w:sz="8" w:space="0" w:color="005B9E"/>
-        <w:insideH w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/>
-        <w:insideV w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/>
+        <w:top w:val="single" w:sz="4" w:space="0" w:color="000000"/>
+        <w:left w:val="single" w:sz="4" w:space="0" w:color="000000"/>
+        <w:bottom w:val="single" w:sz="4" w:space="0" w:color="000000"/>
+        <w:right w:val="single" w:sz="4" w:space="0" w:color="000000"/>
+        <w:insideH w:val="single" w:sz="4" w:space="0" w:color="000000"/>
+        <w:insideV w:val="single" w:sz="4" w:space="0" w:color="000000"/>
       </w:tblBorders>`;
 
-    function cellXml(text, widthDxa, bold = false, align = 'left', bgColor = null, color = '0F172A', fontSize = 18) {
+    function cellXml(text, span, widthDxa, bold = false, align = 'left', fontSize = 18, vAlign = 'center', bgColor = null, color = '000000') {
       const shd = bgColor ? `<w:shd w:val="clear" w:color="auto" w:fill="${bgColor}"/>` : '';
-      return `
-        <w:tc>
-          <w:tcPr>
-            <w:tcW w:w="${widthDxa}" w:type="dxa"/>
-            ${shd}
-            <w:tcMar>
-              <w:top w:w="120" w:type="dxa"/>
-              <w:bottom w:w="120" w:type="dxa"/>
-              <w:left w:w="160" w:type="dxa"/>
-              <w:right w:w="160" w:type="dxa"/>
-            </w:tcMar>
-          </w:tcPr>
+      const gridSpan = span > 1 ? `<w:gridSpan w:val="${span}"/>` : '';
+      const bTag = bold ? '<w:b/><w:bCs/>' : '';
+      const lines = String(text != null ? text : '').split('\n');
+      const pXml = lines.map(line => {
+        const escaped = escapeXml(line);
+        return `
           <w:p>
-            <w:pPr><w:jc w:val="${align}"/><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>
+            <w:pPr><w:jc w:val="${align}"/><w:spacing w:before="0" w:after="0" w:line="220" w:lineRule="auto"/></w:pPr>
             <w:r>
               <w:rPr>
-                <w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>
-                ${bold ? '<w:b/><w:bCs/>' : ''}
+                <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/>
+                ${bTag}
                 <w:sz w:val="${fontSize}"/>
                 <w:szCs w:val="${fontSize}"/>
                 <w:color w:val="${color}"/>
               </w:rPr>
-              <w:t xml:space="preserve">${escapeXml(text)}</w:t>
+              <w:t xml:space="preserve">${escaped}</w:t>
             </w:r>
-          </w:p>
+          </w:p>`;
+      }).join('');
+
+      return `
+        <w:tc>
+          <w:tcPr>
+            ${gridSpan}
+            <w:tcW w:w="${widthDxa}" w:type="dxa"/>
+            ${shd}
+            <w:vAlign w:val="${vAlign}"/>
+            <w:tcMar>
+              <w:top w:w="80" w:type="dxa"/>
+              <w:bottom w:w="80" w:type="dxa"/>
+              <w:left w:w="120" w:type="dxa"/>
+              <w:right w:w="120" w:type="dxa"/>
+            </w:tcMar>
+          </w:tcPr>
+          ${pXml}
         </w:tc>`;
     }
 
-    const empTable = `
-      <w:tbl>
-        <w:tblPr>
-          <w:tblW w:w="9360" w:type="dxa"/>
-          <w:jc w:val="center"/>
-          ${tblBorders}
-        </w:tblPr>
-        <w:tblGrid>
-          <w:gridCol w:w="4680"/>
-          <w:gridCol w:w="2340"/>
-          <w:gridCol w:w="2340"/>
-        </w:tblGrid>
-        <w:tr>
-          ${cellXml('Name: ' + (emp.name || ''), 4680, true)}
-          ${cellXml('Emp ID: ' + (emp.empNo || ''), 2340, true, 'center', null, '005B9E')}
-          ${cellXml('Joining Date: ' + (emp.doj || '-'), 2340, false, 'center')}
-        </w:tr>
-        <w:tr>
-          ${cellXml('Section & Dept.: ' + (emp.section || '-') + ' / ' + (emp.dept || 'QUALITY CONTROL'), 4680, false)}
-          ${cellXml(`Skill Level: ( ${currLvl} ) TO ( ${targetLvl} )`, 2340, true, 'center', null, '0284C7')}
-          ${cellXml('Assessment Date: ' + assessDate, 2340, false, 'center')}
-        </w:tr>
-      </w:tbl>`;
-
-    const cpRows = (tmpl.checkpoints || []).map((cp, idx) => {
+    const cpRows = (tmpl.checkpoints || []).map((cp) => {
       const sc = scores[cp.sno];
-      const scText = (sc !== undefined && sc > 0) ? `${sc} / 5 Marks` : '- / 5 Marks';
+      const scText = (sc !== undefined && sc > 0) ? String(sc) : ' ';
       const isWi = !!wiChecks[cp.sno];
-      const wiText = isWi ? '✓ OK' : '-';
-      const rowBg = idx % 2 === 0 ? 'FFFFFF' : 'F8FAFC';
-      const scColor = (sc && sc >= 3) ? '166534' : ((sc && sc > 0) ? 'DC2626' : '64748B');
+      const wiText = isWi ? '✓' : ' ';
       return `
         <w:tr>
-          ${cellXml(String(cp.sno), 600, true, 'center', rowBg, '475569')}
-          ${cellXml(cp.text, 6160, false, 'left', rowBg, '1E293B')}
-          ${cellXml(scText, 1600, true, 'center', rowBg, scColor)}
-          ${cellXml(wiText, 1000, isWi, 'center', rowBg, isWi ? '166534' : '64748B')}
+          ${cellXml(String(cp.sno), 1, 700, false, 'center', 18)}
+          ${cellXml(cp.text, 6, 7100, false, 'left', 18)}
+          ${cellXml(scText, 2, 1500, true, 'center', 18)}
+          ${cellXml(wiText, 1, 1100, true, 'center', 18)}
         </w:tr>`;
     }).join('');
 
-    const checkpointsTable = `
+    const pageBreak = isStandalone ? '' : '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
+
+    const ojtTable = `
       <w:tbl>
         <w:tblPr>
-          <w:tblW w:w="9360" w:type="dxa"/>
+          <w:tblW w:w="10400" w:type="dxa"/>
           <w:jc w:val="center"/>
           ${tblBorders}
         </w:tblPr>
         <w:tblGrid>
+          <w:gridCol w:w="700"/>
+          <w:gridCol w:w="1300"/>
+          <w:gridCol w:w="1300"/>
+          <w:gridCol w:w="1300"/>
+          <w:gridCol w:w="900"/>
+          <w:gridCol w:w="900"/>
+          <w:gridCol w:w="1400"/>
+          <w:gridCol w:w="900"/>
           <w:gridCol w:w="600"/>
-          <w:gridCol w:w="6160"/>
-          <w:gridCol w:w="1600"/>
-          <w:gridCol w:w="1000"/>
+          <w:gridCol w:w="1100"/>
         </w:tblGrid>
         <w:tr>
-          ${cellXml('S.No', 600, true, 'center', '005B9E', 'FFFFFF', 19)}
-          ${cellXml('Training Content / Check Point', 6160, true, 'left', '005B9E', 'FFFFFF', 19)}
-          ${cellXml('Score', 1600, true, 'center', '005B9E', 'FFFFFF', 19)}
-          ${cellXml('WI Check', 1000, true, 'center', '005B9E', 'FFFFFF', 19)}
+          ${cellXml('ATC TIRES PRIVATE LIMITED', 10, 10400, true, 'center', 22)}
+        </w:tr>
+        <w:tr>
+          ${cellXml(tmpl.title, 10, 10400, true, 'center', 26)}
+        </w:tr>
+        <w:tr>
+          ${cellXml('Name: ' + (emp.name || ''), 5, 5500, false, 'left', 18)}
+          ${cellXml('Emp ID: ' + (emp.empNo || ''), 2, 2300, false, 'left', 18)}
+          ${cellXml('Joining Date: ' + (emp.doj || '-'), 3, 2600, false, 'left', 18)}
+        </w:tr>
+        <w:tr>
+          ${cellXml('Section & Dept: ' + (emp.section || '-') + ' / ' + (emp.dept || 'QUALITY CONTROL'), 5, 5500, false, 'left', 18)}
+          ${cellXml(`Skill Level: ( ${currLvl} )   TO   ( ${targetLvl} )`, 2, 2300, false, 'left', 18)}
+          ${cellXml('Assessment Date: ' + assessDate, 3, 2600, false, 'left', 18)}
+        </w:tr>
+        <w:tr>
+          ${cellXml('Rank', 1, 700, false, 'center', 18)}
+          ${cellXml('1 =   POOR', 3, 3900, false, 'center', 18)}
+          ${cellXml('2 =   FAIR', 1, 900, false, 'center', 18)}
+          ${cellXml('3 =   GOOD', 2, 2300, false, 'center', 18)}
+          ${cellXml('4 =   VERY GOOD', 2, 1500, false, 'center', 18)}
+          ${cellXml('5 =   EXCELLENT', 1, 1100, false, 'center', 18)}
+        </w:tr>
+        <w:tr>
+          ${cellXml('S.No', 1, 700, true, 'center', 18)}
+          ${cellXml('Training Content / Check Point', 6, 7100, true, 'left', 18)}
+          ${cellXml('Score', 2, 1500, true, 'center', 18)}
+          ${cellXml('WI Check', 1, 1100, true, 'center', 18)}
         </w:tr>
         ${cpRows}
         <w:tr>
-          ${cellXml('TOTAL SCORE', 6760, true, 'right', 'F1F5F9', '0F172A', 20)}
-          ${cellXml(`${totalScore} / ${maxScore} = ${pct}%`, 1600, true, 'center', isQual ? 'DCFCE7' : 'FEE2E2', isQual ? '166534' : '991B1B', 20)}
-          ${cellXml(isQual ? 'QUALIFIED' : 'NEEDS REFOCUS', 1000, true, 'center', isQual ? 'DCFCE7' : 'FEE2E2', isQual ? '166534' : '991B1B', 18)}
+          ${cellXml('Total Score', 7, 7800, false, 'left', 18)}
+          ${cellXml(`${totalScore}/${maxScore} = ${pct}%`, 2, 1500, true, 'center', 18)}
+          ${cellXml('', 1, 1100, false, 'center', 18)}
+        </w:tr>
+        <w:tr>
+          ${cellXml('Improvement / Training requirement :', 5, 5500, false, 'left', 18, 'top')}
+          ${cellXml(ojtData.comments || '', 5, 4900, false, 'left', 18, 'top')}
+        </w:tr>
+        <w:tr>
+          ${cellXml('Evaluation By (Name & Sign with date)', 10, 10400, false, 'center', 18)}
+        </w:tr>
+        <w:tr>
+          ${cellXml('Safety', 2, 2000, true, 'center', 19)}
+          ${cellXml('Quality', 6, 6700, true, 'center', 19)}
+          ${cellXml('CI', 2, 1700, true, 'center', 19)}
+        </w:tr>
+        <w:tr>
+          ${cellXml('Section Representative', 2, 2000, false, 'center', 17)}
+          ${cellXml('Section Representative', 6, 6700, false, 'center', 17)}
+          ${cellXml('Representative', 2, 1700, false, 'center', 17)}
+        </w:tr>
+        <w:tr>
+          ${cellXml((ojtData.safetyRep || '') + (ojtData.safetyDate ? ' (' + ojtData.safetyDate + ')' : ''), 2, 2000, false, 'center', 17)}
+          ${cellXml((ojtData.qualityRep || '') + (ojtData.qualityDate ? ' (' + ojtData.qualityDate + ')' : ''), 6, 6700, false, 'center', 17)}
+          ${cellXml((ojtData.ciRep || '') + (ojtData.ciDate ? ' (' + ojtData.ciDate + ')' : ''), 2, 1700, false, 'center', 17)}
+        </w:tr>
+        <w:tr>
+          ${cellXml('Final Comment by:', 10, 10400, true, 'center', 18)}
+        </w:tr>
+        <w:tr>
+          ${cellXml('Safety Section Head:\nSign & Name with Date', 3, 3300, false, 'left', 17)}
+          ${cellXml(ojtData.safetyHeadSign || '', 7, 7100, false, 'left', 17)}
+        </w:tr>
+        <w:tr>
+          ${cellXml('Quality Section Head:\nSign & Name with Date', 3, 3300, false, 'left', 17)}
+          ${cellXml(ojtData.qualityHeadSign || '', 7, 7100, false, 'left', 17)}
+        </w:tr>
+        <w:tr>
+          ${cellXml('CI Head:\nSign & Name with Date', 3, 3300, false, 'left', 17)}
+          ${cellXml(ojtData.ciHeadSign || '', 7, 7100, false, 'left', 17)}
+        </w:tr>
+        <w:tr>
+          ${cellXml('Qualification Status:\nTick on status & Strike through other', 3, 3300, false, 'left', 17)}
+          ${cellXml(isQual ? '[ ✔ ] Qualified' : '[   ] Qualified', 2, 2200, true, 'center', 18)}
+          ${cellXml(!isQual ? '[ ✔ ] Not Qualified' : '[   ] Not Qualified', 1, 900, true, 'center', 18)}
+          ${cellXml('Date of Reassessment: ' + (ojtData.reassessmentDate || ''), 4, 4000, false, 'left', 17)}
+        </w:tr>
+        <w:tr>
+          ${cellXml('Final Recommendation & Approval:\nQUALITY - Head', 3, 3300, true, 'left', 18)}
+          ${cellXml(isQual ? 'Approved (Qualified)' : 'Not Qualified / Reassessment Required', 7, 7100, true, 'left', 18)}
+        </w:tr>
+        <w:tr>
+          ${cellXml(tmpl.formatNo, 10, 10400, false, 'center', 17)}
         </w:tr>
       </w:tbl>`;
 
-    const evalTable = `
-      <w:tbl>
-        <w:tblPr>
-          <w:tblW w:w="9360" w:type="dxa"/>
-          <w:jc w:val="center"/>
-          ${tblBorders}
-        </w:tblPr>
-        <w:tblGrid>
-          <w:gridCol w:w="1872"/>
-          <w:gridCol w:w="1872"/>
-          <w:gridCol w:w="1872"/>
-          <w:gridCol w:w="1872"/>
-          <w:gridCol w:w="1872"/>
-        </w:tblGrid>
-        <w:tr>
-          ${cellXml('Safety (Section Rep)', 1872, true, 'center', 'F1F5F9', '005B9E')}
-          ${cellXml('Quality (Section Rep)', 1872, true, 'center', 'F1F5F9', '005B9E')}
-          ${cellXml('CI (Representative)', 1872, true, 'center', 'F1F5F9', '005B9E')}
-          ${cellXml('Technical (Representative)', 1872, true, 'center', 'F1F5F9', '005B9E')}
-          ${cellXml('HR (Representative)', 1872, true, 'center', 'F1F5F9', '005B9E')}
-        </w:tr>
-        <w:tr>
-          ${cellXml((ojtData.safetyRep || '-') + (ojtData.safetyDate ? `\n(${ojtData.safetyDate})` : ''), 1872, false, 'center')}
-          ${cellXml((ojtData.qualityRep || '-') + (ojtData.qualityDate ? `\n(${ojtData.qualityDate})` : ''), 1872, false, 'center')}
-          ${cellXml((ojtData.ciRep || '-') + (ojtData.ciDate ? `\n(${ojtData.ciDate})` : ''), 1872, false, 'center')}
-          ${cellXml((ojtData.techRep || '-') + (ojtData.techDate ? `\n(${ojtData.techDate})` : ''), 1872, false, 'center')}
-          ${cellXml((ojtData.hrRep || '-') + (ojtData.hrDate ? `\n(${ojtData.hrDate})` : ''), 1872, false, 'center')}
-        </w:tr>
-      </w:tbl>`;
-
-    const headTable = `
-      <w:tbl>
-        <w:tblPr>
-          <w:tblW w:w="9360" w:type="dxa"/>
-          <w:jc w:val="center"/>
-          ${tblBorders}
-        </w:tblPr>
-        <w:tblGrid>
-          <w:gridCol w:w="3120"/>
-          <w:gridCol w:w="3120"/>
-          <w:gridCol w:w="3120"/>
-        </w:tblGrid>
-        <w:tr>
-          ${cellXml('Safety Section Head', 3120, true, 'center', 'F1F5F9', '334155')}
-          ${cellXml('Quality Section Head', 3120, true, 'center', 'F1F5F9', '334155')}
-          ${cellXml('CI Head', 3120, true, 'center', 'F1F5F9', '334155')}
-        </w:tr>
-        <w:tr>
-          ${cellXml(ojtData.safetyHeadSign || 'Sign & Name with Date', 3120, false, 'center')}
-          ${cellXml(ojtData.qualityHeadSign || 'Sign & Name with Date', 3120, false, 'center')}
-          ${cellXml(ojtData.ciHeadSign || 'Sign & Name with Date', 3120, false, 'center')}
-        </w:tr>
-      </w:tbl>`;
-
-    const pageBreak = isStandalone ? '' : '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
-
-    return `
-      ${pageBreak}
-      <w:p>
-        <w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="40"/></w:pPr>
-        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="28"/><w:color w:val="0F172A"/></w:rPr><w:t>ATC TIRES PRIVATE LIMITED</w:t></w:r>
-      </w:p>
-      <w:p>
-        <w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="40"/></w:pPr>
-        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="24"/><w:color w:val="005B9E"/></w:rPr><w:t>${escapeXml(tmpl.title)}</w:t></w:r>
-      </w:p>
-      <w:p>
-        <w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="160"/></w:pPr>
-        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="18"/><w:color w:val="64748B"/></w:rPr><w:t>${escapeXml(tmpl.formatNo)}</w:t></w:r>
-      </w:p>
-
-      ${empTable}
-
-      <w:p>
-        <w:pPr><w:jc w:val="center"/><w:spacing w:before="120" w:after="120"/></w:pPr>
-        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="17"/><w:color w:val="0F172A"/></w:rPr><w:t>RANK SCALE:   </w:t></w:r>
-        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="17"/><w:color w:val="DC2626"/></w:rPr><w:t>1 = POOR   |   </w:t></w:r>
-        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="17"/><w:color w:val="EA580C"/></w:rPr><w:t>2 = FAIR   |   </w:t></w:r>
-        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="17"/><w:color w:val="D97706"/></w:rPr><w:t>3 = GOOD   |   </w:t></w:r>
-        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="17"/><w:color w:val="2563EB"/></w:rPr><w:t>4 = VERY GOOD   |   </w:t></w:r>
-        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="17"/><w:color w:val="16A34A"/></w:rPr><w:t>5 = EXCELLENT</w:t></w:r>
-      </w:p>
-
-      ${checkpointsTable}
-
-      <w:p>
-        <w:pPr><w:spacing w:before="160" w:after="40"/></w:pPr>
-        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="18"/><w:color w:val="0F172A"/></w:rPr><w:t>IMPROVEMENT / TRAINING REQUIREMENT:</w:t></w:r>
-      </w:p>
-      <w:p>
-        <w:pPr><w:spacing w:before="0" w:after="160"/></w:pPr>
-        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="18"/><w:color w:val="334155"/></w:rPr><w:t>${escapeXml(ojtData.comments || 'No specific improvement requirements observed. Standard procedures maintained.')}</w:t></w:r>
-      </w:p>
-
-      <w:p>
-        <w:pPr><w:spacing w:before="80" w:after="40"/></w:pPr>
-        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="18"/><w:color w:val="005B9E"/></w:rPr><w:t>EVALUATION BY (NAME &amp; SIGN WITH DATE):</w:t></w:r>
-      </w:p>
-      ${evalTable}
-
-      <w:p>
-        <w:pPr><w:spacing w:before="120" w:after="40"/></w:pPr>
-        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="18"/><w:color w:val="334155"/></w:rPr><w:t>FINAL COMMENT BY SECTION HEADS:</w:t></w:r>
-      </w:p>
-      ${headTable}
-
-      <w:p>
-        <w:pPr><w:spacing w:before="120" w:after="40"/></w:pPr>
-        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="18"/><w:color w:val="0F172A"/></w:rPr><w:t>FINAL RECOMMENDATION &amp; APPROVAL:   </w:t></w:r>
-        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="18"/><w:color w:val="${isQual ? '166534' : 'DC2626'}"/></w:rPr><w:t>${isQual ? '[✔] QUALIFIED' : '[✔] NOT QUALIFIED (RETEST REQUIRED)'}</w:t></w:r>
-      </w:p>
-      <w:p>
-        <w:pPr><w:spacing w:before="40" w:after="80"/></w:pPr>
-        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="18"/><w:color w:val="475569"/></w:rPr><w:t>QUALITY - HEAD SIGN-OFF:   Approved &amp; Documented</w:t></w:r>
-      </w:p>
-    `;
+    return `${pageBreak}${ojtTable}`;
   }
 
   async function generateStandaloneOjtDocx(emp, tmpl, scores, wiChecks, ojtData, jszipInstance) {
