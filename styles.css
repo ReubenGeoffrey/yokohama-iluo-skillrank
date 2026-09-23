@@ -2055,4 +2055,96 @@ body {
   background-color: #F8FAFC !important;
 }
 
+/* ---------------------------------------------------------------------
+ * OFFICIAL OJT FORM STYLES (Matching D:\OJT 9 Formats)
+ * ------------------------------------------------------------------ */
+.ojt-score-group {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  justify-content: center;
+}
 
+.ojt-score-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1.5px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #334155;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.ojt-score-btn:hover {
+  border-color: #94A3B8;
+  background: #F1F5F9;
+  transform: scale(1.08);
+}
+
+.ojt-score-btn.score-1.active {
+  background: #EF4444;
+  border-color: #DC2626;
+  color: #FFFFFF;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25);
+}
+
+.ojt-score-btn.score-2.active {
+  background: #F97316;
+  border-color: #EA580C;
+  color: #FFFFFF;
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.25);
+}
+
+.ojt-score-btn.score-3.active {
+  background: #F59E0B;
+  border-color: #D97706;
+  color: #FFFFFF;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
+}
+
+.ojt-score-btn.score-4.active {
+  background: #3B82F6;
+  border-color: #2563EB;
+  color: #FFFFFF;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+}
+
+.ojt-score-btn.score-5.active {
+  background: #10B981;
+  border-color: #059669;
+  color: #FFFFFF;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+}
+
+.ojt-wicheck-btn {
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border-radius: 6px;
+  border: 1.5px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #64748B;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.ojt-wicheck-btn:hover {
+  border-color: #10B981;
+  color: #059669;
+}
+
+.ojt-wicheck-btn.active {
+  background: #ECFDF5;
+  border-color: #10B981;
+  color: #047857;
+  font-weight: 800;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}

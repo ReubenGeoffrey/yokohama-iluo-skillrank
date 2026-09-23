@@ -4558,163 +4558,22 @@ function exportTrainingPlanExcel() {
 }
 
 // ---------------------------------------------------------------------
-// ON-THE-JOB TRAINING EVALUATION (OJT) ENGINE (D:\QA 7 Formats)
+// ON-THE-JOB TRAINING EVALUATION (OJT) ENGINE (Official D:\OJT 9 Formats)
 // ---------------------------------------------------------------------
 
-const OJT_SECTION_TEMPLATES = {
-  'rro_alt': {
-    id: 'rro_alt',
-    code: '83D',
-    title: 'TN PLANT -    INDIVIDUAL ON THE JOB TRAINING EVALUATION  –  RRO & ALT',
-    sectionName: 'Final Finish RRO & ALT QA',
-    formatNo: 'Format No: ATC/T/FOR/HR/83D',
-    fileName: '83D. ON THE JOB TRAINING EVALUATION -  RRO & ALT Operator.xlsx',
-    checkpoints: [
-      { sno: 1, text: 'Plant Safety Awareness (BBs, HSEE, PPE, LOTO, Electrical safety, etc.,)' },
-      { sno: 2, text: 'Basic 5S on shop floor.' },
-      { sno: 3, text: 'Hands-on knowledge of size, engraving description, QR sticker knowledge' },
-      { sno: 4, text: 'EOT operating skill during rim change.' },
-      { sno: 5, text: 'Hands-on Skills on RRO, RRM and ALT operation – Master tire verification, OD verification, Scanning, Poka Yoke and standards' },
-      { sno: 6, text: 'Knowledge on hold tire handling procedure, reverification, disposal.' },
-      { sno: 7, text: 'Knowledge of FIFO & Clearing of old tires on time.' },
-      { sno: 8, text: 'TEI ( Knowledge of QCC, OPL, Kaizen, Suggestion etc.,)' }
-    ],
-    maxScore: 40
-  },
-  'final_finish': {
-    id: 'final_finish',
-    code: '84D',
-    title: 'TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION – FINAL FINISH REPAIR ASSOCIATE',
-    sectionName: 'Final Finish QA',
-    formatNo: 'Format No: ATC/T/FOR/HR/84D',
-    fileName: '84D. ON THE JOB TRAINING EVALUATION -  Final Finish Repair Associate.xlsx',
-    checkpoints: [
-      { sno: 1, text: 'Plant Safety Awareness (BBs,  PPE, naphtha handling etc.,)' },
-      { sno: 2, text: 'Basic 5S on shop floor.' },
-      { sno: 3, text: 'AMR basic operation and tire loading and unloading' },
-      { sno: 4, text: 'Knowledge & Adherence of Flash cutting & Vent trimming Work Instruction and standards.' },
-      { sno: 5, text: 'Knowledge of type of paint and respective tire usage' },
-      { sno: 6, text: 'Segregation of crayon marked tires – LTC, Sample, Pilot, Repair and Hold tires' },
-      { sno: 7, text: 'TEI ( Knowledge of QCC, OPL, Kaizen, Suggestion etc.,)' }
-    ],
-    maxScore: 35
-  },
-  'preparatory': {
-    id: 'preparatory',
-    code: '85D',
-    title: 'TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION - PREPARATORY QA',
-    sectionName: 'Preparatory QA',
-    formatNo: 'Format No: ATC/T/FOR/HR/85D',
-    fileName: '85D. ON THE JOB TRAINING EVALUATION - Preparatory QA.xlsx',
-    checkpoints: [
-      { sno: 1, text: 'Safety Awareness (BBs, PPE, Tire handling, Electrical safety,)' },
-      { sno: 2, text: 'Machine cleanliness and material handling' },
-      { sno: 3, text: 'Verification on – NSNL /MES/Scanning and recipe /Guide light / Pressure gauge/ material Guider centering/ TCU temperature /Poka yoke' },
-      { sno: 4, text: 'Measurement of Ply angle and skiving angle' },
-      { sno: 5, text: 'Material measurement and knowledge on measuring tool' },
-      { sno: 6, text: 'Material direction (Ply/breaker/belt) or material positioning of band building' },
-      { sno: 7, text: 'Understand and read for IPS & MSS requirements' },
-      { sno: 8, text: 'Verification of material aging and non-conformance handling with holding tags' },
-      { sno: 9, text: 'Verification of Kanban system (FIFO)' },
-      { sno: 10, text: 'TEI ( Knowledge of QCC, 5S, OPL, Kaizen, Suggestion etc.,)' }
-    ],
-    maxScore: 50
-  },
-  'solid_tire': {
-    id: 'solid_tire',
-    code: '86D',
-    title: 'TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION - Solid Tire QA',
-    sectionName: 'Solid Tire QA',
-    formatNo: 'Format No: ATC/T/FOR/HR/86D',
-    fileName: '86D. ON THE JOB TRAINING EVALUATION - Solid Tire QA.xlsx',
-    checkpoints: [
-      { sno: 1, text: 'Safety Awareness (BBs, PPE, Tire handling, Electrical safety & manipulator )' },
-      { sno: 2, text: 'Verification of Press parameters steam temperature, Hydraulic Pressure gauges, Tower lamp working condition , bumping count, measurement (Equipment calibrations)' },
-      { sno: 3, text: 'Verification on – NSNL /MES/Scanning and recipe' },
-      { sno: 4, text: 'Verification of tire engraving covered as per route card' },
-      { sno: 5, text: 'Cure cycle time verification as per specification' },
-      { sno: 6, text: 'TBM-Verification of GT condition (Green tire ageing, off centre wind up, and / GT storage)' },
-      { sno: 7, text: 'TBM-Verification for Drum pressure and conveyor pressure as well as green tires weight.' },
-      { sno: 8, text: 'TBM-Verification on – Guide light / Guider centring/ TCU temperature /Pokayoke' },
-      { sno: 9, text: 'Material measurement and knowledge on measuring tool' },
-      { sno: 10, text: 'NC material handling' }
-    ],
-    maxScore: 50
-  },
-  'tire_building': {
-    id: 'tire_building',
-    code: '87D',
-    title: 'TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION -TBM QA',
-    sectionName: 'Tire Building QA',
-    formatNo: 'Format No: ATC/T/FOR/HR/87D',
-    fileName: '87D. ON THE JOB TRAINING EVALUATION - TBM QA.xlsx',
-    checkpoints: [
-      { sno: 1, text: 'Safety Awareness (BBs, PPE, Tire handling, Electrical safety,)' },
-      { sno: 2, text: 'Machine cleanliness and material handling' },
-      { sno: 3, text: 'Verification for BPR parameter & centering.' },
-      { sno: 4, text: 'Verification of Drum parameter with filling of the drum change memo and FTC sheet.' },
-      { sno: 5, text: 'Bottom / Back stitcher tool gap and play verification.' },
-      { sno: 6, text: 'Verification on – NSNL /MES/SKU sticker and recipe /Guide light / Pressure gauge/ material Guider centering/ TCU temperature /Pokayoke' },
-      { sno: 7, text: 'Material measurement and knowledge on measuring tool' },
-      { sno: 8, text: 'Material direction (Ply/breaker/belt) or material positioning for uncommon size.' },
-      { sno: 9, text: 'CC/ GT defect checking and NC material handling' },
-      { sno: 10, text: 'TEI ( Knowledge of QCC, 5S, OPL, Kaizen, Suggestion etc.,)' }
-    ],
-    maxScore: 50
-  },
-  'tire_curing': {
-    id: 'tire_curing',
-    code: '88D',
-    title: 'TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION  - TIRE CURING QA',
-    sectionName: 'Tire Curing QA',
-    formatNo: 'Format No: ATC/T/FOR/HR/88D',
-    fileName: '88D. ON THE JOB TRAINING EVALUATION - Tire Curing QA.xlsx',
-    checkpoints: [
-      { sno: 1, text: 'Safety Awareness (BBs, PPE, Tire handling, Electrical safety & VCL )' },
-      { sno: 2, text: 'Verification of Press parameters dome temperature, Pressure gauges, Tower lamp working condition , Bladder and sleeve height measurement (Equipment calibrations)' },
-      { sno: 3, text: 'Verification on – NSNL /MES/Scanning and recipe' },
-      { sno: 4, text: 'Verification of tire engraving covered as per route card' },
-      { sno: 5, text: 'Cure cycle time verification as per specification' },
-      { sno: 6, text: 'Verification of GT condition (Paint aging and application (Inner & outer)/ GT storage)' },
-      { sno: 7, text: 'GT loading direction against route card' },
-      { sno: 8, text: 'PCI machine pressure & flange width measurement (OD setting if applicable)' },
-      { sno: 9, text: 'NC material handling' },
-      { sno: 10, text: 'Knowledge of Measuring equipments Vernier caliper, Measuring tape, Steel rule, dial gauge and Lux meter.' }
-    ],
-    maxScore: 50
-  },
-  'warehouse': {
-    id: 'warehouse',
-    code: '89D',
-    title: 'TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION - WAREHOUSE QA',
-    sectionName: 'Warehouse QA',
-    formatNo: 'Format No: ATC/T/FOR/HR/89D',
-    fileName: '89D. ON THE JOB TRAINING EVALUATION -  WAREHOUSE QA.xlsx',
-    checkpoints: [
-      { sno: 1, text: 'Safety Awareness (BBs, PPE, Tire handling, Electrical safety,)' },
-      { sno: 2, text: 'Basic 5S on shop floor.' },
-      { sno: 3, text: 'Precautions for forklift usage during tire loading inside the container.' },
-      { sno: 4, text: 'OK tires and not ok tire identification and disposal.' },
-      { sno: 5, text: 'Confirmation of PDI cleared tires.' },
-      { sno: 6, text: 'Containment action and corrective action for customer complaints/feedbacks.' },
-      { sno: 7, text: 'Aging requirements for outgoing product.' },
-      { sno: 8, text: 'Poke Yoke in warehouse.' },
-      { sno: 9, text: 'Purpose of bead vent/flash trimming on tubeless tires before dispatch.' },
-      { sno: 10, text: 'TEI ( Knowledge of QCC, 5S, OPL, Kaizen, Suggestion etc.,)' }
-    ],
-    maxScore: 50
-  }
-};
-
 function getOjtTemplateForSection(secName) {
-  const s = normalizeSectionName(secName);
-  if (s.includes('rro') || s.includes('alt')) return OJT_SECTION_TEMPLATES['rro_alt'];
-  if (s.includes('preparatory')) return OJT_SECTION_TEMPLATES['preparatory'];
-  if (s.includes('solid')) return OJT_SECTION_TEMPLATES['solid_tire'];
-  if (s.includes('building') || s.includes('tbm')) return OJT_SECTION_TEMPLATES['tire_building'];
-  if (s.includes('curing')) return OJT_SECTION_TEMPLATES['tire_curing'];
-  if (s.includes('warehouse') || s.includes('data entry') || s.includes('fid')) return OJT_SECTION_TEMPLATES['warehouse'];
-  return OJT_SECTION_TEMPLATES['final_finish'];
+  if (typeof OJT_OFFICIAL_TEMPLATES === 'undefined') return null;
+  const s = normalizeSectionName(secName || '');
+  if (s.includes('solid')) return OJT_OFFICIAL_TEMPLATES['86D'];
+  if (s.includes('rro') || s.includes('alt')) return OJT_OFFICIAL_TEMPLATES['83D'];
+  if (s.includes('preparatory')) return OJT_OFFICIAL_TEMPLATES['85D'];
+  if (s.includes('building') || s.includes('tbm')) return OJT_OFFICIAL_TEMPLATES['87D'];
+  if (s.includes('curing')) return OJT_OFFICIAL_TEMPLATES['88D'];
+  if (s.includes('warehouse') || s.includes('data entry')) return OJT_OFFICIAL_TEMPLATES['89D'];
+  if (s.includes('fid')) return OJT_OFFICIAL_TEMPLATES['90D'];
+  if (s.includes('buffer') || s.includes('compound') || s.includes('replate')) return OJT_OFFICIAL_TEMPLATES['90G'];
+  // Default to Final Finish Repair Associate 84D
+  return OJT_OFFICIAL_TEMPLATES['84D'] || Object.values(OJT_OFFICIAL_TEMPLATES)[0];
 }
 
 function getStoredOjtRecords() {
@@ -4742,6 +4601,32 @@ function saveOjtRecord(empNo, data) {
 let activeOjtEmployee = null;
 let activeOjtTemplate = null;
 let activeOjtScores = {};
+let activeOjtWiChecks = {};
+
+function populateOjtTemplateSwitcher() {
+  const switcher = document.getElementById('ojtTemplateSwitcher');
+  if (!switcher || typeof OJT_OFFICIAL_TEMPLATES === 'undefined') return;
+  const currentVal = switcher.value;
+  switcher.innerHTML = '<option value="">-- Choose Official OJT Template --</option>';
+  
+  const templateOrder = ['86D', '84D', '83D', '89D', '90D', '85D', '87D', '88D', '90G'];
+  templateOrder.forEach(id => {
+    const tmpl = OJT_OFFICIAL_TEMPLATES[id];
+    if (tmpl) {
+      const opt = document.createElement('option');
+      opt.value = tmpl.id;
+      opt.textContent = `${tmpl.id} - ${tmpl.title.replace('TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION', '').replace('TN PLANT -', '').trim()} (${tmpl.checkpointCount} Checkpoints)`;
+      switcher.appendChild(opt);
+    }
+  });
+  if (currentVal && OJT_OFFICIAL_TEMPLATES[currentVal]) switcher.value = currentVal;
+}
+
+function switchOjtTemplate(templateId) {
+  if (typeof OJT_OFFICIAL_TEMPLATES === 'undefined' || !OJT_OFFICIAL_TEMPLATES[templateId]) return;
+  activeOjtTemplate = OJT_OFFICIAL_TEMPLATES[templateId];
+  renderOjtForm();
+}
 
 function populateOjtEmployeeSwitcher() {
   const switcher = document.getElementById('ojtEmployeeSwitcher');
@@ -4766,6 +4651,7 @@ function populateOjtEmployeeSwitcher() {
 
 function openOjtModalQuick() {
   populateOjtEmployeeSwitcher();
+  populateOjtTemplateSwitcher();
 
   const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
   let session = null;
@@ -4810,7 +4696,7 @@ function openOjtModalForCurrentEmployee() {
   openOjtModalQuick();
 }
 
-function openOjtModalForEmployee(empNo) {
+function openOjtModalForEmployee(empNo, optTemplateId) {
   const emp = EMPLOYEES.find(e => String(e.empNo).trim() === String(empNo).trim());
   if (!emp) {
     showToast(`Employee ${empNo} not found in directory.`);
@@ -4818,29 +4704,101 @@ function openOjtModalForEmployee(empNo) {
   }
 
   activeOjtEmployee = emp;
-  activeOjtTemplate = getOjtTemplateForSection(emp.section);
 
-  const switcher = document.getElementById('ojtEmployeeSwitcher');
-  if (switcher) {
-    if (switcher.options.length <= 1) {
-      populateOjtEmployeeSwitcher();
-    }
-    switcher.value = emp.empNo;
+  if (optTemplateId && typeof OJT_OFFICIAL_TEMPLATES !== 'undefined' && OJT_OFFICIAL_TEMPLATES[optTemplateId]) {
+    activeOjtTemplate = OJT_OFFICIAL_TEMPLATES[optTemplateId];
+  } else {
+    activeOjtTemplate = getOjtTemplateForSection(emp.section);
   }
+
+  populateOjtEmployeeSwitcher();
+  populateOjtTemplateSwitcher();
+
+  const empSwitcher = document.getElementById('ojtEmployeeSwitcher');
+  if (empSwitcher) empSwitcher.value = emp.empNo;
+
+  const tmplSwitcher = document.getElementById('ojtTemplateSwitcher');
+  if (tmplSwitcher && activeOjtTemplate) tmplSwitcher.value = activeOjtTemplate.id;
+
+  // Load existing saved evaluation if present
+  const allOjt = getStoredOjtRecords();
+  const existing = allOjt[empNo] || {};
+
+  activeOjtScores = existing.scores ? { ...existing.scores } : {};
+  activeOjtWiChecks = existing.wiChecks ? { ...existing.wiChecks } : {};
+
+  const commEl = document.getElementById('ojtImprovementComments');
+  if (commEl) commEl.value = existing.comments || '';
+
+  const safeEl = document.getElementById('ojtSafetyRep');
+  if (safeEl) safeEl.value = existing.safetyRep || '';
+  const safeDateEl = document.getElementById('ojtSafetyDate');
+  if (safeDateEl) safeDateEl.value = existing.safetyDate || new Date().toISOString().split('T')[0];
+
+  const qualEl = document.getElementById('ojtQualityRep');
+  if (qualEl) qualEl.value = existing.qualityRep || '';
+  const qualDateEl = document.getElementById('ojtQualityDate');
+  if (qualDateEl) qualDateEl.value = existing.qualityDate || new Date().toISOString().split('T')[0];
+
+  const ciEl = document.getElementById('ojtCiRep');
+  if (ciEl) ciEl.value = existing.ciRep || '';
+  const ciDateEl = document.getElementById('ojtCiDate');
+  if (ciDateEl) ciDateEl.value = existing.ciDate || new Date().toISOString().split('T')[0];
+
+  const techEl = document.getElementById('ojtTechRep');
+  if (techEl) techEl.value = existing.techRep || '';
+  const techDateEl = document.getElementById('ojtTechDate');
+  if (techDateEl) techDateEl.value = existing.techDate || new Date().toISOString().split('T')[0];
+
+  const hrEl = document.getElementById('ojtHrRep');
+  if (hrEl) hrEl.value = existing.hrRep || '';
+  const hrDateEl = document.getElementById('ojtHrDate');
+  if (hrDateEl) hrDateEl.value = existing.hrDate || new Date().toISOString().split('T')[0];
+
+  const safeHeadEl = document.getElementById('ojtSafetyHeadSign');
+  if (safeHeadEl) safeHeadEl.value = existing.safetyHeadSign || '';
+
+  const qualHeadEl = document.getElementById('ojtQualityHeadSign');
+  if (qualHeadEl) qualHeadEl.value = existing.qualityHeadSign || '';
+
+  const ciHeadEl = document.getElementById('ojtCiHeadSign');
+  if (ciHeadEl) ciHeadEl.value = existing.ciHeadSign || '';
+
+  const reassessEl = document.getElementById('ojtReassessmentDate');
+  if (reassessEl) reassessEl.value = existing.reassessmentDate || '';
+
+  renderOjtForm();
+
+  const modal = document.getElementById('modalOjtEvaluation');
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+    modal.scrollTop = 0;
+  }
+}
+
+function renderOjtForm() {
+  if (!activeOjtEmployee || !activeOjtTemplate) return;
+
+  const emp = activeOjtEmployee;
+  const tmpl = activeOjtTemplate;
 
   const targetMap = { 'I': 'L', 'L': 'U', 'U': 'O', 'O': 'O' };
   const currLvl = emp.currentLevel || 'I';
   const targetLvl = targetMap[currLvl] || 'L';
 
   const records = getStoredRecords();
-  const rec = records[empNo] || {};
+  const rec = records[emp.empNo] || {};
   const assessmentDate = emp.assessmentDate || rec.attemptDate || new Date().toLocaleDateString('en-GB');
 
   const titleEl = document.getElementById('ojtModalHeaderTitle');
-  if (titleEl) titleEl.innerText = activeOjtTemplate.title;
+  if (titleEl) titleEl.innerText = tmpl.title;
 
   const fmtEl = document.getElementById('ojtModalFormatNo');
-  if (fmtEl) fmtEl.innerText = activeOjtTemplate.formatNo;
+  if (fmtEl) fmtEl.innerText = tmpl.formatNo;
+
+  const fmtFooterEl = document.getElementById('ojtModalFooterFormatNo');
+  if (fmtFooterEl) fmtFooterEl.innerText = tmpl.formatNo;
 
   const nameEl = document.getElementById('ojtEmpName');
   if (nameEl) nameEl.innerText = emp.name;
@@ -4855,47 +4813,18 @@ function openOjtModalForEmployee(empNo) {
   if (dojEl) dojEl.innerText = emp.doj || '-';
 
   const lvlEl = document.getElementById('ojtEmpSkillLevel');
-  if (lvlEl) lvlEl.innerText = `( ${currLvl} ) TO ( ${targetLvl} )`;
+  if (lvlEl) lvlEl.innerText = `( ${currLvl} )   TO   ( ${targetLvl} )`;
 
   const dateEl = document.getElementById('ojtAssessmentDate');
   if (dateEl) dateEl.innerText = assessmentDate;
 
-  // Load existing saved evaluation if present
-  const allOjt = getStoredOjtRecords();
-  const existing = allOjt[empNo] || {};
-
-  activeOjtScores = existing.scores ? { ...existing.scores } : {};
-
-  const commEl = document.getElementById('ojtImprovementComments');
-  if (commEl) commEl.value = existing.comments || '';
-
-  const safeEl = document.getElementById('ojtSafetyRep');
-  if (safeEl) safeEl.value = existing.safetyRep || '';
-
-  const qualEl = document.getElementById('ojtQualityRep');
-  if (qualEl) qualEl.value = existing.qualityRep || '';
-
-  const ciEl = document.getElementById('ojtCiRep');
-  if (ciEl) ciEl.value = existing.ciRep || '';
-
-  const techEl = document.getElementById('ojtTechRep');
-  if (techEl) techEl.value = existing.techRep || '';
-
-  const hrEl = document.getElementById('ojtHrRep');
-  if (hrEl) hrEl.value = existing.hrRep || '';
-
-  const ojtSession = sessionStorage.getItem('iluo_ojt_session');
-  if (ojtSession === 'Safety' && safeEl && !safeEl.value) safeEl.placeholder = 'Safety Evaluator (Active)';
-  if (ojtSession === 'CI & TPM' && ciEl && !ciEl.value) ciEl.placeholder = 'CI & TPM Evaluator (Active)';
-  if (ojtSession === 'Quality' && qualEl && !qualEl.value) qualEl.placeholder = 'Quality Evaluator (Active)';
-  if (ojtSession === 'Technical' && techEl && !techEl.value) techEl.placeholder = 'Technical Evaluator (Active)';
-  if (ojtSession === 'HR' && hrEl && !hrEl.value) hrEl.placeholder = 'HR Evaluator (Active)';
-
   // Render Checkpoint Rows
   const tbody = document.getElementById('ojtCheckpointsBody');
   if (tbody) {
-    tbody.innerHTML = activeOjtTemplate.checkpoints.map((cp, idx) => {
+    tbody.innerHTML = tmpl.checkpoints.map((cp, idx) => {
       const currentScore = activeOjtScores[cp.sno] || 0;
+      const isWiChecked = !!activeOjtWiChecks[cp.sno];
+
       const buttonsHtml = [1, 2, 3, 4, 5].map(val => {
         const isActive = currentScore === val;
         return `
@@ -4909,13 +4838,21 @@ function openOjtModalForEmployee(empNo) {
       }).join('');
 
       return `
-        <tr style="border-bottom: 1px solid #E2E8F0; background: ${idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
-          <td style="padding: 10px 12px; text-align: center; font-weight: 700; color: #64748B;">${cp.sno}</td>
-          <td style="padding: 10px 14px; color: #1E293B; font-weight: 600;">${cp.text}</td>
-          <td style="padding: 10px 14px; text-align: center;">
+        <tr style="border-bottom: 1px solid #CBD5E1; background: ${idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+          <td style="padding: 10px 12px; text-align: center; font-weight: 700; color: #475569; border-right: 1px solid #CBD5E1;">${cp.sno}</td>
+          <td style="padding: 10px 16px; color: #1E293B; font-weight: 600; line-height: 1.4; border-right: 1px solid #CBD5E1;">${cp.text}</td>
+          <td style="padding: 10px 12px; text-align: center; border-right: 1px solid #CBD5E1;">
             <div class="ojt-score-group">
               ${buttonsHtml}
             </div>
+          </td>
+          <td style="padding: 10px 12px; text-align: center;">
+            <button type="button" 
+                    id="ojtWiCheckBtn_${cp.sno}"
+                    class="ojt-wicheck-btn ${isWiChecked ? 'active' : ''}" 
+                    onclick="toggleOjtWiCheck(${cp.sno})">
+              ${isWiChecked ? '✓ OK' : 'Check'}
+            </button>
           </td>
         </tr>
       `;
@@ -4923,13 +4860,6 @@ function openOjtModalForEmployee(empNo) {
   }
 
   updateOjtTotals();
-
-  const modal = document.getElementById('modalOjtEvaluation');
-  if (modal) {
-    modal.style.display = 'flex';
-    modal.classList.add('active');
-    modal.scrollTop = 0;
-  }
 }
 
 function closeOjtModal() {
@@ -4943,9 +4873,8 @@ function closeOjtModal() {
 function setOjtScore(sno, val) {
   activeOjtScores[sno] = val;
 
-  // Update button active state in DOM for this checkpoint row
   const tbody = document.getElementById('ojtCheckpointsBody');
-  if (tbody) {
+  if (tbody && activeOjtTemplate) {
     const rows = tbody.querySelectorAll('tr');
     activeOjtTemplate.checkpoints.forEach((cp, rIdx) => {
       if (cp.sno === sno && rows[rIdx]) {
@@ -4964,10 +4893,28 @@ function setOjtScore(sno, val) {
   updateOjtTotals();
 }
 
+function toggleOjtWiCheck(sno) {
+  activeOjtWiChecks[sno] = !activeOjtWiChecks[sno];
+  const btn = document.getElementById(`ojtWiCheckBtn_${sno}`);
+  if (btn) {
+    if (activeOjtWiChecks[sno]) {
+      btn.classList.add('active');
+      btn.innerText = '✓ OK';
+    } else {
+      btn.classList.remove('active');
+      btn.innerText = 'Check';
+    }
+  }
+}
+
+function onOjtRadioChange(status) {
+  // Handled via user choice
+}
+
 function updateOjtTotals() {
   if (!activeOjtTemplate) return;
 
-  const numCheckpoints = activeOjtTemplate.checkpoints.length;
+  const numCheckpoints = activeOjtTemplate.checkpointCount || activeOjtTemplate.checkpoints.length;
   const maxScore = numCheckpoints * 5;
   let totalScore = 0;
   let scoredCount = 0;
@@ -4980,27 +4927,37 @@ function updateOjtTotals() {
     }
   });
 
-  const isQualified = totalScore >= Math.round(maxScore * 0.7);
+  const pct = Math.round((totalScore / maxScore) * 100);
+  const isQualified = pct >= 70;
 
   const totalDisplay = document.getElementById('ojtTotalScoreDisplay');
   if (totalDisplay) {
-    totalDisplay.innerText = `${totalScore} / ${maxScore} Marks`;
+    totalDisplay.innerText = `${totalScore} / ${maxScore} = ${pct}%`;
   }
 
   const badge = document.getElementById('ojtQualificationBadge');
+  const radioYes = document.getElementById('ojtQualRadioYes');
+  const radioNo = document.getElementById('ojtQualRadioNo');
+
   if (badge) {
     if (scoredCount === 0) {
       badge.style.background = '#FEF3C7';
       badge.style.color = '#D97706';
       badge.innerText = 'PENDING SCORING';
+      if (radioYes) radioYes.checked = false;
+      if (radioNo) radioNo.checked = false;
     } else if (isQualified) {
       badge.style.background = '#DCFCE7';
       badge.style.color = '#166534';
-      badge.innerText = `QUALIFIED (${totalScore} / ${maxScore} Marks)`;
+      badge.innerText = `QUALIFIED (${totalScore} / ${maxScore} = ${pct}%)`;
+      if (radioYes) radioYes.checked = true;
+      if (radioNo) radioNo.checked = false;
     } else {
       badge.style.background = '#FEE2E2';
       badge.style.color = '#B91C1C';
-      badge.innerText = `NOT QUALIFIED (${totalScore} / ${maxScore} Marks)`;
+      badge.innerText = `NOT QUALIFIED (${totalScore} / ${maxScore} = ${pct}%)`;
+      if (radioYes) radioYes.checked = false;
+      if (radioNo) radioNo.checked = true;
     }
   }
 }
@@ -5008,7 +4965,7 @@ function updateOjtTotals() {
 function saveOjtEvaluationForm() {
   if (!activeOjtEmployee || !activeOjtTemplate) return;
 
-  const numCheckpoints = activeOjtTemplate.checkpoints.length;
+  const numCheckpoints = activeOjtTemplate.checkpointCount || activeOjtTemplate.checkpoints.length;
   const maxScore = numCheckpoints * 5;
   let totalScore = 0;
   activeOjtTemplate.checkpoints.forEach(cp => {
@@ -5016,37 +4973,48 @@ function saveOjtEvaluationForm() {
   });
 
   const pct = Math.round((totalScore / maxScore) * 100);
-  const qualificationStatus = pct >= 70 ? 'Qualified' : 'Not Qualified';
+  const radioYes = document.getElementById('ojtQualRadioYes');
+  const qualificationStatus = (radioYes && radioYes.checked) || (pct >= 70) ? 'Qualified' : 'Not Qualified';
 
   const ojtData = {
     empNo: activeOjtEmployee.empNo,
     name: activeOjtEmployee.name,
     section: activeOjtEmployee.section,
-    templateCode: activeOjtTemplate.code,
+    templateId: activeOjtTemplate.id,
+    templateCode: activeOjtTemplate.id,
     formatNo: activeOjtTemplate.formatNo,
+    title: activeOjtTemplate.title,
     scores: { ...activeOjtScores },
+    wiChecks: { ...activeOjtWiChecks },
     totalScore,
     maxScore,
     scorePct: pct,
     qualificationStatus,
+    reassessmentDate: document.getElementById('ojtReassessmentDate') ? document.getElementById('ojtReassessmentDate').value : '',
     comments: document.getElementById('ojtImprovementComments') ? document.getElementById('ojtImprovementComments').value.trim() : '',
     safetyRep: document.getElementById('ojtSafetyRep') ? document.getElementById('ojtSafetyRep').value.trim() : '',
+    safetyDate: document.getElementById('ojtSafetyDate') ? document.getElementById('ojtSafetyDate').value : '',
     qualityRep: document.getElementById('ojtQualityRep') ? document.getElementById('ojtQualityRep').value.trim() : '',
+    qualityDate: document.getElementById('ojtQualityDate') ? document.getElementById('ojtQualityDate').value : '',
     ciRep: document.getElementById('ojtCiRep') ? document.getElementById('ojtCiRep').value.trim() : '',
+    ciDate: document.getElementById('ojtCiDate') ? document.getElementById('ojtCiDate').value : '',
     techRep: document.getElementById('ojtTechRep') ? document.getElementById('ojtTechRep').value.trim() : '',
+    techDate: document.getElementById('ojtTechDate') ? document.getElementById('ojtTechDate').value : '',
     hrRep: document.getElementById('ojtHrRep') ? document.getElementById('ojtHrRep').value.trim() : '',
+    hrDate: document.getElementById('ojtHrDate') ? document.getElementById('ojtHrDate').value : '',
+    safetyHeadSign: document.getElementById('ojtSafetyHeadSign') ? document.getElementById('ojtSafetyHeadSign').value.trim() : '',
+    qualityHeadSign: document.getElementById('ojtQualityHeadSign') ? document.getElementById('ojtQualityHeadSign').value.trim() : '',
+    ciHeadSign: document.getElementById('ojtCiHeadSign') ? document.getElementById('ojtCiHeadSign').value.trim() : '',
     evaluatedAt: new Date().toISOString().split('T')[0]
   };
 
   saveOjtRecord(activeOjtEmployee.empNo, ojtData);
 
-  // If admin table is active, refresh it immediately
   if (document.getElementById('adminTableBody')) {
     const searchInput = document.getElementById('adminSearchInput');
     renderAdminTable(searchInput ? searchInput.value : '');
   }
 
-  // If OJT table is active, refresh it immediately
   if (document.getElementById('ojtTableBody')) {
     renderOjtDashboardTable();
   }
@@ -5065,7 +5033,11 @@ function downloadCurrentOjtExcel() {
   const currLvl = emp.currentLevel || 'I';
   const targetLvl = targetMap[currLvl] || 'L';
 
-  const numCheckpoints = tmpl.checkpoints.length;
+  const records = getStoredRecords();
+  const rec = records[emp.empNo] || {};
+  const assessmentDate = emp.assessmentDate || rec.attemptDate || new Date().toLocaleDateString('en-GB');
+
+  const numCheckpoints = tmpl.checkpointCount || tmpl.checkpoints.length;
   const maxScore = numCheckpoints * 5;
   let totalScore = 0;
   tmpl.checkpoints.forEach(cp => {
@@ -5075,58 +5047,76 @@ function downloadCurrentOjtExcel() {
 
   const comments = document.getElementById('ojtImprovementComments') ? document.getElementById('ojtImprovementComments').value.trim() : '';
   const safetyRep = document.getElementById('ojtSafetyRep') ? document.getElementById('ojtSafetyRep').value.trim() : '';
+  const safetyDate = document.getElementById('ojtSafetyDate') ? document.getElementById('ojtSafetyDate').value : '';
   const qualityRep = document.getElementById('ojtQualityRep') ? document.getElementById('ojtQualityRep').value.trim() : '';
+  const qualityDate = document.getElementById('ojtQualityDate') ? document.getElementById('ojtQualityDate').value : '';
   const ciRep = document.getElementById('ojtCiRep') ? document.getElementById('ojtCiRep').value.trim() : '';
-  const techRep = document.getElementById('ojtTechRep') ? document.getElementById('ojtTechRep').value.trim() : '';
-  const hrRep = document.getElementById('ojtHrRep') ? document.getElementById('ojtHrRep').value.trim() : '';
+  const ciDate = document.getElementById('ojtCiDate') ? document.getElementById('ojtCiDate').value : '';
 
-  const rows = [
-    ["ATC TIRES PRIVATE LIMITED"],
-    [tmpl.title],
-    [],
-    [`Name:  ${emp.name}`, "", "", "", "", `Emp ID:  ${emp.empNo}`, "", `Joining Date:  ${emp.doj || '-'}`],
-    [`Section & Dept:  ${emp.section} / ${emp.dept}`, "", "", "", "", `Skill Level: ( ${currLvl} )   TO   ( ${targetLvl} )`, "", `Assessment Date:  ${new Date().toLocaleDateString('en-GB')}`],
-    ["Rank", "1 =   POOR", "", "", "2 =   FAIR", "3 =   GOOD", "", "4 =   VERY GOOD", "", "5 =   EXCELLENT"],
-    ["S.No", "Training Content / Check Point", "", "", "", "", "", "Score", "", "WI Check"]
-  ];
-
-  tmpl.checkpoints.forEach(cp => {
-    const sc = activeOjtScores[cp.sno] || "";
-    rows.push([cp.sno, cp.text, "", "", "", "", "", sc, "", ""]);
-  });
-
-  rows.push(["Total Score", "", "", "", "", "", "", `${totalScore}/${maxScore} = ${pct}%`, "", ""]);
-  rows.push(["Improvement / Training requirement :", comments, "", "", "", "", "", "", "", ""]);
-  rows.push([]);
-  rows.push(["Evaluation By (Name & Sign with date)"]);
-  rows.push(["Safety", "", "CI & TPM", "", "Quality", "", "Technical", "", "HR"]);
-  rows.push([safetyRep || "Representative", "", ciRep || "Representative", "", qualityRep || "Representative", "", techRep || "Representative", "", hrRep || "Representative"]);
-  rows.push([]);
-  rows.push(["Qualification Status:", "", "", pct >= 70 ? "Qualified" : "Not Qualified", "", "", "Date of Reassessment"]);
-  rows.push([tmpl.formatNo]);
+  const radioYes = document.getElementById('ojtQualRadioYes');
+  const isQual = (radioYes && radioYes.checked) || (pct >= 70);
 
   const cleanName = emp.name.replace(/[^a-zA-Z0-9]/g, '_');
-  const filename = `Yokohama_OJT_${emp.empNo}_${cleanName}`;
+  const filename = `Yokohama_OJT_${tmpl.id}_${emp.empNo}_${cleanName}`;
 
   try {
-    if (typeof XLSX !== 'undefined') {
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-      XLSX.utils.book_append_sheet(wb, ws, `${emp.empNo} - OJT Evaluation`);
+    if (typeof XLSX !== 'undefined' && tmpl.base64) {
+      // 100% BIT-FOR-BIT EXACT TEMPLATE FROM D:\OJT
+      const wb = XLSX.read(tmpl.base64, { type: 'base64', cellStyles: true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+
+      // Populate Employee Details
+      if (tmpl.nameCell) ws[tmpl.nameCell] = { t: 's', v: 'Name: ' + emp.name };
+      if (tmpl.empIdCell) ws[tmpl.empIdCell] = { t: 's', v: 'Emp ID: ' + emp.empNo };
+      if (tmpl.dojCell) ws[tmpl.dojCell] = { t: 's', v: 'Joining Date: ' + (emp.doj || '-') };
+      if (tmpl.sectionDeptCell) ws[tmpl.sectionDeptCell] = { t: 's', v: 'Section & Dept.: ' + emp.section + ' / ' + emp.dept };
+      if (tmpl.skillLevelCell) ws[tmpl.skillLevelCell] = { t: 's', v: 'Skill Level: ( ' + currLvl + ' )   TO   ( ' + targetLvl + ' )' };
+      if (tmpl.assessmentDateCell) ws[tmpl.assessmentDateCell] = { t: 's', v: 'Assessment Date: ' + assessmentDate };
+
+      // Populate Checkpoint Scores and WI Checks
+      tmpl.checkpoints.forEach(cp => {
+        const sc = activeOjtScores[cp.sno];
+        if (sc !== undefined && sc > 0) {
+          ws['H' + cp.row] = { t: 'n', v: sc };
+        }
+        if (activeOjtWiChecks[cp.sno]) {
+          ws['J' + cp.row] = { t: 's', v: '✓' };
+        }
+      });
+
+      // Total Score
+      if (tmpl.totalScoreCell) {
+        ws[tmpl.totalScoreCell] = { t: 's', v: `${totalScore}/${maxScore} = ${pct}%` };
+      }
+
+      // Improvement Comments
+      if (tmpl.improvementCell && comments) {
+        ws[tmpl.improvementCell] = { t: 's', v: comments };
+      }
+
+      // Evaluator Signatures
+      if (tmpl.evalSafetyCell) {
+        ws[tmpl.evalSafetyCell] = { t: 's', v: safetyRep ? (safetyRep + (safetyDate ? ' (' + safetyDate + ')' : '')) : '' };
+      }
+      if (tmpl.evalQualityCell) {
+        ws[tmpl.evalQualityCell] = { t: 's', v: qualityRep ? (qualityRep + (qualityDate ? ' (' + qualityDate + ')' : '')) : '' };
+      }
+      if (tmpl.evalCiCell) {
+        ws[tmpl.evalCiCell] = { t: 's', v: ciRep ? (ciRep + (ciDate ? ' (' + ciDate + ')' : '')) : '' };
+      }
+
+      // Qualification Status
+      if (isQual && tmpl.qualCellQualified) {
+        ws[tmpl.qualCellQualified] = { t: 's', v: 'Qualified [✓]' };
+      } else if (!isQual && tmpl.qualCellNotQualified) {
+        ws[tmpl.qualCellNotQualified] = { t: 's', v: 'Not Qualified [✓]' };
+      }
+
       XLSX.writeFile(wb, `${filename}.xlsx`);
-      showToast(`OJT Evaluation Excel (.xlsx) downloaded for Employee ${emp.empNo}!`);
+      showToast(`Official OJT Excel (${tmpl.formatNo}) downloaded for Employee ${emp.empNo}!`);
     } else {
-      const csvData = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
-      const blob = new Blob(['\uFEFF' + csvData], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${filename}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showToast(`OJT Evaluation downloaded as CSV for Employee ${emp.empNo}.`);
+      // Fallback
+      showToast('SheetJS XLSX library is initializing. Please try again.');
     }
   } catch (err) {
     console.error('OJT export error:', err);
