@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Yokohama ILUO Skill Assessment Portal | Tire Building QA</title>
   <link rel="icon" type="image/png" href="yokohama_logo.png">
-  <link rel="stylesheet" href="styles.css?v=31.0">
+  <link rel="stylesheet" href="styles.css?v=33.0">
 </head>
 <body>
 
@@ -948,8 +948,8 @@
                 <button class="btn-primary" style="padding: 8px 16px; font-size: 0.9rem;" onclick="openAddQuestionModal()">
                   ➕ Add Question
                 </button>
-                <button class="btn-secondary" style="padding: 8px 16px; font-size: 0.9rem; color: var(--accent-red); border-color: #FECDD3;" onclick="clearAllQuestions()">
-                  🗑️ Clear All Questions
+                <button class="btn-secondary" style="padding: 8px 16px; font-size: 0.9rem; color: var(--accent-red); border-color: #FECDD3; display: inline-flex; align-items: center; gap: 6px;" onclick="openClearQuestionsModal()">
+                  🗑️ Clear Questions (Section / Level)
                 </button>
               </div>
             </div>
@@ -976,8 +976,11 @@
                   <option value="FID Inspector QA">FID Inspector QA</option>
                   <option value="Final Finish RRO &amp; ALT QA">Final Finish RRO &amp; ALT QA</option>
                 </select>
-                <div style="font-size: 0.85rem; color: var(--text-muted); align-self: center;">
-                  Total <strong id="qCountText">0</strong> questions
+                <div style="font-size: 0.85rem; color: var(--text-muted); align-self: center; display: inline-flex; align-items: center; gap: 8px;">
+                  <span>Total <strong id="qCountText">0</strong> questions</span>
+                  <button type="button" class="btn-secondary" id="btnClearFilteredQs" style="display: none; padding: 4px 10px; font-size: 0.78rem; color: var(--accent-red); border-color: #FECDD3;" onclick="clearCurrentFilteredQuestions()">
+                    🗑️ Clear Filtered (<span id="btnFilteredCount">0</span>)
+                  </button>
                 </div>
               </div>
               <div id="questionsListContainer" style="display: flex; flex-direction: column; gap: 12px; margin-top: 12px;">
@@ -1688,6 +1691,79 @@
     </div>
   </div>
 
+  <!-- Clear Questions Modal (Section & Level Specific) -->
+  <div class="modal-overlay" id="modalClearQuestions" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.75); z-index: 99999; overflow-y: auto; padding: 20px; align-items: center; justify-content: center; opacity: 1; pointer-events: auto;">
+    <div class="security-modal-box" style="max-width: 580px; width: 100%; text-align: left; background: #FFFFFF; border-radius: 12px; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.25); margin: 30px auto; max-height: 90vh; overflow-y: auto;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #EF4444; padding-bottom: 12px; margin-bottom: 16px;">
+        <h3 style="margin: 0; color: #DC2626; display: flex; align-items: center; gap: 8px;">
+          <span>🗑️</span> Clear Questions by Section &amp; Level
+        </h3>
+        <button onclick="closeClearQuestionsModal()" style="background: none; border: none; font-size: 1.4rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+      </div>
+
+      <div style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 16px;">
+        Choose which questions you want to remove. You can target a specific <strong>QC Section</strong> and/or <strong>Skill Level</strong>, or clear the entire question bank.
+      </div>
+
+      <!-- Scope Selection -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
+        <div>
+          <label style="font-weight: 700; font-size: 0.85rem; display: block; margin-bottom: 4px; color: var(--text-dark);">QC Section:</label>
+          <select id="clearModalSection" class="form-control" onchange="updateClearModalImpact()">
+            <option value="ALL">🌐 All QC Sections</option>
+            <option value="Final Finish QA">Final Finish QA</option>
+            <option value="Tire Building QA">Tire Building QA</option>
+            <option value="Tire Curing QA">Tire Curing QA</option>
+            <option value="Solid Tire QA">Solid Tire QA</option>
+            <option value="Preparatory QA">Preparatory QA</option>
+            <option value="Warehouse QA">Warehouse QA</option>
+            <option value="FID Inspector QA">FID Inspector QA</option>
+            <option value="Final Finish RRO &amp; ALT QA">Final Finish RRO &amp; ALT QA</option>
+          </select>
+        </div>
+
+        <div>
+          <label style="font-weight: 700; font-size: 0.85rem; display: block; margin-bottom: 4px; color: var(--text-dark);">Skill Level:</label>
+          <select id="clearModalLevel" class="form-control" onchange="updateClearModalImpact()">
+            <option value="ALL">🎯 All Levels (L, U, O)</option>
+            <option value="L">L Level</option>
+            <option value="U">U Level</option>
+            <option value="O">O Level</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Real-time Impact Box -->
+      <div id="clearImpactBox" style="background: #FEF2F2; border: 1.5px solid #FCA5A5; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px;">
+        <div style="font-size: 0.92rem; font-weight: 700; color: #991B1B; margin-bottom: 4px;" id="clearImpactHeading">
+          Matching questions: 0
+        </div>
+        <div style="font-size: 0.84rem; color: #B91C1C;" id="clearImpactDetails">
+          Select section and level to see count.
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <button type="button" class="btn-primary" id="btnConfirmClearSelected" style="background: #DC2626; border-color: #DC2626; padding: 10px 16px; font-weight: 700; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;" onclick="confirmExecuteClear()">
+          <span>🗑️ Delete Matching Questions</span>
+        </button>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 14px; border-top: 1px solid #E2E8F0; flex-wrap: wrap; gap: 10px;">
+          <button type="button" class="btn-secondary" style="font-size: 0.82rem; color: #0284C7; border-color: #BAE6FD;" onclick="restoreDefaultQuestionsBank()" title="Restore factory default master questions">
+            🔄 Restore Default Questions
+          </button>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn-reset" onclick="closeClearQuestionsModal()">Cancel</button>
+            <button type="button" class="btn-secondary" style="font-size: 0.82rem; color: #B91C1C; border-color: #FECDD3;" onclick="confirmClearAllQuestionsBank()">
+              ⚠️ Clear All Questions
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Add/Edit Employee Modal -->
   <div class="modal-overlay" id="modalAddEditEmployee" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.75); z-index: 99999; overflow-y: auto; padding: 20px; align-items: center; justify-content: center; opacity: 1; pointer-events: auto;">
     <div class="security-modal-box" style="max-width: 580px; text-align: left; background: #FFFFFF; border-radius: 12px; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.25); margin: 30px auto; max-height: 90vh; overflow-y: auto;">
@@ -1933,7 +2009,7 @@
   <script defer src="docx_generator.js"></script>
 
   <!-- Data Script & Application Router -->
-  <script src="data.js?v=32.0"></script>
-  <script src="app.js?v=32.0"></script>
+  <script src="data.js?v=33.0"></script>
+  <script src="app.js?v=33.0"></script>
 </body>
 </html>

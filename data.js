@@ -21181,3 +21181,10 @@ const LEVEL_RULES = {
   "U": { "nextLevel": "O", "numQuestions": 30, "passingPct": 50, "timeLimitMinutes": 45 },
   "O": { "nextLevel": "O", "numQuestions": 40, "passingPct": 50, "timeLimitMinutes": 45 }
 };
+
+// Immutable snapshot of default questions for restoration
+const DEFAULT_QUESTION_BANK = JSON.parse(JSON.stringify(QUESTION_BANK));
+if (typeof window !== 'undefined') {
+  window.QUESTION_BANK = QUESTION_BANK;
+  window.DEFAULT_QUESTION_BANK = DEFAULT_QUESTION_BANK;
+}

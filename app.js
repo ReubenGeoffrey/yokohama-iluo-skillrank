@@ -61,7 +61,7 @@ function initStorage() {
     if (cachedQ) {
       const parsedQ = JSON.parse(cachedQ);
       ['L', 'U', 'O'].forEach(lvl => {
-        if (parsedQ[lvl] && Array.isArray(parsedQ[lvl]) && parsedQ[lvl].length > 0) {
+        if (parsedQ[lvl] && Array.isArray(parsedQ[lvl])) {
           QUESTION_BANK[lvl] = parsedQ[lvl];
         }
       });
@@ -1859,7 +1859,19 @@ function renderQuestionsManager() {
     return matchSec && matchSearch;
   });
 
- document.getElementById('qCountText').innerText = filtered.length;
+  document.getElementById('qCountText').innerText = filtered.length;
+
+  const btnClearFiltered = document.getElementById('btnClearFilteredQs');
+  const spanFilteredCount = document.getElementById('btnFilteredCount');
+  const hasFilterActive = (levelFilter !== 'ALL' || sectionFilter !== 'ALL' || !!searchVal);
+  if (btnClearFiltered) {
+    if (hasFilterActive && filtered.length > 0) {
+      btnClearFiltered.style.display = 'inline-flex';
+      if (spanFilteredCount) spanFilteredCount.innerText = filtered.length;
+    } else {
+      btnClearFiltered.style.display = 'none';
+    }
+  }
 
   if (filtered.length === 0) {
     container.innerHTML = `
@@ -3069,17 +3081,204 @@ function generateSelectedEmployeeDocx() {
   downloadEmployeeDocx(empNo);
 }
 
-// Bulk Clear & Docx Upload Parser
-function clearAllQuestions() {
-  if (!confirm('⚠️ WARNING: Are you sure you want to DELETE ALL QUESTIONS?\n\nThis will clear the entire question bank. You can then upload your own custom .docx files!')) return;
+// ---------------------------------------------------------------------
+// SECTION & LEVEL QUESTION CLEARING ENGINE
+// ---------------------------------------------------------------------
+
+function openClearQuestionsModal(prefillSection, prefillLevel) {
+  const modal = document.getElementById('modalClearQuestions');
+  if (!modal) return;
+
+  const secSelect = document.getElementById('clearModalSection');
+  const lvlSelect = document.getElementById('clearModalLevel');
+
+  // Pre-fill with passed values or current table filters
+  const currentSec = prefillSection || (document.getElementById('qSectionFilter') ? document.getElementById('qSectionFilter').value : 'ALL');
+  const currentLvl = prefillLevel || (document.getElementById('qLevelFilter') ? document.getElementById('qLevelFilter').value : 'ALL');
+
+  if (secSelect) secSelect.value = currentSec;
+  if (lvlSelect) lvlSelect.value = currentLvl;
+
+  updateClearModalImpact();
+
+  modal.classList.add('active');
+  modal.style.display = 'flex';
+}
+
+function closeClearQuestionsModal() {
+  const modal = document.getElementById('modalClearQuestions');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+}
+
+function getMatchingQuestionsCount(targetSection, targetLevel) {
+  const levels = (targetLevel === 'ALL' || !targetLevel) ? ['L', 'U', 'O'] : [targetLevel];
+  let count = 0;
+
+  levels.forEach(lvl => {
+    const list = QUESTION_BANK[lvl] || [];
+    if (targetSection === 'ALL' || !targetSection) {
+      count += list.length;
+    } else {
+      const normTarget = normalizeSectionName(targetSection);
+      count += list.filter(q => normalizeSectionName(q.section) === normTarget).length;
+    }
+  });
+
+  return count;
+}
+
+function getTotalQuestionsInBank() {
+  return (QUESTION_BANK.L || []).length + (QUESTION_BANK.U || []).length + (QUESTION_BANK.O || []).length;
+}
+
+function updateClearModalImpact() {
+  const secSelect = document.getElementById('clearModalSection');
+  const lvlSelect = document.getElementById('clearModalLevel');
+  const targetSection = secSelect ? secSelect.value : 'ALL';
+  const targetLevel = lvlSelect ? lvlSelect.value : 'ALL';
+
+  const matchCount = getMatchingQuestionsCount(targetSection, targetLevel);
+  const totalCount = getTotalQuestionsInBank();
+  const remainCount = totalCount - matchCount;
+
+  const headingEl = document.getElementById('clearImpactHeading');
+  const detailsEl = document.getElementById('clearImpactDetails');
+  const btnDelete = document.getElementById('btnConfirmClearSelected');
+  const impactBox = document.getElementById('clearImpactBox');
+
+  const secLabel = targetSection === 'ALL' ? 'All QC Sections' : targetSection;
+  const lvlLabel = targetLevel === 'ALL' ? 'All Levels (L, U, O)' : `Level ${targetLevel}`;
+
+  if (matchCount === 0) {
+    if (headingEl) headingEl.innerText = `0 questions match your selection`;
+    if (detailsEl) detailsEl.innerText = `There are currently no questions in ${secLabel} (${lvlLabel}). Nothing to delete.`;
+    if (btnDelete) {
+      btnDelete.disabled = true;
+      btnDelete.innerText = '🗑️ No Matching Questions to Delete';
+      btnDelete.style.opacity = '0.5';
+      btnDelete.style.cursor = 'not-allowed';
+    }
+    if (impactBox) {
+      impactBox.style.background = '#F8FAFC';
+      impactBox.style.borderColor = '#CBD5E1';
+    }
+  } else {
+    if (headingEl) headingEl.innerText = `⚠️ ${matchCount} questions will be deleted`;
+    if (detailsEl) detailsEl.innerHTML = `Scope: <strong>${secLabel}</strong> &bull; <strong>${lvlLabel}</strong>.<br>Remaining questions in bank after deletion: <strong>${remainCount}</strong> questions.`;
+    if (btnDelete) {
+      btnDelete.disabled = false;
+      btnDelete.innerText = `🗑️ Delete ${matchCount} Questions from ${targetSection === 'ALL' ? 'All Sections' : targetSection} (${targetLevel === 'ALL' ? 'All Levels' : 'Level ' + targetLevel})`;
+      btnDelete.style.opacity = '1';
+      btnDelete.style.cursor = 'pointer';
+    }
+    if (impactBox) {
+      impactBox.style.background = '#FEF2F2';
+      impactBox.style.borderColor = '#FCA5A5';
+    }
+  }
+}
+
+function confirmExecuteClear() {
+  const secSelect = document.getElementById('clearModalSection');
+  const lvlSelect = document.getElementById('clearModalLevel');
+  const targetSection = secSelect ? secSelect.value : 'ALL';
+  const targetLevel = lvlSelect ? lvlSelect.value : 'ALL';
+
+  const matchCount = getMatchingQuestionsCount(targetSection, targetLevel);
+  if (matchCount === 0) {
+    showToast('No matching questions found to delete.');
+    return;
+  }
+
+  const secLabel = targetSection === 'ALL' ? 'ALL Sections' : targetSection;
+  const lvlLabel = targetLevel === 'ALL' ? 'ALL Levels (L, U, O)' : `Level ${targetLevel}`;
+
+  const promptMsg = `⚠️ ARE YOU SURE?\n\nYou are about to DELETE ${matchCount} questions from:\n\nSection: ${secLabel}\nLevel: ${lvlLabel}\n\nThis will remove them permanently from the Question Bank!`;
+  if (!confirm(promptMsg)) return;
+
+  deleteQuestionsBySectionAndLevel(targetSection, targetLevel);
+  closeClearQuestionsModal();
+  showToast(`Successfully deleted ${matchCount} questions from ${secLabel} (${lvlLabel}).`);
+}
+
+function deleteQuestionsBySectionAndLevel(targetSection, targetLevel) {
+  const levels = (targetLevel === 'ALL' || !targetLevel) ? ['L', 'U', 'O'] : [targetLevel];
+  let deletedCount = 0;
+
+  levels.forEach(lvl => {
+    if (!QUESTION_BANK[lvl] || !Array.isArray(QUESTION_BANK[lvl])) return;
+    const initialLen = QUESTION_BANK[lvl].length;
+
+    if (targetSection === 'ALL' || !targetSection) {
+      deletedCount += initialLen;
+      QUESTION_BANK[lvl] = [];
+    } else {
+      const normTarget = normalizeSectionName(targetSection);
+      const remaining = QUESTION_BANK[lvl].filter(q => {
+        const matches = normalizeSectionName(q.section) === normTarget;
+        if (matches) deletedCount++;
+        return !matches;
+      });
+      QUESTION_BANK[lvl] = remaining;
+    }
+  });
+
+  saveCustomQuestionsToServer();
+  renderQuestionsManager();
+  return deletedCount;
+}
+
+function clearCurrentFilteredQuestions() {
+  const secFilter = document.getElementById('qSectionFilter') ? document.getElementById('qSectionFilter').value : 'ALL';
+  const lvlFilter = document.getElementById('qLevelFilter') ? document.getElementById('qLevelFilter').value : 'ALL';
+  openClearQuestionsModal(secFilter, lvlFilter);
+}
+
+function confirmClearAllQuestionsBank() {
+  const total = getTotalQuestionsInBank();
+  if (total === 0) {
+    showToast('Question bank is already empty.');
+    return;
+  }
+
+  const confirm1 = confirm(`⚠️ WARNING: DANGER ZONE!\n\nAre you sure you want to DELETE ALL ${total} QUESTIONS from the entire bank?\n\nThis will erase questions across ALL sections (L, U, and O levels)!`);
+  if (!confirm1) return;
 
   QUESTION_BANK.L = [];
   QUESTION_BANK.U = [];
   QUESTION_BANK.O = [];
 
   saveCustomQuestionsToServer();
- showToast('All questions deleted! Question bank is now empty.');
+  closeClearQuestionsModal();
+  showToast(`Entire Question Bank cleared! (Deleted ${total} questions)`);
   renderQuestionsManager();
+}
+
+function restoreDefaultQuestionsBank() {
+  if (typeof DEFAULT_QUESTION_BANK === 'undefined') {
+    showToast('Default question bank snapshot not found.');
+    return;
+  }
+
+  const confirmRestore = confirm('🔄 Restore Default Question Bank?\n\nThis will restore the factory default questions for all sections and levels from the master curriculum.');
+  if (!confirmRestore) return;
+
+  QUESTION_BANK.L = JSON.parse(JSON.stringify(DEFAULT_QUESTION_BANK.L || []));
+  QUESTION_BANK.U = JSON.parse(JSON.stringify(DEFAULT_QUESTION_BANK.U || []));
+  QUESTION_BANK.O = JSON.parse(JSON.stringify(DEFAULT_QUESTION_BANK.O || []));
+
+  saveCustomQuestionsToServer();
+  closeClearQuestionsModal();
+  showToast('Default Question Bank successfully restored!');
+  renderQuestionsManager();
+}
+
+// Backward compatibility alias
+function clearAllQuestions() {
+  openClearQuestionsModal();
 }
 
 // ---------------------------------------------------------------------
