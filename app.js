@@ -168,7 +168,12 @@ function saveCustomQuestionsToServer() {
 // URL ROUTER ENGINE (4-Role Portals: Employee, Section, HOD, HR Admin)
 // ---------------------------------------------------------------------
 function navigateTo(path) {
-  window.location.hash = path;
+  const targetHash = path.startsWith('/') ? path : '/' + path;
+  if (window.location.hash === '#' + targetHash) {
+    handleRoute();
+  } else {
+    window.location.hash = targetHash;
+  }
 }
 
 function updateRoleNavHighlight(role) {
@@ -265,6 +270,10 @@ function handleRoute() {
   // Explicit Admin Login Page (/secure-control)
   if (hash === '/secure-control' || hash === '/admin-login' || hash === '/admin') {
     updateRoleNavHighlight('admin');
+    if (session && session.role === 'admin') {
+      navigateTo('/secure-control/dashboard');
+      return;
+    }
     showView('viewAdminLogin');
     return;
   }
@@ -630,6 +639,7 @@ async function handleAdminLogin(e) {
     updateUserBadge(adminName);
  showToast('Authenticated successfully as Administrator');
     navigateTo('/secure-control/dashboard');
+    handleRoute();
 
     // Also sync session with backend if reachable
     fetch('/api/auth/admin/login', {
@@ -1725,31 +1735,45 @@ function filterModalEmployees(type) {
 }
 
 function renderPieChart(completed, inProgress, notStarted) {
-  const ctx = document.getElementById('completionPieChart').getContext('2d');
-  if (pieChartInstance) pieChartInstance.destroy();
+  const canvas = document.getElementById('completionPieChart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  if (pieChartInstance) {
+    try { pieChartInstance.destroy(); } catch (e) {}
+  }
 
-  pieChartInstance = new Chart(ctx, {
-    type: 'pie',
-    data: {
-      labels: ['Completed', 'In Progress', 'Not Attempted'],
-      datasets: [{
-        data: [completed, inProgress, notStarted],
-        backgroundColor: ['#10B981', '#F59E0B', '#94A3B8']
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'bottom' }
+  try {
+    pieChartInstance = new Chart(ctx, {
+      type: 'pie',
+      data: {
+        labels: ['Completed', 'In Progress', 'Not Attempted'],
+        datasets: [{
+          data: [completed, inProgress, notStarted],
+          backgroundColor: ['#10B981', '#F59E0B', '#94A3B8']
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom' }
+        }
       }
-    }
-  });
+    });
+  } catch (err) {
+    console.warn('Pie chart render notice:', err.message);
+  }
 }
 
 function renderBarChart(records) {
-  const ctx = document.getElementById('levelBarChart').getContext('2d');
-  if (barChartInstance) barChartInstance.destroy();
+  const canvas = document.getElementById('levelBarChart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  if (barChartInstance) {
+    try { barChartInstance.destroy(); } catch (e) {}
+  }
 
   let uCount = 0, lCount = 0, oCount = 0, iCount = 0;
 
@@ -1761,27 +1785,31 @@ function renderBarChart(records) {
     else iCount++;
   });
 
-  barChartInstance = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: ['I Level', 'L Level', 'U Level', 'O Level'],
-      datasets: [{
-        label: 'Employee Count',
-        data: [iCount, lCount, uCount, oCount],
-        backgroundColor: ['#3B82F6', '#F59E0B', '#10B981', '#E31B23']
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false }
+  try {
+    barChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: ['I Level', 'L Level', 'U Level', 'O Level'],
+        datasets: [{
+          label: 'Employee Count',
+          data: [iCount, lCount, uCount, oCount],
+          backgroundColor: ['#3B82F6', '#F59E0B', '#10B981', '#E31B23']
+        }]
       },
-      scales: {
-        y: { beginAtZero: true }
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          y: { beginAtZero: true }
+        }
       }
-    }
-  });
+    });
+  } catch (err) {
+    console.warn('Bar chart render notice:', err.message);
+  }
 }
 
 // Question Bank Manager View & Manual Mapping Engine
