@@ -197,7 +197,7 @@ function navigateTo(path) {
 }
 
 function updateRoleNavHighlight(role) {
-  ['tabRoleHome', 'tabRoleEmp', 'tabRoleSection', 'tabRoleDept', 'tabRoleAdmin'].forEach(id => {
+  ['tabRoleHome', 'tabRoleEmp', 'tabRoleSection', 'tabRoleDept', 'tabRoleAdmin', 'tabRoleOjt'].forEach(id => {
     const btn = document.getElementById(id);
     if (btn) btn.classList.remove('active');
   });
@@ -208,7 +208,9 @@ function updateRoleNavHighlight(role) {
     'section': 'tabRoleSection',
     'department': 'tabRoleDept',
     'hod': 'tabRoleDept',
-    'admin': 'tabRoleAdmin'
+    'admin': 'tabRoleAdmin',
+    'ojt': 'tabRoleOjt',
+    'ojt-login': 'tabRoleOjt'
   };
   const targetId = map[role];
   if (targetId) {
@@ -231,8 +233,26 @@ function handleRoute() {
     return;
   }
 
-  // Direct OJT Practical Evaluation Modal Route (/ojt, /ojt-evaluation, /ojt-form)
-  if (hash === '/ojt' || hash === '/ojt-evaluation' || hash === '/ojt-form') {
+  // Dedicated OJT Portal Route (/ojt, /ojt-login)
+  if (hash === '/ojt' || hash === '/ojt-login' || hash.startsWith('/ojt/')) {
+    updateRoleNavHighlight('ojt');
+    showView('viewOjtPortal');
+    const ojtSession = sessionStorage.getItem('iluo_ojt_session');
+    const loginWrapper = document.getElementById('ojtLoginWrapper');
+    const dashWrapper = document.getElementById('ojtDashboardWrapper');
+    if (ojtSession) {
+      if (loginWrapper) loginWrapper.style.display = 'none';
+      if (dashWrapper) dashWrapper.style.display = 'block';
+      renderOjtDashboard(ojtSession);
+    } else {
+      if (loginWrapper) loginWrapper.style.display = 'block';
+      if (dashWrapper) dashWrapper.style.display = 'none';
+    }
+    return;
+  }
+
+  // Quick Direct OJT Modal Route (/ojt-modal, /ojt-evaluation, /ojt-form)
+  if (hash === '/ojt-modal' || hash === '/ojt-evaluation' || hash === '/ojt-form') {
     showView('viewPublicLanding');
     openOjtModalQuick();
     return;
@@ -4858,6 +4878,19 @@ function openOjtModalForEmployee(empNo) {
   const ciEl = document.getElementById('ojtCiRep');
   if (ciEl) ciEl.value = existing.ciRep || '';
 
+  const techEl = document.getElementById('ojtTechRep');
+  if (techEl) techEl.value = existing.techRep || '';
+
+  const hrEl = document.getElementById('ojtHrRep');
+  if (hrEl) hrEl.value = existing.hrRep || '';
+
+  const ojtSession = sessionStorage.getItem('iluo_ojt_session');
+  if (ojtSession === 'Safety' && safeEl && !safeEl.value) safeEl.placeholder = 'Safety Evaluator (Active)';
+  if (ojtSession === 'CI & TPM' && ciEl && !ciEl.value) ciEl.placeholder = 'CI & TPM Evaluator (Active)';
+  if (ojtSession === 'Quality' && qualEl && !qualEl.value) qualEl.placeholder = 'Quality Evaluator (Active)';
+  if (ojtSession === 'Technical' && techEl && !techEl.value) techEl.placeholder = 'Technical Evaluator (Active)';
+  if (ojtSession === 'HR' && hrEl && !hrEl.value) hrEl.placeholder = 'HR Evaluator (Active)';
+
   // Render Checkpoint Rows
   const tbody = document.getElementById('ojtCheckpointsBody');
   if (tbody) {
@@ -4996,10 +5029,12 @@ function saveOjtEvaluationForm() {
     maxScore,
     scorePct: pct,
     qualificationStatus,
-    comments: document.getElementById('ojtImprovementComments').value.trim(),
-    safetyRep: document.getElementById('ojtSafetyRep').value.trim(),
-    qualityRep: document.getElementById('ojtQualityRep').value.trim(),
-    ciRep: document.getElementById('ojtCiRep').value.trim(),
+    comments: document.getElementById('ojtImprovementComments') ? document.getElementById('ojtImprovementComments').value.trim() : '',
+    safetyRep: document.getElementById('ojtSafetyRep') ? document.getElementById('ojtSafetyRep').value.trim() : '',
+    qualityRep: document.getElementById('ojtQualityRep') ? document.getElementById('ojtQualityRep').value.trim() : '',
+    ciRep: document.getElementById('ojtCiRep') ? document.getElementById('ojtCiRep').value.trim() : '',
+    techRep: document.getElementById('ojtTechRep') ? document.getElementById('ojtTechRep').value.trim() : '',
+    hrRep: document.getElementById('ojtHrRep') ? document.getElementById('ojtHrRep').value.trim() : '',
     evaluatedAt: new Date().toISOString().split('T')[0]
   };
 
@@ -5009,6 +5044,11 @@ function saveOjtEvaluationForm() {
   if (document.getElementById('adminTableBody')) {
     const searchInput = document.getElementById('adminSearchInput');
     renderAdminTable(searchInput ? searchInput.value : '');
+  }
+
+  // If OJT table is active, refresh it immediately
+  if (document.getElementById('ojtTableBody')) {
+    renderOjtDashboardTable();
   }
 
   showToast(`OJT Evaluation saved successfully for Employee ${activeOjtEmployee.empNo} (${qualificationStatus})`);
@@ -5033,10 +5073,12 @@ function downloadCurrentOjtExcel() {
   });
   const pct = Math.round((totalScore / maxScore) * 100);
 
-  const comments = document.getElementById('ojtImprovementComments').value.trim();
-  const safetyRep = document.getElementById('ojtSafetyRep').value.trim();
-  const qualityRep = document.getElementById('ojtQualityRep').value.trim();
-  const ciRep = document.getElementById('ojtCiRep').value.trim();
+  const comments = document.getElementById('ojtImprovementComments') ? document.getElementById('ojtImprovementComments').value.trim() : '';
+  const safetyRep = document.getElementById('ojtSafetyRep') ? document.getElementById('ojtSafetyRep').value.trim() : '';
+  const qualityRep = document.getElementById('ojtQualityRep') ? document.getElementById('ojtQualityRep').value.trim() : '';
+  const ciRep = document.getElementById('ojtCiRep') ? document.getElementById('ojtCiRep').value.trim() : '';
+  const techRep = document.getElementById('ojtTechRep') ? document.getElementById('ojtTechRep').value.trim() : '';
+  const hrRep = document.getElementById('ojtHrRep') ? document.getElementById('ojtHrRep').value.trim() : '';
 
   const rows = [
     ["ATC TIRES PRIVATE LIMITED"],
@@ -5057,8 +5099,8 @@ function downloadCurrentOjtExcel() {
   rows.push(["Improvement / Training requirement :", comments, "", "", "", "", "", "", "", ""]);
   rows.push([]);
   rows.push(["Evaluation By (Name & Sign with date)"]);
-  rows.push(["Safety", "", "Quality", "", "", "", "", "", "CI"]);
-  rows.push([safetyRep || "Section Representative", "", qualityRep || "Section Representative", "", "", "", "", "", ciRep || "Representative"]);
+  rows.push(["Safety", "", "CI & TPM", "", "Quality", "", "Technical", "", "HR"]);
+  rows.push([safetyRep || "Representative", "", ciRep || "Representative", "", qualityRep || "Representative", "", techRep || "Representative", "", hrRep || "Representative"]);
   rows.push([]);
   rows.push(["Qualification Status:", "", "", pct >= 70 ? "Qualified" : "Not Qualified", "", "", "Date of Reassessment"]);
   rows.push([tmpl.formatNo]);
@@ -5102,7 +5144,7 @@ function switchRolePortal(role) {
   }
 
   // Update navbar buttons
-  ['tabRoleHome', 'tabRoleEmp', 'tabRoleSection', 'tabRoleDept', 'tabRoleAdmin'].forEach(id => {
+  ['tabRoleHome', 'tabRoleEmp', 'tabRoleSection', 'tabRoleDept', 'tabRoleAdmin', 'tabRoleOjt'].forEach(id => {
     const btn = document.getElementById(id);
     if (btn) btn.classList.remove('active');
   });
@@ -5133,7 +5175,231 @@ function switchRolePortal(role) {
     } else {
       navigateTo('/secure-control');
     }
+  } else if (role === 'ojt' || role === 'ojt-login') {
+    const btn = document.getElementById('tabRoleOjt');
+    if (btn) btn.classList.add('active');
+    navigateTo('/ojt-login');
   }
+}
+
+// ---------------------------------------------------------------------
+// 5-SECTION OJT PORTAL LOGIC (Safety, CI & TPM, Quality, Technical, HR)
+// ---------------------------------------------------------------------
+function selectOjtLoginSection(secName) {
+  const input = document.getElementById('ojtSelectedSectionInput');
+  if (input) input.value = secName;
+
+  const label = document.getElementById('ojtSelectedSectionLabel');
+  const btnSubmit = document.getElementById('btnSubmitOjtLogin');
+
+  const meta = {
+    'Safety': { icon: '🦺', color: '#059669', title: 'Safety Section' },
+    'CI & TPM': { icon: '⚙️', color: '#2563EB', title: 'CI & TPM Section' },
+    'Quality': { icon: '🎯', color: '#DC2626', title: 'Quality Section' },
+    'Technical': { icon: '🔧', color: '#7C3AED', title: 'Technical Section' },
+    'HR': { icon: '👥', color: '#D97706', title: 'HR Section' }
+  };
+  const m = meta[secName] || { icon: '📋', color: '#059669', title: secName };
+
+  if (label) {
+    label.innerHTML = `${m.icon} ${m.title}`;
+    label.style.color = m.color;
+  }
+  if (btnSubmit) {
+    btnSubmit.innerText = `Sign In to ${secName} OJT Center`;
+    btnSubmit.style.background = `linear-gradient(135deg, ${m.color} 0%, #003D6B 100%)`;
+  }
+
+  // Active state on buttons
+  const mapBtn = {
+    'Safety': 'ojtSecBtnSafety',
+    'CI & TPM': 'ojtSecBtnCi',
+    'Quality': 'ojtSecBtnQuality',
+    'Technical': 'ojtSecBtnTechnical',
+    'HR': 'ojtSecBtnHr'
+  };
+  Object.values(mapBtn).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+  });
+  const activeBtn = document.getElementById(mapBtn[secName]);
+  if (activeBtn) activeBtn.classList.add('active');
+}
+
+function handleOjtSectionLogin(e) {
+  if (e) e.preventDefault();
+  const secInput = document.getElementById('ojtSelectedSectionInput');
+  const section = secInput ? secInput.value : 'Safety';
+
+  sessionStorage.setItem('iluo_ojt_session', section);
+
+  const loginWrapper = document.getElementById('ojtLoginWrapper');
+  const dashWrapper = document.getElementById('ojtDashboardWrapper');
+  if (loginWrapper) loginWrapper.style.display = 'none';
+  if (dashWrapper) dashWrapper.style.display = 'block';
+
+  renderOjtDashboard(section);
+  showToast(`Signed in to ${section} OJT Center`);
+}
+
+function quickEnterOjtSection(secName) {
+  selectOjtLoginSection(secName);
+  sessionStorage.setItem('iluo_ojt_session', secName);
+  const loginWrapper = document.getElementById('ojtLoginWrapper');
+  const dashWrapper = document.getElementById('ojtDashboardWrapper');
+  if (loginWrapper) loginWrapper.style.display = 'none';
+  if (dashWrapper) dashWrapper.style.display = 'block';
+  renderOjtDashboard(secName);
+  showToast(`Signed in to ${secName} OJT Center`);
+}
+
+function ojtLogout() {
+  sessionStorage.removeItem('iluo_ojt_session');
+  const loginWrapper = document.getElementById('ojtLoginWrapper');
+  const dashWrapper = document.getElementById('ojtDashboardWrapper');
+  if (loginWrapper) loginWrapper.style.display = 'block';
+  if (dashWrapper) dashWrapper.style.display = 'none';
+  showToast('Signed out of OJT Evaluation Center');
+}
+
+function renderOjtDashboard(secName) {
+  const activeSec = secName || sessionStorage.getItem('iluo_ojt_session') || 'Safety';
+  const meta = {
+    'Safety': { icon: '🦺', color: '#059669', title: 'Safety Section OJT Center', badge: 'Safety Evaluator Active' },
+    'CI & TPM': { icon: '⚙️', color: '#2563EB', title: 'CI & TPM Section OJT Center', badge: 'CI & TPM Evaluator Active' },
+    'Quality': { icon: '🎯', color: '#DC2626', title: 'Quality Section OJT Center', badge: 'Quality Evaluator Active' },
+    'Technical': { icon: '🔧', color: '#7C3AED', title: 'Technical Section OJT Center', badge: 'Technical Evaluator Active' },
+    'HR': { icon: '👥', color: '#D97706', title: 'HR Section OJT Center', badge: 'HR Evaluator Active' }
+  };
+  const m = meta[activeSec] || meta['Safety'];
+
+  const iconEl = document.getElementById('ojtActiveSectionIcon');
+  if (iconEl) iconEl.innerText = m.icon;
+
+  const titleEl = document.getElementById('ojtActiveSectionTitle');
+  if (titleEl) titleEl.innerText = m.title;
+
+  const badgeEl = document.getElementById('ojtActiveBadge');
+  if (badgeEl) {
+    badgeEl.innerText = m.badge;
+    badgeEl.style.backgroundColor = m.color + '1A';
+    badgeEl.style.color = m.color;
+    badgeEl.style.border = `1px solid ${m.color}`;
+  }
+
+  // Update KPIs
+  const allOjt = getStoredOjtRecords();
+  const totalEmps = (typeof EMPLOYEES !== 'undefined') ? EMPLOYEES.length : 0;
+  let qualifiedCount = 0;
+
+  if (typeof EMPLOYEES !== 'undefined') {
+    EMPLOYEES.forEach(emp => {
+      const ojt = allOjt[emp.empNo];
+      if (ojt && ojt.totalScore !== undefined) {
+        const maxScore = ojt.maxScore || 50;
+        if (ojt.totalScore >= Math.round(maxScore * 0.7)) {
+          qualifiedCount++;
+        }
+      }
+    });
+  }
+
+  const kpiTotal = document.getElementById('ojtKpiTotalEmps');
+  if (kpiTotal) kpiTotal.innerText = totalEmps;
+
+  const kpiQual = document.getElementById('ojtKpiQualified');
+  if (kpiQual) kpiQual.innerText = qualifiedCount;
+
+  const kpiPending = document.getElementById('ojtKpiPending');
+  if (kpiPending) kpiPending.innerText = Math.max(0, totalEmps - qualifiedCount);
+
+  renderOjtDashboardTable();
+}
+
+function renderOjtDashboardTable() {
+  const tbody = document.getElementById('ojtTableBody');
+  if (!tbody || typeof EMPLOYEES === 'undefined') return;
+
+  const searchInput = document.getElementById('ojtEmpSearchInput');
+  const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+  const secFilter = document.getElementById('ojtQcSectionFilter');
+  const selectedSec = secFilter ? secFilter.value : 'ALL';
+  const lvlFilter = document.getElementById('ojtLevelFilter');
+  const selectedLvl = lvlFilter ? lvlFilter.value : 'ALL';
+
+  const allOjt = getStoredOjtRecords();
+  const records = getStoredRecords();
+
+  let filtered = EMPLOYEES.filter(emp => {
+    if (query) {
+      const matchName = (emp.name || '').toLowerCase().includes(query);
+      const matchNo = String(emp.empNo || '').toLowerCase().includes(query);
+      if (!matchName && !matchNo) return false;
+    }
+    if (selectedSec !== 'ALL') {
+      const empSec = (emp.section || emp.dept || '').toLowerCase();
+      if (!empSec.includes(selectedSec.toLowerCase())) return false;
+    }
+    if (selectedLvl !== 'ALL') {
+      if ((emp.currentLevel || 'I').toUpperCase() !== selectedLvl) return false;
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 24px; color: #94A3B8;">No employees match the selected criteria.</td></tr>`;
+    return;
+  }
+
+  const targetMap = { 'I': 'L', 'L': 'U', 'U': 'O', 'O': 'O' };
+
+  tbody.innerHTML = filtered.map((emp, idx) => {
+    const ojt = allOjt[emp.empNo];
+    const rec = records[emp.empNo];
+    const currLvl = emp.currentLevel || 'I';
+    const targetLvl = targetMap[currLvl] || 'L';
+
+    // Knowledge MCQ status
+    let mcqText = `<span style="color: #94A3B8; font-size: 0.8rem;">Not Attempted</span>`;
+    if (rec && rec.score !== undefined) {
+      const mcqPassed = (rec.score >= 21);
+      mcqText = `<span class="${mcqPassed ? 'badge-pass' : 'badge-fail'}" style="font-size: 0.78rem;">${rec.score} / ${rec.total || 30} Marks (${mcqPassed ? 'PASS' : 'FAIL'})</span>`;
+    }
+
+    // Practical OJT Mark & Status
+    let ojtMarkText = `<span style="color: #94A3B8; font-size: 0.8rem;">Pending</span>`;
+    let statusBadge = `<span class="badge-pending" style="font-size: 0.78rem; padding: 3px 8px; border-radius: 4px; background: #FEF3C7; color: #D97706; font-weight: 700;">PENDING</span>`;
+
+    if (ojt && ojt.totalScore !== undefined) {
+      const maxScore = ojt.maxScore || 50;
+      const isQualified = ojt.totalScore >= Math.round(maxScore * 0.7);
+      ojtMarkText = `<strong style="color: ${isQualified ? '#059669' : '#DC2626'};">${ojt.totalScore} / ${maxScore} Marks</strong>`;
+      if (isQualified) {
+        statusBadge = `<span class="badge-pass" style="font-size: 0.78rem; padding: 3px 8px;">QUALIFIED</span>`;
+      } else {
+        statusBadge = `<span class="badge-fail" style="font-size: 0.78rem; padding: 3px 8px;">NEEDS REFOCUS</span>`;
+      }
+    }
+
+    return `
+      <tr style="border-bottom: 1px solid #E2E8F0;">
+        <td style="text-align: center; color: #64748B; font-weight: 600;">${idx + 1}</td>
+        <td><strong style="color: var(--primary-dark);">${emp.empNo}</strong></td>
+        <td><strong style="color: #1E293B;">${emp.name}</strong></td>
+        <td><span style="font-size: 0.82rem; color: #475569;">${emp.section || emp.dept || 'QA'}</span></td>
+        <td style="text-align: center;"><span class="iluo-badge iluo-badge-${currLvl.toLowerCase()}" style="width: 24px; height: 24px; font-size: 0.75rem;">${currLvl}</span></td>
+        <td style="text-align: center;"><span class="iluo-badge iluo-badge-${targetLvl.toLowerCase()}" style="width: 24px; height: 24px; font-size: 0.75rem;">${targetLvl}</span></td>
+        <td>${mcqText}</td>
+        <td>${ojtMarkText}</td>
+        <td>${statusBadge}</td>
+        <td style="text-align: center;">
+          <button type="button" class="btn-primary" style="padding: 5px 12px; font-size: 0.78rem; background: #059669; border-color: #059669; font-weight: 700; white-space: nowrap;" onclick="openOjtModalForEmployee('${emp.empNo}')">
+            📋 Score OJT Form
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
 }
 
 // Section Portal Logic

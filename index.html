@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Yokohama ILUO Skill Assessment Portal | Tire Building QA</title>
   <link rel="icon" type="image/png" href="yokohama_logo.png">
-  <link rel="stylesheet" href="styles.css?v=33.0">
+  <link rel="stylesheet" href="styles.css?v=34.0">
 </head>
 <body>
 
@@ -43,10 +43,10 @@
       <span class="tab-icon">🏛️</span> <span>Department</span>
     </button>
     <button class="role-tab-btn" id="tabRoleAdmin" onclick="switchRolePortal('admin')">
-      <span class="tab-icon">⚙️</span> <span>HR Admin</span>
+      <span class="tab-icon">⚙️</span> <span>Admin</span>
     </button>
-    <button class="role-tab-btn" id="tabRoleSop" onclick="openSopModal()" style="border-color: #059669; color: #059669;">
-      <span class="tab-icon">📖</span> <span>ILUO SOP</span>
+    <button class="role-tab-btn" id="tabRoleOjt" onclick="switchRolePortal('ojt')">
+      <span class="tab-icon">📋</span> <span>OJT Login</span>
     </button>
   </nav>
 
@@ -88,20 +88,22 @@
           <span class="portal-arrow">&rarr;</span>
         </button>
 
-        <!-- HR Admin -->
+        <!-- Admin -->
         <button class="vertical-portal-card admin-card" onclick="switchRolePortal('admin')" type="button">
           <div class="portal-card-main">
             <span class="portal-icon">⚙️</span>
-            <span class="portal-title">HR Admin</span>
+            <span class="portal-title">Admin</span>
           </div>
           <span class="portal-arrow">&rarr;</span>
         </button>
-      </div>
 
-      <!-- Quick ILUO Definitions Teaser Link -->
-      <div class="landing-sop-link">
-        <button type="button" onclick="openSopModal()">
-          <span>📖</span> <span>ILUO Definitions &amp; SOP</span>
+        <!-- OJT Login -->
+        <button class="vertical-portal-card ojt-card" onclick="switchRolePortal('ojt')" type="button">
+          <div class="portal-card-main">
+            <span class="portal-icon">📋</span>
+            <span class="portal-title">OJT Login</span>
+          </div>
+          <span class="portal-arrow">&rarr;</span>
         </button>
       </div>
     </section>
@@ -137,7 +139,7 @@
               <button type="submit" class="btn-primary" style="width: 100%; padding: 12px; font-weight: 700;">Sign In to Employee Portal</button>
             </form>
             <div class="login-toggle-text">
-              Switch role? <span class="login-toggle-link" onclick="switchRolePortal('section')">Section Portal</span> &bull; <span class="login-toggle-link" onclick="switchRolePortal('department')">Department HOD</span> &bull; <span class="login-toggle-link" onclick="switchRolePortal('admin')">HR Admin</span>
+              Switch role? <span class="login-toggle-link" onclick="switchRolePortal('section')">Section Portal</span> &bull; <span class="login-toggle-link" onclick="switchRolePortal('department')">Department</span> &bull; <span class="login-toggle-link" onclick="switchRolePortal('admin')">Admin</span> &bull; <span class="login-toggle-link" onclick="switchRolePortal('ojt')">OJT Login</span>
             </div>
           </div>
         </div>
@@ -757,6 +759,165 @@
           </h3>
           <div id="deptTrainingPlanContainer">
             <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW: OJT PORTAL (/ojt or /ojt-login) -->
+    <section class="view-section" id="viewOjtPortal">
+      <!-- OJT 5-Section Login Wrapper (when not signed in to a section) -->
+      <div class="login-wrapper" id="ojtLoginWrapper" style="max-width: 920px; margin: 30px auto;">
+        <div class="login-card" style="border-top: 4px solid #059669; max-width: 100%;">
+          <div class="login-header" style="background: linear-gradient(135deg, #059669 0%, #003D6B 100%);">
+            <h2>OJT Portal Sign In</h2>
+            <p>Select your Evaluation Section below to access Practical OJT evaluations &amp; checkpoints</p>
+          </div>
+          <div class="login-body" style="padding: 28px 24px;">
+            <!-- 5 Interactive Section Cards -->
+            <div class="ojt-sections-grid">
+              <button type="button" class="ojt-section-btn active" id="ojtSecBtnSafety" onclick="selectOjtLoginSection('Safety')" ondblclick="quickEnterOjtSection('Safety')">
+                <div class="ojt-sec-icon">🦺</div>
+                <div class="ojt-sec-title">Safety</div>
+                <div class="ojt-sec-desc">Hazard identification, PPE &amp; emergency protocols</div>
+                <div class="ojt-sec-action" onclick="quickEnterOjtSection('Safety')">Enter Section &rarr;</div>
+              </button>
+              <button type="button" class="ojt-section-btn" id="ojtSecBtnCi" onclick="selectOjtLoginSection('CI & TPM')" ondblclick="quickEnterOjtSection('CI & TPM')">
+                <div class="ojt-sec-icon">⚙️</div>
+                <div class="ojt-sec-title">CI &amp; TPM</div>
+                <div class="ojt-sec-desc">Continuous improvement, 5S &amp; autonomous maintenance</div>
+                <div class="ojt-sec-action" onclick="quickEnterOjtSection('CI & TPM')">Enter Section &rarr;</div>
+              </button>
+              <button type="button" class="ojt-section-btn" id="ojtSecBtnQuality" onclick="selectOjtLoginSection('Quality')" ondblclick="quickEnterOjtSection('Quality')">
+                <div class="ojt-sec-icon">🎯</div>
+                <div class="ojt-sec-title">Quality</div>
+                <div class="ojt-sec-desc">Visual defect detection, standards &amp; compliance</div>
+                <div class="ojt-sec-action" onclick="quickEnterOjtSection('Quality')">Enter Section &rarr;</div>
+              </button>
+              <button type="button" class="ojt-section-btn" id="ojtSecBtnTechnical" onclick="selectOjtLoginSection('Technical')" ondblclick="quickEnterOjtSection('Technical')">
+                <div class="ojt-sec-icon">🔧</div>
+                <div class="ojt-sec-title">Technical</div>
+                <div class="ojt-sec-desc">Machine operation, parameters &amp; tooling mastery</div>
+                <div class="ojt-sec-action" onclick="quickEnterOjtSection('Technical')">Enter Section &rarr;</div>
+              </button>
+              <button type="button" class="ojt-section-btn" id="ojtSecBtnHr" onclick="selectOjtLoginSection('HR')" ondblclick="quickEnterOjtSection('HR')">
+                <div class="ojt-sec-icon">👥</div>
+                <div class="ojt-sec-title">HR</div>
+                <div class="ojt-sec-desc">Competency tracking &amp; official skill authorization</div>
+                <div class="ojt-sec-action" onclick="quickEnterOjtSection('HR')">Enter Section &rarr;</div>
+              </button>
+            </div>
+
+            <!-- Password & Submit Form -->
+            <form onsubmit="handleOjtSectionLogin(event)" style="max-width: 480px; margin: 0 auto; background: #F8FAFC; border: 1px solid #E2E8F0; padding: 20px 24px; border-radius: 12px;">
+              <input type="hidden" id="ojtSelectedSectionInput" value="Safety">
+              <div class="form-group" style="margin-bottom: 14px;">
+                <label style="font-weight: 700; color: #0F172A; display: flex; align-items: center; justify-content: space-between;">
+                  <span>Selected Section:</span>
+                  <span id="ojtSelectedSectionLabel" style="color: #059669; font-weight: 800; font-size: 0.95rem;">🦺 Safety Section</span>
+                </label>
+              </div>
+              <div class="form-group" style="margin-bottom: 18px;">
+                <label for="ojtSectionPassword">Section Evaluator Password</label>
+                <input type="password" id="ojtSectionPassword" class="form-control" placeholder="Enter password (default: ojt123)" value="ojt123" required>
+              </div>
+              <button type="submit" class="btn-primary" id="btnSubmitOjtLogin" style="background: linear-gradient(135deg, #059669 0%, #003D6B 100%); width: 100%; padding: 12px; font-weight: 700;">
+                Sign In to Safety OJT Center
+              </button>
+            </form>
+
+            <div class="login-toggle-text" style="margin-top: 20px;">
+              Switch role? <span class="login-toggle-link" onclick="switchRolePortal('employee')">Employee Portal</span> &bull; <span class="login-toggle-link" onclick="switchRolePortal('section')">Section Portal</span> &bull; <span class="login-toggle-link" onclick="switchRolePortal('department')">Department</span> &bull; <span class="login-toggle-link" onclick="switchRolePortal('admin')">Admin</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- OJT Dashboard (when signed in as one of the 5 sections) -->
+      <div id="ojtDashboardWrapper" style="display: none;">
+        <!-- OJT Dashboard Header -->
+        <div style="background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; padding: 20px 24px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; box-shadow: var(--shadow-sm);">
+          <div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 1.8rem;" id="ojtActiveSectionIcon">🦺</span>
+              <div>
+                <h2 style="margin: 0; color: var(--primary-dark); font-size: 1.4rem;" id="ojtActiveSectionTitle">Safety Section OJT Center</h2>
+                <div style="font-size: 0.85rem; color: var(--text-muted);">Practical On-the-Job Training &bull; Quality Control Department</div>
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span class="badge-pass" id="ojtActiveBadge" style="font-size: 0.85rem; padding: 6px 14px;">Safety Evaluator Active</span>
+            <button class="btn-secondary" style="padding: 8px 16px; font-size: 0.85rem;" onclick="ojtLogout()">Switch Section / Sign Out</button>
+          </div>
+        </div>
+
+        <!-- 3 KPI Cards -->
+        <div class="stats-grid" style="margin-bottom: 24px;">
+          <div class="stat-card" style="border-left: 4px solid #005B9E;">
+            <div class="stat-label">Total Employees</div>
+            <div class="stat-value" id="ojtKpiTotalEmps">236</div>
+            <div class="stat-desc">Plant workforce directory</div>
+          </div>
+          <div class="stat-card" style="border-left: 4px solid #059669;">
+            <div class="stat-label">OJT Qualified (&ge; 70%)</div>
+            <div class="stat-value" style="color: #059669;" id="ojtKpiQualified">0</div>
+            <div class="stat-desc">Passed practical checkpoint exam</div>
+          </div>
+          <div class="stat-card" style="border-left: 4px solid #E31B23;">
+            <div class="stat-label">Pending Practical Evaluation</div>
+            <div class="stat-value" style="color: #E31B23;" id="ojtKpiPending">0</div>
+            <div class="stat-desc">Awaiting evaluator scoring</div>
+          </div>
+        </div>
+
+        <!-- OJT Employees Table Container -->
+        <div class="instruction-card" style="margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+            <h3 style="margin: 0; color: var(--primary-dark); font-size: 1.15rem;">Shop-Floor Employee Practical Evaluation Roster</h3>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <input type="text" id="ojtEmpSearchInput" class="form-control" placeholder="Search by name or emp ID..." style="width: 220px; font-size: 0.85rem;" oninput="renderOjtDashboardTable()">
+              <select id="ojtQcSectionFilter" class="form-control" style="width: 180px; font-size: 0.85rem;" onchange="renderOjtDashboardTable()">
+                <option value="ALL">All QC Sections</option>
+                <option value="Final Finish QA">Final Finish QA</option>
+                <option value="Tire Building QA">Tire Building QA</option>
+                <option value="Tire Curing QA">Tire Curing QA</option>
+                <option value="Solid Tire QA">Solid Tire QA</option>
+                <option value="Preparatory QA">Preparatory QA</option>
+                <option value="Warehouse QA">Warehouse QA</option>
+                <option value="FID Inspector QA">FID Inspector QA</option>
+                <option value="Final Finish RRO & ALT QA">Final Finish RRO &amp; ALT QA</option>
+              </select>
+              <select id="ojtLevelFilter" class="form-control" style="width: 130px; font-size: 0.85rem;" onchange="renderOjtDashboardTable()">
+                <option value="ALL">All Levels</option>
+                <option value="I">Level I</option>
+                <option value="L">Level L</option>
+                <option value="U">Level U</option>
+                <option value="O">Level O</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="overflow-x: auto;">
+            <table class="admin-table" style="width: 100%; min-width: 820px;">
+              <thead>
+                <tr>
+                  <th style="width: 50px;">S.No</th>
+                  <th>Emp ID</th>
+                  <th>Employee Name</th>
+                  <th>QC Section</th>
+                  <th>Current Skill</th>
+                  <th>Target Skill</th>
+                  <th>Knowledge MCQ</th>
+                  <th>Practical OJT Mark</th>
+                  <th>Status</th>
+                  <th style="text-align: center;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="ojtTableBody">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -1909,19 +2070,27 @@
         <textarea id="ojtImprovementComments" class="form-control" rows="2" placeholder="Enter practical improvement areas, training observations or refresher needs..."></textarea>
       </div>
 
-      <!-- Sign-off Section -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 22px; background: #F8FAFC; padding: 12px 16px; border-radius: 8px; border: 1px solid #E2E8F0;">
+      <!-- Sign-off Section (5 Sections: Safety, CI & TPM, Quality, Technical, HR) -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 22px; background: #F8FAFC; padding: 14px 16px; border-radius: 8px; border: 1px solid #E2E8F0;">
         <div>
-          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">Safety Section Representative</label>
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">🦺 Safety Representative</label>
           <input type="text" id="ojtSafetyRep" class="form-control" placeholder="Name &amp; Sign" style="font-size: 0.82rem;">
         </div>
         <div>
-          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">Quality Section Representative</label>
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">⚙️ CI &amp; TPM Representative</label>
+          <input type="text" id="ojtCiRep" class="form-control" placeholder="Name &amp; Sign" style="font-size: 0.82rem;">
+        </div>
+        <div>
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">🎯 Quality Representative</label>
           <input type="text" id="ojtQualityRep" class="form-control" placeholder="Name &amp; Sign" style="font-size: 0.82rem;">
         </div>
         <div>
-          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">CI Representative</label>
-          <input type="text" id="ojtCiRep" class="form-control" placeholder="Name &amp; Sign" style="font-size: 0.82rem;">
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">🔧 Technical Representative</label>
+          <input type="text" id="ojtTechRep" class="form-control" placeholder="Name &amp; Sign" style="font-size: 0.82rem;">
+        </div>
+        <div>
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">👥 HR Representative</label>
+          <input type="text" id="ojtHrRep" class="form-control" placeholder="Name &amp; Sign" style="font-size: 0.82rem;">
         </div>
       </div>
 
@@ -2005,7 +2174,7 @@
   <script defer src="docx_generator.js"></script>
 
   <!-- Data Script & Application Router -->
-  <script src="data.js?v=33.0"></script>
-  <script src="app.js?v=33.0"></script>
+  <script src="data.js?v=34.0"></script>
+  <script src="app.js?v=34.0"></script>
 </body>
 </html>

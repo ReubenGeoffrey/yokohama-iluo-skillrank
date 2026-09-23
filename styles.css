@@ -1849,6 +1849,93 @@ body {
   transform: translateX(4px);
 }
 
+.vertical-portal-card.ojt-card:hover {
+  border-color: #059669;
+  background: #F8FAFC;
+}
+.vertical-portal-card.ojt-card:hover .portal-arrow {
+  color: #059669;
+  transform: translateX(4px);
+}
+
+/* OJT 5-Section Selection Cards */
+.ojt-sections-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.ojt-section-btn {
+  background: #FFFFFF;
+  border: 2px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 20px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.ojt-section-btn:hover {
+  border-color: #059669;
+  background: #F0FDF4;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(5, 150, 105, 0.12);
+}
+
+.ojt-section-btn.active {
+  border-color: #059669;
+  background: #ECFDF5;
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.25);
+}
+
+.ojt-sec-icon {
+  font-size: 2rem;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F1F5F9;
+}
+
+.ojt-section-btn.active .ojt-sec-icon {
+  background: #D1FAE5;
+}
+
+.ojt-sec-title {
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: #0F172A;
+}
+
+.ojt-sec-desc {
+  font-size: 0.78rem;
+  color: #64748B;
+  line-height: 1.3;
+}
+
+.ojt-sec-action {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #059669;
+  background: #E6F4EA;
+  padding: 4px 10px;
+  border-radius: 6px;
+  margin-top: 4px;
+  transition: all 0.2s ease;
+}
+
+.ojt-section-btn:hover .ojt-sec-action {
+  background: #059669;
+  color: #FFFFFF;
+}
+
 .portal-card-main {
   display: flex;
   align-items: center;
