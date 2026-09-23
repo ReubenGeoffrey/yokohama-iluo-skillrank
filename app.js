@@ -14,6 +14,20 @@ let timerInterval = null;
 let pieChartInstance = null;
 let barChartInstance = null;
 let lastTabSwitchTime = 0; // Debounce duplicate events
+let currentActiveSection = 'Tire building QA';
+let currentActiveSectionKey = 'warehouse';
+let currentActiveSectionTab = 'employees';
+
+const QA_SECTIONS_LIST = [
+  { id: 'warehouse', name: 'Ware House QA', normName: 'warehouse qa', code: 'WH', title: 'Warehouse QA' },
+  { id: 'final_finish', name: 'Final Finish QA', normName: 'final finish qa', code: 'FF', title: 'Final Finish QA' },
+  { id: 'tire_building', name: 'Tire building QA', normName: 'tire building qa', code: 'TB', title: 'Tire Building QA' },
+  { id: 'tire_curing', name: 'Tire curing QA', normName: 'tire curing qa', code: 'TC', title: 'Tire Curing QA' },
+  { id: 'solid_tire', name: 'Solid Tire QA', normName: 'solid tire qa', code: 'ST', title: 'Solid Tire QA' },
+  { id: 'rro_alt', name: 'Final Finish RRO & ALT QA', normName: 'final finish rro & alt qa', code: 'RA', title: 'Final Finish RRO & ALT QA' },
+  { id: 'preparatory', name: 'Preparatory QA', normName: 'preparatory qa', code: 'PR', title: 'Preparatory QA' },
+  { id: 'fid_inspector', name: 'FID Inspector QA', normName: 'fid inspector qa', code: 'FD', title: 'FID Inspector QA' }
+];
 
 // Initialize App & Router
 document.addEventListener('DOMContentLoaded', () => {
@@ -3405,20 +3419,6 @@ function handleDocxUpload(event) {
 // ---------------------------------------------------------------------
 // QA SECTIONS & DEPARTMENT EXPLORER (/control-center/sections)
 // ---------------------------------------------------------------------
-const QA_SECTIONS_LIST = [
-  { id: 'warehouse', name: 'Ware House QA', normName: 'warehouse qa', code: 'WH', title: 'Warehouse QA' },
-  { id: 'final_finish', name: 'Final Finish QA', normName: 'final finish qa', code: 'FF', title: 'Final Finish QA' },
-  { id: 'tire_building', name: 'Tire building QA', normName: 'tire building qa', code: 'TB', title: 'Tire Building QA' },
-  { id: 'tire_curing', name: 'Tire curing QA', normName: 'tire curing qa', code: 'TC', title: 'Tire Curing QA' },
-  { id: 'solid_tire', name: 'Solid Tire QA', normName: 'solid tire qa', code: 'ST', title: 'Solid Tire QA' },
-  { id: 'rro_alt', name: 'Final Finish RRO & ALT QA', normName: 'final finish rro & alt qa', code: 'RA', title: 'Final Finish RRO & ALT QA' },
-  { id: 'preparatory', name: 'Preparatory QA', normName: 'preparatory qa', code: 'PR', title: 'Preparatory QA' },
-  { id: 'fid_inspector', name: 'FID Inspector QA', normName: 'fid inspector qa', code: 'FD', title: 'FID Inspector QA' }
-];
-
-let currentActiveSectionKey = 'warehouse'; // Default to Ware House QA
-let currentActiveSectionTab = 'employees';
-
 function renderSectionsExplorer(targetSecKey) {
   if (targetSecKey) currentActiveSectionKey = targetSecKey;
   const currentSec = QA_SECTIONS_LIST.find(s => s.id === currentActiveSectionKey) || QA_SECTIONS_LIST[0];
@@ -4883,13 +4883,17 @@ function switchRolePortal(role) {
   } else if (role === 'admin') {
     const btn = document.getElementById('tabRoleAdmin');
     if (btn) btn.classList.add('active');
-    navigateTo('/secure-control');
+    const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
+    const session = sessionStr ? JSON.parse(sessionStr) : null;
+    if (session && session.role === 'admin') {
+      navigateTo('/secure-control/dashboard');
+    } else {
+      navigateTo('/secure-control');
+    }
   }
 }
 
 // Section Portal Logic
-let currentActiveSection = 'Tire building QA';
-
 function handleSectionLogin(e) {
   if (e) e.preventDefault();
   const select = document.getElementById('secSelectInput');
