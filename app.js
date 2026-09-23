@@ -37,34 +37,6 @@ document.addEventListener('DOMContentLoaded', () => {
   checkExistingSession();
 });
 
-function initStorage() {
-  if (!localStorage.getItem(STORAGE_KEY_RECORDS)) {
-    localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify({}));
-  }
-  // Immediate localStorage bootstrap for questions & employees
-  try {
-    const cachedQ = localStorage.getItem(STORAGE_KEY_CUSTOM_QUESTIONS);
-    if (cachedQ) {
-      const parsedQ = JSON.parse(cachedQ);
-      ['L', 'U', 'O'].forEach(lvl => {
-        if (parsedQ[lvl] && Array.isArray(parsedQ[lvl]) && parsedQ[lvl].length > 0) {
-          QUESTION_BANK[lvl] = parsedQ[lvl];
-        }
-      });
-    }
-  } catch (e) {}
-
-  try {
-    const cachedEmp = localStorage.getItem(STORAGE_KEY_CUSTOM_EMPLOYEES);
-    if (cachedEmp) {
-      const parsedEmp = JSON.parse(cachedEmp);
-      if (Array.isArray(parsedEmp) && parsedEmp.length > 0) {
-        EMPLOYEES.length = 0;
-        EMPLOYEES.push(...parsedEmp);
-      }
-    }
-  } catch (e) {}
-
 // Reliable network request helper with strict timeout to prevent browser tab loading hangs
 async function fetchWithTimeout(url, options = {}, timeoutMs = 3500) {
   const controller = new AbortController();
