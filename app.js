@@ -158,12 +158,13 @@ function navigateTo(path) {
 }
 
 function updateRoleNavHighlight(role) {
-  ['tabRoleEmp', 'tabRoleSection', 'tabRoleDept', 'tabRoleAdmin'].forEach(id => {
+  ['tabRoleHome', 'tabRoleEmp', 'tabRoleSection', 'tabRoleDept', 'tabRoleAdmin'].forEach(id => {
     const btn = document.getElementById(id);
     if (btn) btn.classList.remove('active');
   });
 
   const map = {
+    'home': 'tabRoleHome',
     'employee': 'tabRoleEmp',
     'section': 'tabRoleSection',
     'department': 'tabRoleDept',
@@ -186,7 +187,7 @@ function handleRoute() {
   // Root Public Hub Landing Page (/)
   if (hash === '/' || hash === '' || hash === '/public') {
     showView('viewPublicLanding');
-    updateRoleNavHighlight('employee');
+    updateRoleNavHighlight('home');
     updateUserBadge(session && session.name ? session.name : (session && session.role === 'admin' ? 'Administrator' : null));
     return;
   }
@@ -482,6 +483,15 @@ function showView(viewId) {
   document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active'));
   const target = document.getElementById(viewId);
   if (target) target.classList.add('active');
+
+  const roleNav = document.getElementById('roleNavBar');
+  if (roleNav) {
+    if (viewId === 'viewPublicLanding') {
+      roleNav.style.display = 'none';
+    } else {
+      roleNav.style.display = 'flex';
+    }
+  }
 }
 
 function updateUserBadge(name) {
@@ -4843,8 +4853,13 @@ function downloadCurrentOjtExcel() {
 // 4-ROLE NAVIGATION & PORTAL SYSTEM (ui.pptx)
 // ---------------------------------------------------------------------
 function switchRolePortal(role) {
+  if (role === 'home' || role === 'landing') {
+    navigateTo('/');
+    return;
+  }
+
   // Update navbar buttons
-  ['tabRoleEmp', 'tabRoleSection', 'tabRoleDept', 'tabRoleAdmin'].forEach(id => {
+  ['tabRoleHome', 'tabRoleEmp', 'tabRoleSection', 'tabRoleDept', 'tabRoleAdmin'].forEach(id => {
     const btn = document.getElementById(id);
     if (btn) btn.classList.remove('active');
   });
@@ -4855,7 +4870,7 @@ function switchRolePortal(role) {
     if (currentUser) {
       navigateTo('/employee/dashboard');
     } else {
-      showView('viewEmpLogin');
+      navigateTo('/employee-portal');
     }
   } else if (role === 'section') {
     const btn = document.getElementById('tabRoleSection');

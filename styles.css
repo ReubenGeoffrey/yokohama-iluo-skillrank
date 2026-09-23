@@ -1760,3 +1760,151 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* Vertical Portal Selector (ui.pptx) */
+.landing-hero-simple {
+  text-align: center;
+  margin: 28px 0 32px;
+}
+
+.landing-eyebrow {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--accent-red);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.landing-title {
+  font-size: 1.85rem;
+  color: var(--primary-dark);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.vertical-portal-list {
+  max-width: 440px;
+  margin: 0 auto 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 16px;
+}
+
+.vertical-portal-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 18px 24px;
+  background: #FFFFFF;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.04);
+  text-align: left;
+  outline: none;
+}
+
+.vertical-portal-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+
+.vertical-portal-card.emp-card:hover {
+  border-color: #005B9E;
+  background: #F8FAFC;
+}
+.vertical-portal-card.emp-card:hover .portal-arrow {
+  color: #005B9E;
+  transform: translateX(4px);
+}
+
+.vertical-portal-card.section-card:hover {
+  border-color: #0284C7;
+  background: #F8FAFC;
+}
+.vertical-portal-card.section-card:hover .portal-arrow {
+  color: #0284C7;
+  transform: translateX(4px);
+}
+
+.vertical-portal-card.dept-card:hover {
+  border-color: #7C3AED;
+  background: #F8FAFC;
+}
+.vertical-portal-card.dept-card:hover .portal-arrow {
+  color: #7C3AED;
+  transform: translateX(4px);
+}
+
+.vertical-portal-card.admin-card:hover {
+  border-color: #E31B23;
+  background: #F8FAFC;
+}
+.vertical-portal-card.admin-card:hover .portal-arrow {
+  color: #E31B23;
+  transform: translateX(4px);
+}
+
+.portal-card-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.portal-card-main .portal-icon {
+  font-size: 1.35rem;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F1F5F9;
+  flex-shrink: 0;
+}
+
+.portal-card-main .portal-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0F172A;
+  letter-spacing: -0.2px;
+}
+
+.portal-arrow {
+  font-size: 1.25rem;
+  color: #94A3B8;
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.landing-sop-link {
+  text-align: center;
+  margin-top: 16px;
+  margin-bottom: 30px;
+}
+
+.landing-sop-link button {
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  color: #059669;
+  font-weight: 600;
+  font-size: 0.88rem;
+  padding: 10px 22px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.landing-sop-link button:hover {
+  border-color: #059669;
+  background: #ECFDF5;
+  transform: translateY(-1px);
+}
