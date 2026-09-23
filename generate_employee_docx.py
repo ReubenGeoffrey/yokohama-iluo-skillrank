@@ -177,6 +177,38 @@ OJT_CHECKPOINTS = {
             (7, 'Classification of tires (Grade A, Grade B, Re-check, Scrap)'),
             (8, 'Marking and data logging in MES/Quality portal')
         ]
+    },
+    'fid_inspector': {
+        'formatNo': 'Format No: ATC/T/FOR/HR/90D',
+        'title': 'ON THE JOB TRAINING EVALUATION – FID INSPECTORS',
+        'checkpoints': [
+            (1, 'Safety Awareness (BBs, PPE, Tire handling, Electrical safety)'),
+            (2, 'Basic 5S on shop floor.'),
+            (3, 'Knowledge & Adherence of Inspection Work Instruction and standards.(Inspection machine operation)'),
+            (4, 'OK tires and not ok tire identification and disposal.'),
+            (5, 'MES Scanner usage Confirmation of Ist stage and 2nd Stage inspection cleared tires.'),
+            (6, 'Awareness and adherence to Defect standard.'),
+            (7, 'Tube inflated tire inspection requirements'),
+            (8, 'Tire weighment procedure and handling of off spec tires.'),
+            (9, 'NPD and Pilot Sizes checking procedure adherence'),
+            (10, 'TEI ( Knowledge of QCC, OPL, Kaizen, Suggestion etc.,)')
+        ]
+    },
+    'buffer_repair': {
+        'formatNo': 'Format No: ATC/T/FOR/HR/90G',
+        'title': 'ON THE JOB TRAINING EVALUATION SHEET – Buffer, Compound Repair, Replate',
+        'checkpoints': [
+            (1, 'Plant Safety Awareness (BBs, HSEE, PPE, LOTO, Electrical safety, naphtha handling etc.,)'),
+            (2, 'Basic 5S on shop floor.'),
+            (3, 'Hands-on knowledge of size, engraving description, QR sticker and scanning knowledge'),
+            (4, 'Hands-on Skills in tire inner, outer defects, mould mark defects,'),
+            (5, 'Knowledge & Adherence of Work Instruction and standards, Replate & Autoclave machine operation skill'),
+            (6, 'Tire inner and outer surface repairing skill along with buffing stone and right buffing gun selection.'),
+            (7, 'Precautions for forklift usage during Autoclave loading/unloading, tire handling and movement inside & between FID, EOT Operation and AMR basic operation.'),
+            (8, 'OTR Tire drilling and Bead reducer operation.'),
+            (9, 'Knowledge of FIFO & Clearing of old tires on time.'),
+            (10, 'TEI ( Knowledge of QCC, OPL, Kaizen, Suggestion etc.,)')
+        ]
     }
 }
 
@@ -190,6 +222,7 @@ def normalize_section(sec):
     if 'solid' in s: return 'solid tire qa'
     if 'preparatory' in s: return 'preparatory qa'
     if 'fid' in s: return 'fid inspector qa'
+    if 'buffer' in s or 'compound' in s or 'replate' in s: return 'buffer compound repair replate'
     if 'warehouse' in s or 'data entry' in s: return 'warehouse qa'
     if 'finish' in s: return 'final finish qa'
     return s
@@ -198,9 +231,11 @@ def get_ojt_key(sec_norm):
     if 'rro' in sec_norm or 'alt' in sec_norm: return 'rro_alt'
     if 'preparatory' in sec_norm: return 'preparatory'
     if 'solid' in sec_norm: return 'solid_tire'
-    if 'building' in sec_norm: return 'tire_building'
+    if 'building' in sec_norm or 'tbm' in sec_norm: return 'tire_building'
     if 'curing' in sec_norm: return 'tire_curing'
-    if 'warehouse' in sec_norm or 'fid' in sec_norm: return 'warehouse'
+    if 'fid' in sec_norm: return 'fid_inspector'
+    if 'buffer' in sec_norm or 'compound' in sec_norm or 'replate' in sec_norm: return 'buffer_repair'
+    if 'warehouse' in sec_norm or 'data entry' in sec_norm: return 'warehouse'
     return 'final_finish'
 
 def load_data():

@@ -500,13 +500,23 @@ app.delete('/api/records/:empNo', async (req, res) => {
 // ---------------------------------------------------------------------
 // INDIVIDUAL EMPLOYEE DOCX QUALIFICATION REPORT GENERATOR (Exact Template Mapper)
 // ---------------------------------------------------------------------
-const { getTemplateFilename, mapExactTemplate } = require('./docx_generator.js');
+const { getTemplateFilename, mapExactTemplate, generateStandaloneOjtDocx } = require('./docx_generator.js');
 let JSZipLib = null;
 try {
   JSZipLib = require('./jszip.min.js');
 } catch (e) {
   try { JSZipLib = require('jszip'); } catch (err) {}
 }
+
+let serverOjtTemplates = null;
+try {
+  const ojtCode = fs.readFileSync(path.join(__dirname, 'ojt_templates_data.js'), 'utf-8');
+  const vm = require('vm');
+  const sandbox = {};
+  vm.createContext(sandbox);
+  vm.runInContext(ojtCode, sandbox);
+  serverOjtTemplates = sandbox.OJT_OFFICIAL_TEMPLATES || null;
+} catch (e) {}
 
 async function buildDocxBufferForEmployee(empNo, optionalRecordData) {
   let emp = null;
@@ -560,7 +570,22 @@ async function buildDocxBufferForEmployee(empNo, optionalRecordData) {
     } catch (e) {}
   }
 
-  const zip = await mapExactTemplate(templateBuf, emp, examRecord, JSZipLib, qbQuestions);
+  const ojtRec = globalOjtEvaluations ? globalOjtEvaluations.get(String(empNo)) : null;
+  let ojtTmpl = null;
+  if (serverOjtTemplates && emp && emp.section) {
+    const s = emp.section.toLowerCase();
+    if (s.includes('solid')) ojtTmpl = serverOjtTemplates['86D'];
+    else if (s.includes('rro') || s.includes('alt')) ojtTmpl = serverOjtTemplates['83D'];
+    else if (s.includes('preparatory')) ojtTmpl = serverOjtTemplates['85D'];
+    else if (s.includes('building') || s.includes('tbm')) ojtTmpl = serverOjtTemplates['87D'];
+    else if (s.includes('curing')) ojtTmpl = serverOjtTemplates['88D'];
+    else if (s.includes('warehouse') || s.includes('data entry')) ojtTmpl = serverOjtTemplates['89D'];
+    else if (s.includes('fid')) ojtTmpl = serverOjtTemplates['90D'];
+    else if (s.includes('buffer') || s.includes('compound') || s.includes('replate')) ojtTmpl = serverOjtTemplates['90G'];
+    else ojtTmpl = serverOjtTemplates['84D'];
+  }
+
+  const zip = await mapExactTemplate(templateBuf, emp, examRecord, JSZipLib, qbQuestions, ojtRec, ojtTmpl);
   return await zip.generateAsync({ type: 'nodebuffer' });
 }
 
@@ -576,6 +601,46 @@ app.get('/api/employee-docx/:empNo', async (req, res) => {
   } catch (err) {
     console.error(`DOCX generation error for ${empNo}:`, err.message);
     return res.status(500).json({ success: false, message: 'Failed to generate DOCX', error: err.message });
+  }
+});
+
+app.get('/api/ojt-docx/:empNo', async (req, res) => {
+  const empNo = String(req.params.empNo).trim();
+  try {
+    let emp = null;
+    if (customEmployeesMemory && Array.isArray(customEmployeesMemory)) {
+      emp = customEmployeesMemory.find(e => String(e.empNo).trim() === empNo);
+    }
+    if (!emp) emp = { empNo, name: `Employee ${empNo}`, section: 'Tire building QA', dept: 'QUALITY CONTROL' };
+
+    const ojtRec = globalOjtEvaluations ? globalOjtEvaluations.get(empNo) : null;
+    let ojtTmpl = null;
+    if (serverOjtTemplates && emp && emp.section) {
+      const s = emp.section.toLowerCase();
+      if (s.includes('solid')) ojtTmpl = serverOjtTemplates['86D'];
+      else if (s.includes('rro') || s.includes('alt')) ojtTmpl = serverOjtTemplates['83D'];
+      else if (s.includes('preparatory')) ojtTmpl = serverOjtTemplates['85D'];
+      else if (s.includes('building') || s.includes('tbm')) ojtTmpl = serverOjtTemplates['87D'];
+      else if (s.includes('curing')) ojtTmpl = serverOjtTemplates['88D'];
+      else if (s.includes('warehouse') || s.includes('data entry')) ojtTmpl = serverOjtTemplates['89D'];
+      else if (s.includes('fid')) ojtTmpl = serverOjtTemplates['90D'];
+      else if (s.includes('buffer') || s.includes('compound') || s.includes('replate')) ojtTmpl = serverOjtTemplates['90G'];
+      else ojtTmpl = serverOjtTemplates['84D'];
+    }
+    if (!ojtTmpl && serverOjtTemplates) ojtTmpl = serverOjtTemplates['87D'] || Object.values(serverOjtTemplates)[0];
+
+    const zip = await generateStandaloneOjtDocx(emp, ojtTmpl, (ojtRec && ojtRec.scores) || {}, (ojtRec && ojtRec.wiChecks) || {}, ojtRec || {}, JSZipLib);
+    const buf = await zip.generateAsync({ type: 'nodebuffer' });
+    const cleanName = (emp.name || empNo).replace(/[^a-zA-Z0-9]/g, '_');
+    const fileName = `Yokohama_OJT_${ojtTmpl ? ojtTmpl.id : 'Form'}_${empNo}_${cleanName}.docx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', buf.length);
+    return res.send(buf);
+  } catch (err) {
+    console.error(`OJT DOCX error for ${empNo}:`, err.message);
+    return res.status(500).json({ success: false, message: 'Failed to generate OJT DOCX', error: err.message });
   }
 });
 

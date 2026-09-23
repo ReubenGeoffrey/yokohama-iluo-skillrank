@@ -2862,12 +2862,18 @@ async function generateClientSideDocx(empNo, recordData) {
 
   const qbQuestions = (typeof QUESTION_BANK !== 'undefined' && QUESTION_BANK[targetLevel]) ? QUESTION_BANK[targetLevel] : [];
 
+  const allOjt = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
+  const ojtRec = allOjt[empNo] || null;
+  const ojtTmpl = (typeof getOjtTemplateForSection === 'function') ? getOjtTemplateForSection(emp.section) : null;
+
   const zip = await window.YokohamaDocxGenerator.mapExactTemplate(
     templateArrayBuffer,
     emp,
     examRecord,
     window.JSZip,
-    qbQuestions
+    qbQuestions,
+    ojtRec,
+    ojtTmpl
   );
 
   const blob = await zip.generateAsync({
@@ -5173,6 +5179,20 @@ function downloadCurrentOjtExcel() {
         ws[tmpl.evalCiCell] = { t: 's', v: ciRep ? (ciRep + (ciDate ? ' (' + ciDate + ')' : '')) : '' };
       }
 
+      // Section Head Signatures
+      const safeHeadSign = document.getElementById('ojtSafetyHeadSign') ? document.getElementById('ojtSafetyHeadSign').value.trim() : '';
+      const qualHeadSign = document.getElementById('ojtQualityHeadSign') ? document.getElementById('ojtQualityHeadSign').value.trim() : '';
+      const ciHeadSign = document.getElementById('ojtCiHeadSign') ? document.getElementById('ojtCiHeadSign').value.trim() : '';
+      const reassessDate = document.getElementById('ojtReassessmentDate') ? document.getElementById('ojtReassessmentDate').value : '';
+
+      const baseHeadRow = tmpl.finalCommentRow ? (tmpl.finalCommentRow + 2) : (tmpl.totalScoreRow + 12);
+      if (safeHeadSign) ws['A' + baseHeadRow] = { t: 's', v: safeHeadSign };
+      if (qualHeadSign) ws['A' + (baseHeadRow + 2)] = { t: 's', v: qualHeadSign };
+      if (ciHeadSign) ws['A' + (baseHeadRow + 4)] = { t: 's', v: ciHeadSign };
+      if (reassessDate && tmpl.qualificationStatusRow) {
+        ws['H' + tmpl.qualificationStatusRow] = { t: 's', v: reassessDate };
+      }
+
       // Qualification Status
       if (isQual && tmpl.qualCellQualified) {
         ws[tmpl.qualCellQualified] = { t: 's', v: 'Qualified [✓]' };
@@ -5188,6 +5208,60 @@ function downloadCurrentOjtExcel() {
     }
   } catch (err) {
     console.error('OJT export error:', err);
+    showToast('Download error: ' + err.message);
+  }
+}
+
+async function downloadCurrentOjtDocx() {
+  if (!hasOjtEvaluationAccess()) {
+    showToast('Access Denied: Only Section Supervisors and Admins can download OJT Word files.');
+    return;
+  }
+  if (!activeOjtEmployee || !activeOjtTemplate) return;
+
+  saveOjtEvaluationForm();
+
+  const emp = activeOjtEmployee;
+  const tmpl = activeOjtTemplate;
+  const allOjt = getStoredOjtRecords();
+  const ojtData = allOjt[emp.empNo] || {};
+
+  showToast(`Generating official OJT Word Document (${tmpl.id})...`);
+
+  try {
+    if (typeof window.YokohamaDocxGenerator !== 'undefined' && typeof window.JSZip !== 'undefined') {
+      const zip = await window.YokohamaDocxGenerator.generateStandaloneOjtDocx(
+        emp,
+        tmpl,
+        activeOjtScores,
+        activeOjtWiChecks,
+        ojtData,
+        window.JSZip
+      );
+
+      const blob = await zip.generateAsync({
+        type: 'blob',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      });
+
+      const cleanName = emp.name.replace(/[^a-zA-Z0-9]/g, '_');
+      const filename = `Yokohama_OJT_${tmpl.id}_${emp.empNo}_${cleanName}.docx`;
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      showToast(`Official OJT Word Document (${tmpl.formatNo}) downloaded successfully!`);
+    } else {
+      showToast('Word generator is initializing. Please try again in a moment.');
+    }
+  } catch (err) {
+    console.error('OJT Word export error:', err);
     showToast('Download error: ' + err.message);
   }
 }

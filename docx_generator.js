@@ -393,8 +393,305 @@
       return pXml;
     });
 
-    const finalDocXml = partBeforeTbl + questionsPart + tailPart;
+    // Check if OJT evaluation data exists to append to the comprehensive report
+    let ojtSectionXml = '';
+    const ojtRec = optionalOjtData || (typeof getStoredOjtRecords === 'function' ? getStoredOjtRecords()[empNo] : null) || (global.globalOjtEvaluations ? global.globalOjtEvaluations.get(String(empNo)) : null);
+    let ojtTmpl = optionalOjtTemplate;
+    if (!ojtTmpl && typeof global.OJT_OFFICIAL_TEMPLATES !== 'undefined') {
+      ojtTmpl = typeof getOjtTemplateForSection === 'function' ? getOjtTemplateForSection(section) : global.OJT_OFFICIAL_TEMPLATES['87D'];
+    }
+    if (ojtRec && ojtTmpl) {
+      ojtSectionXml = buildOjtDocxBodyXml(emp, ojtTmpl, ojtRec.scores || {}, ojtRec.wiChecks || {}, ojtRec, false);
+    }
+
+    let finalDocXml = partBeforeTbl + questionsPart + tailPart;
+    if (ojtSectionXml) {
+      const sectPrMatch = finalDocXml.match(/<w:sectPr(?:\s[^>]*)?>[\s\S]*?<\/w:sectPr>\s*<\/w:body>/);
+      if (sectPrMatch) {
+        finalDocXml = finalDocXml.replace(sectPrMatch[0], `${ojtSectionXml}${sectPrMatch[0]}`);
+      } else {
+        finalDocXml = finalDocXml.replace('</w:body>', `${ojtSectionXml}</w:body>`);
+      }
+    }
     zip.file('word/document.xml', finalDocXml);
+    return zip;
+  }
+
+  function buildOjtDocxBodyXml(emp, tmpl, scores, wiChecks, ojtData, isStandalone = true) {
+    scores = scores || {};
+    wiChecks = wiChecks || {};
+    ojtData = ojtData || {};
+
+    const numCheckpoints = tmpl.checkpointCount || (tmpl.checkpoints ? tmpl.checkpoints.length : 10);
+    const maxScore = numCheckpoints * 5;
+    let totalScore = 0;
+    (tmpl.checkpoints || []).forEach(cp => {
+      totalScore += (scores[cp.sno] || 0);
+    });
+    const pct = Math.round((totalScore / maxScore) * 100);
+    const isQual = (ojtData.qualificationStatus === 'Qualified') || (pct >= 70);
+
+    const targetMap = { 'I': 'L', 'L': 'U', 'U': 'O', 'O': 'O' };
+    const currLvl = emp.currentLevel || 'I';
+    const targetLvl = targetMap[currLvl] || 'L';
+    const assessDate = emp.assessmentDate || ojtData.evaluatedAt || new Date().toLocaleDateString('en-GB');
+
+    const tblBorders = `
+      <w:tblBorders>
+        <w:top w:val="single" w:sz="8" w:space="0" w:color="005B9E"/>
+        <w:left w:val="single" w:sz="8" w:space="0" w:color="005B9E"/>
+        <w:bottom w:val="single" w:sz="8" w:space="0" w:color="005B9E"/>
+        <w:right w:val="single" w:sz="8" w:space="0" w:color="005B9E"/>
+        <w:insideH w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/>
+        <w:insideV w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/>
+      </w:tblBorders>`;
+
+    function cellXml(text, widthDxa, bold = false, align = 'left', bgColor = null, color = '0F172A', fontSize = 18) {
+      const shd = bgColor ? `<w:shd w:val="clear" w:color="auto" w:fill="${bgColor}"/>` : '';
+      return `
+        <w:tc>
+          <w:tcPr>
+            <w:tcW w:w="${widthDxa}" w:type="dxa"/>
+            ${shd}
+            <w:tcMar>
+              <w:top w:w="120" w:type="dxa"/>
+              <w:bottom w:w="120" w:type="dxa"/>
+              <w:left w:w="160" w:type="dxa"/>
+              <w:right w:w="160" w:type="dxa"/>
+            </w:tcMar>
+          </w:tcPr>
+          <w:p>
+            <w:pPr><w:jc w:val="${align}"/><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>
+            <w:r>
+              <w:rPr>
+                <w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>
+                ${bold ? '<w:b/><w:bCs/>' : ''}
+                <w:sz w:val="${fontSize}"/>
+                <w:szCs w:val="${fontSize}"/>
+                <w:color w:val="${color}"/>
+              </w:rPr>
+              <w:t xml:space="preserve">${escapeXml(text)}</w:t>
+            </w:r>
+          </w:p>
+        </w:tc>`;
+    }
+
+    const empTable = `
+      <w:tbl>
+        <w:tblPr>
+          <w:tblW w:w="9360" w:type="dxa"/>
+          <w:jc w:val="center"/>
+          ${tblBorders}
+        </w:tblPr>
+        <w:tblGrid>
+          <w:gridCol w:w="4680"/>
+          <w:gridCol w:w="2340"/>
+          <w:gridCol w:w="2340"/>
+        </w:tblGrid>
+        <w:tr>
+          ${cellXml('Name: ' + (emp.name || ''), 4680, true)}
+          ${cellXml('Emp ID: ' + (emp.empNo || ''), 2340, true, 'center', null, '005B9E')}
+          ${cellXml('Joining Date: ' + (emp.doj || '-'), 2340, false, 'center')}
+        </w:tr>
+        <w:tr>
+          ${cellXml('Section & Dept.: ' + (emp.section || '-') + ' / ' + (emp.dept || 'QUALITY CONTROL'), 4680, false)}
+          ${cellXml(`Skill Level: ( ${currLvl} ) TO ( ${targetLvl} )`, 2340, true, 'center', null, '0284C7')}
+          ${cellXml('Assessment Date: ' + assessDate, 2340, false, 'center')}
+        </w:tr>
+      </w:tbl>`;
+
+    const cpRows = (tmpl.checkpoints || []).map((cp, idx) => {
+      const sc = scores[cp.sno];
+      const scText = (sc !== undefined && sc > 0) ? `${sc} / 5 Marks` : '- / 5 Marks';
+      const isWi = !!wiChecks[cp.sno];
+      const wiText = isWi ? '✓ OK' : '-';
+      const rowBg = idx % 2 === 0 ? 'FFFFFF' : 'F8FAFC';
+      const scColor = (sc && sc >= 3) ? '166534' : ((sc && sc > 0) ? 'DC2626' : '64748B');
+      return `
+        <w:tr>
+          ${cellXml(String(cp.sno), 600, true, 'center', rowBg, '475569')}
+          ${cellXml(cp.text, 6160, false, 'left', rowBg, '1E293B')}
+          ${cellXml(scText, 1600, true, 'center', rowBg, scColor)}
+          ${cellXml(wiText, 1000, isWi, 'center', rowBg, isWi ? '166534' : '64748B')}
+        </w:tr>`;
+    }).join('');
+
+    const checkpointsTable = `
+      <w:tbl>
+        <w:tblPr>
+          <w:tblW w:w="9360" w:type="dxa"/>
+          <w:jc w:val="center"/>
+          ${tblBorders}
+        </w:tblPr>
+        <w:tblGrid>
+          <w:gridCol w:w="600"/>
+          <w:gridCol w:w="6160"/>
+          <w:gridCol w:w="1600"/>
+          <w:gridCol w:w="1000"/>
+        </w:tblGrid>
+        <w:tr>
+          ${cellXml('S.No', 600, true, 'center', '005B9E', 'FFFFFF', 19)}
+          ${cellXml('Training Content / Check Point', 6160, true, 'left', '005B9E', 'FFFFFF', 19)}
+          ${cellXml('Score', 1600, true, 'center', '005B9E', 'FFFFFF', 19)}
+          ${cellXml('WI Check', 1000, true, 'center', '005B9E', 'FFFFFF', 19)}
+        </w:tr>
+        ${cpRows}
+        <w:tr>
+          ${cellXml('TOTAL SCORE', 6760, true, 'right', 'F1F5F9', '0F172A', 20)}
+          ${cellXml(`${totalScore} / ${maxScore} = ${pct}%`, 1600, true, 'center', isQual ? 'DCFCE7' : 'FEE2E2', isQual ? '166534' : '991B1B', 20)}
+          ${cellXml(isQual ? 'QUALIFIED' : 'NEEDS REFOCUS', 1000, true, 'center', isQual ? 'DCFCE7' : 'FEE2E2', isQual ? '166534' : '991B1B', 18)}
+        </w:tr>
+      </w:tbl>`;
+
+    const evalTable = `
+      <w:tbl>
+        <w:tblPr>
+          <w:tblW w:w="9360" w:type="dxa"/>
+          <w:jc w:val="center"/>
+          ${tblBorders}
+        </w:tblPr>
+        <w:tblGrid>
+          <w:gridCol w:w="1872"/>
+          <w:gridCol w:w="1872"/>
+          <w:gridCol w:w="1872"/>
+          <w:gridCol w:w="1872"/>
+          <w:gridCol w:w="1872"/>
+        </w:tblGrid>
+        <w:tr>
+          ${cellXml('Safety (Section Rep)', 1872, true, 'center', 'F1F5F9', '005B9E')}
+          ${cellXml('Quality (Section Rep)', 1872, true, 'center', 'F1F5F9', '005B9E')}
+          ${cellXml('CI (Representative)', 1872, true, 'center', 'F1F5F9', '005B9E')}
+          ${cellXml('Technical (Representative)', 1872, true, 'center', 'F1F5F9', '005B9E')}
+          ${cellXml('HR (Representative)', 1872, true, 'center', 'F1F5F9', '005B9E')}
+        </w:tr>
+        <w:tr>
+          ${cellXml((ojtData.safetyRep || '-') + (ojtData.safetyDate ? `\n(${ojtData.safetyDate})` : ''), 1872, false, 'center')}
+          ${cellXml((ojtData.qualityRep || '-') + (ojtData.qualityDate ? `\n(${ojtData.qualityDate})` : ''), 1872, false, 'center')}
+          ${cellXml((ojtData.ciRep || '-') + (ojtData.ciDate ? `\n(${ojtData.ciDate})` : ''), 1872, false, 'center')}
+          ${cellXml((ojtData.techRep || '-') + (ojtData.techDate ? `\n(${ojtData.techDate})` : ''), 1872, false, 'center')}
+          ${cellXml((ojtData.hrRep || '-') + (ojtData.hrDate ? `\n(${ojtData.hrDate})` : ''), 1872, false, 'center')}
+        </w:tr>
+      </w:tbl>`;
+
+    const headTable = `
+      <w:tbl>
+        <w:tblPr>
+          <w:tblW w:w="9360" w:type="dxa"/>
+          <w:jc w:val="center"/>
+          ${tblBorders}
+        </w:tblPr>
+        <w:tblGrid>
+          <w:gridCol w:w="3120"/>
+          <w:gridCol w:w="3120"/>
+          <w:gridCol w:w="3120"/>
+        </w:tblGrid>
+        <w:tr>
+          ${cellXml('Safety Section Head', 3120, true, 'center', 'F1F5F9', '334155')}
+          ${cellXml('Quality Section Head', 3120, true, 'center', 'F1F5F9', '334155')}
+          ${cellXml('CI Head', 3120, true, 'center', 'F1F5F9', '334155')}
+        </w:tr>
+        <w:tr>
+          ${cellXml(ojtData.safetyHeadSign || 'Sign & Name with Date', 3120, false, 'center')}
+          ${cellXml(ojtData.qualityHeadSign || 'Sign & Name with Date', 3120, false, 'center')}
+          ${cellXml(ojtData.ciHeadSign || 'Sign & Name with Date', 3120, false, 'center')}
+        </w:tr>
+      </w:tbl>`;
+
+    const pageBreak = isStandalone ? '' : '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
+
+    return `
+      ${pageBreak}
+      <w:p>
+        <w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="40"/></w:pPr>
+        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="28"/><w:color w:val="0F172A"/></w:rPr><w:t>ATC TIRES PRIVATE LIMITED</w:t></w:r>
+      </w:p>
+      <w:p>
+        <w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="40"/></w:pPr>
+        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="24"/><w:color w:val="005B9E"/></w:rPr><w:t>${escapeXml(tmpl.title)}</w:t></w:r>
+      </w:p>
+      <w:p>
+        <w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="160"/></w:pPr>
+        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="18"/><w:color w:val="64748B"/></w:rPr><w:t>${escapeXml(tmpl.formatNo)}</w:t></w:r>
+      </w:p>
+
+      ${empTable}
+
+      <w:p>
+        <w:pPr><w:jc w:val="center"/><w:spacing w:before="120" w:after="120"/></w:pPr>
+        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="17"/><w:color w:val="0F172A"/></w:rPr><w:t>RANK SCALE:   </w:t></w:r>
+        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="17"/><w:color w:val="DC2626"/></w:rPr><w:t>1 = POOR   |   </w:t></w:r>
+        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="17"/><w:color w:val="EA580C"/></w:rPr><w:t>2 = FAIR   |   </w:t></w:r>
+        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="17"/><w:color w:val="D97706"/></w:rPr><w:t>3 = GOOD   |   </w:t></w:r>
+        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="17"/><w:color w:val="2563EB"/></w:rPr><w:t>4 = VERY GOOD   |   </w:t></w:r>
+        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="17"/><w:color w:val="16A34A"/></w:rPr><w:t>5 = EXCELLENT</w:t></w:r>
+      </w:p>
+
+      ${checkpointsTable}
+
+      <w:p>
+        <w:pPr><w:spacing w:before="160" w:after="40"/></w:pPr>
+        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="18"/><w:color w:val="0F172A"/></w:rPr><w:t>IMPROVEMENT / TRAINING REQUIREMENT:</w:t></w:r>
+      </w:p>
+      <w:p>
+        <w:pPr><w:spacing w:before="0" w:after="160"/></w:pPr>
+        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="18"/><w:color w:val="334155"/></w:rPr><w:t>${escapeXml(ojtData.comments || 'No specific improvement requirements observed. Standard procedures maintained.')}</w:t></w:r>
+      </w:p>
+
+      <w:p>
+        <w:pPr><w:spacing w:before="80" w:after="40"/></w:pPr>
+        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="18"/><w:color w:val="005B9E"/></w:rPr><w:t>EVALUATION BY (NAME &amp; SIGN WITH DATE):</w:t></w:r>
+      </w:p>
+      ${evalTable}
+
+      <w:p>
+        <w:pPr><w:spacing w:before="120" w:after="40"/></w:pPr>
+        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="18"/><w:color w:val="334155"/></w:rPr><w:t>FINAL COMMENT BY SECTION HEADS:</w:t></w:r>
+      </w:p>
+      ${headTable}
+
+      <w:p>
+        <w:pPr><w:spacing w:before="120" w:after="40"/></w:pPr>
+        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="18"/><w:color w:val="0F172A"/></w:rPr><w:t>FINAL RECOMMENDATION &amp; APPROVAL:   </w:t></w:r>
+        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="18"/><w:color w:val="${isQual ? '166534' : 'DC2626'}"/></w:rPr><w:t>${isQual ? '[✔] QUALIFIED' : '[✔] NOT QUALIFIED (RETEST REQUIRED)'}</w:t></w:r>
+      </w:p>
+      <w:p>
+        <w:pPr><w:spacing w:before="40" w:after="80"/></w:pPr>
+        <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="18"/><w:color w:val="475569"/></w:rPr><w:t>QUALITY - HEAD SIGN-OFF:   Approved &amp; Documented</w:t></w:r>
+      </w:p>
+    `;
+  }
+
+  async function generateStandaloneOjtDocx(emp, tmpl, scores, wiChecks, ojtData, jszipInstance) {
+    const JSZip = jszipInstance || (typeof window !== 'undefined' ? window.JSZip : null);
+    if (!JSZip) throw new Error('JSZip library is required to generate OJT Word document');
+
+    const zip = new JSZip();
+
+    zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`);
+
+    zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`);
+
+    const bodyContent = buildOjtDocxBodyXml(emp, tmpl, scores, wiChecks, ojtData, true);
+    const docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    ${bodyContent}
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="360" w:footer="360" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>`;
+
+    zip.file('word/document.xml', docXml);
     return zip;
   }
 
@@ -403,7 +700,9 @@
     module.exports = {
       TEMPLATE_FILE_MAP,
       getTemplateFilename,
-      mapExactTemplate
+      mapExactTemplate,
+      buildOjtDocxBodyXml,
+      generateStandaloneOjtDocx
     };
   }
 
@@ -412,7 +711,9 @@
     window.YokohamaDocxGenerator = {
       TEMPLATE_FILE_MAP,
       getTemplateFilename,
-      mapExactTemplate
+      mapExactTemplate,
+      buildOjtDocxBodyXml,
+      generateStandaloneOjtDocx
     };
   }
 
