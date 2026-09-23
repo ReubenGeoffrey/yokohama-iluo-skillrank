@@ -23,6 +23,13 @@ app.get('/favicon.ico', (req, res) => {
   res.sendFile(path.join(__dirname, 'yokohama_logo.png'));
 });
 
+// Explicit OJT Official Templates script handler
+app.get('/ojt_templates_data.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.sendFile(path.join(__dirname, 'ojt_templates_data.js'));
+});
+
 // Server-side active OTP storage (Email -> { otp, expiresAt, attempts, lastSendAt })
 const otpStore = new Map();
 

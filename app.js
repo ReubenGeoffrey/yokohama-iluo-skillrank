@@ -4611,7 +4611,7 @@ let activeOjtWiChecks = {};
 function populateOjtTemplateSwitcher() {
   const switcher = document.getElementById('ojtTemplateSwitcher');
   if (!switcher || typeof OJT_OFFICIAL_TEMPLATES === 'undefined') return;
-  const currentVal = switcher.value;
+  const currentVal = (activeOjtTemplate && activeOjtTemplate.id) || switcher.value;
   switcher.innerHTML = '<option value="">-- Choose Official OJT Template --</option>';
   
   const templateOrder = ['86D', '84D', '83D', '89D', '90D', '85D', '87D', '88D', '90G'];
@@ -4742,7 +4742,15 @@ function openOjtModalForEmployee(empNo, optTemplateId) {
     return;
   }
 
-  const emp = EMPLOYEES.find(e => String(e.empNo).trim() === String(empNo).trim());
+  // If templates script is still loading asynchronously, wait and retry
+  if (typeof OJT_OFFICIAL_TEMPLATES === 'undefined') {
+    setTimeout(() => openOjtModalForEmployee(empNo, optTemplateId), 150);
+    return;
+  }
+
+  const emp = (typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES))
+    ? EMPLOYEES.find(e => String(e.empNo).trim() === String(empNo).trim())
+    : null;
   if (!emp) {
     showToast(`Employee ${empNo} not found in directory.`);
     return;
@@ -4750,10 +4758,13 @@ function openOjtModalForEmployee(empNo, optTemplateId) {
 
   activeOjtEmployee = emp;
 
-  if (optTemplateId && typeof OJT_OFFICIAL_TEMPLATES !== 'undefined' && OJT_OFFICIAL_TEMPLATES[optTemplateId]) {
+  if (optTemplateId && OJT_OFFICIAL_TEMPLATES[optTemplateId]) {
     activeOjtTemplate = OJT_OFFICIAL_TEMPLATES[optTemplateId];
   } else {
     activeOjtTemplate = getOjtTemplateForSection(emp.section);
+  }
+  if (!activeOjtTemplate && typeof OJT_OFFICIAL_TEMPLATES !== 'undefined') {
+    activeOjtTemplate = OJT_OFFICIAL_TEMPLATES['87D'] || Object.values(OJT_OFFICIAL_TEMPLATES)[0];
   }
 
   populateOjtEmployeeSwitcher();
@@ -4823,7 +4834,11 @@ function openOjtModalForEmployee(empNo, optTemplateId) {
 }
 
 function renderOjtForm() {
-  if (!activeOjtEmployee || !activeOjtTemplate) return;
+  if (!activeOjtEmployee) return;
+  if (!activeOjtTemplate && typeof OJT_OFFICIAL_TEMPLATES !== 'undefined') {
+    activeOjtTemplate = getOjtTemplateForSection(activeOjtEmployee.section) || OJT_OFFICIAL_TEMPLATES['87D'] || Object.values(OJT_OFFICIAL_TEMPLATES)[0];
+  }
+  if (!activeOjtTemplate) return;
 
   const emp = activeOjtEmployee;
   const tmpl = activeOjtTemplate;
