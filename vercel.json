@@ -18,7 +18,8 @@
             "yokohama_logo.png",
             "mammoth.browser.min.js",
             "xlsx.full.min.js",
-            "QC_templates/**"
+            "QC_templates/**",
+            "assets/**"
           ]
       }
     }

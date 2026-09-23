@@ -65,14 +65,59 @@ function initStorage() {
     }
   } catch (e) {}
 
-  // Defer cloud syncs after initial page paint for instant loading
+// Reliable network request helper with strict timeout to prevent browser tab loading hangs
+async function fetchWithTimeout(url, options = {}, timeoutMs = 3500) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
+}
+
+function initStorage() {
+  if (!localStorage.getItem(STORAGE_KEY_RECORDS)) {
+    localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify({}));
+  }
+  // Immediate localStorage bootstrap for questions & employees
+  try {
+    const cachedQ = localStorage.getItem(STORAGE_KEY_CUSTOM_QUESTIONS);
+    if (cachedQ) {
+      const parsedQ = JSON.parse(cachedQ);
+      ['L', 'U', 'O'].forEach(lvl => {
+        if (parsedQ[lvl] && Array.isArray(parsedQ[lvl]) && parsedQ[lvl].length > 0) {
+          QUESTION_BANK[lvl] = parsedQ[lvl];
+        }
+      });
+    }
+  } catch (e) {}
+
+  try {
+    const cachedEmp = localStorage.getItem(STORAGE_KEY_CUSTOM_EMPLOYEES);
+    if (cachedEmp) {
+      const parsedEmp = JSON.parse(cachedEmp);
+      if (Array.isArray(parsedEmp) && parsedEmp.length > 0) {
+        EMPLOYEES.length = 0;
+        EMPLOYEES.push(...parsedEmp);
+      }
+    }
+  } catch (e) {}
+
+  // Stagger cloud syncs non-blockingly so initial render and tab spinner clear in 0ms
   setTimeout(() => {
     syncCloudRecords();
     syncCloudOjtEvaluations();
+  }, 1200);
+
+  setTimeout(() => {
     syncCloudQuestions();
     syncCloudEmployees();
     syncCloudSettings();
-  }, 1000);
+  }, 3000);
 }
 
 function getStoredRecords() {
@@ -90,17 +135,17 @@ function saveRecord(empNo, recordData) {
 
   // Sync to server cloud API in background
   try {
-    fetch('/api/records', {
+    fetchWithTimeout('/api/records', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ empNo, recordData })
-    }).catch(err => console.log('Server sync pending:', err.message));
+    }, 5000).catch(err => console.log('Server sync pending:', err.message));
   } catch (e) {}
 }
 
 async function syncCloudRecords() {
   try {
-    const res = await fetch('/api/records');
+    const res = await fetchWithTimeout('/api/records', {}, 3500);
     const data = await res.json();
     if (data.success && data.records) {
       const local = getStoredRecords();
@@ -117,7 +162,7 @@ async function syncCloudRecords() {
 
 async function syncCloudOjtEvaluations() {
   try {
-    const res = await fetch('/api/ojt-evaluations');
+    const res = await fetchWithTimeout('/api/ojt-evaluations', {}, 3500);
     const data = await res.json();
     if (data.success && data.evaluations) {
       const local = getStoredOjtRecords();
@@ -134,7 +179,7 @@ async function syncCloudOjtEvaluations() {
 
 async function syncCloudQuestions() {
   try {
-    const res = await fetch('/api/questions');
+    const res = await fetchWithTimeout('/api/questions', {}, 4000);
     const data = await res.json();
     if (data.success && data.questionBank) {
       ['L', 'U', 'O'].forEach(lvl => {
@@ -480,8 +525,8 @@ function checkExistingSession() {
     handleRoute();
   }
 
-  // 3. Background asynchronous verification (non-blocking)
-  fetch('/api/auth/admin/session')
+  // 3. Background asynchronous verification (non-blocking, 3s timeout)
+  fetchWithTimeout('/api/auth/admin/session', {}, 3000)
     .then(res => res.json())
     .then(data => {
       if (data.authenticated && data.admin) {
@@ -2021,7 +2066,7 @@ function deleteQuestion(qId) {
 // Cloud Sync for Employees & Security Settings
 async function syncCloudEmployees() {
   try {
-    const res = await fetch('/api/employees');
+    const res = await fetchWithTimeout('/api/employees', {}, 3500);
     const data = await res.json();
     if (data.success && data.employees && Array.isArray(data.employees) && data.employees.length > 0) {
       EMPLOYEES.length = 0;
@@ -2042,17 +2087,17 @@ function saveCustomEmployeesToServer() {
     localStorage.setItem(STORAGE_KEY_CUSTOM_EMPLOYEES, JSON.stringify(EMPLOYEES));
   } catch (e) {}
   try {
-    fetch('/api/employees', {
+    fetchWithTimeout('/api/employees', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ employees: EMPLOYEES })
-    }).catch(err => console.log('Employees sync pending:', err.message));
+    }, 5000).catch(err => console.log('Employees sync pending:', err.message));
   } catch (e) {}
 }
 
 async function syncCloudSettings() {
   try {
-    const res = await fetch('/api/settings');
+    const res = await fetchWithTimeout('/api/settings', {}, 3000);
     const data = await res.json();
     if (data.success && data.settings) {
       const s = data.settings;

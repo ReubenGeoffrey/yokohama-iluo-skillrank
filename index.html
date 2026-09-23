@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Yokohama ILUO Skill Assessment Portal | Tire Building QA</title>
-  <link rel="stylesheet" href="styles.css?v=27.0">
+  <link rel="icon" type="image/png" href="yokohama_logo.png">
+  <link rel="stylesheet" href="styles.css?v=31.0">
 </head>
 <body>
 
@@ -1575,7 +1576,7 @@
           <span>🎯</span> Official Definition of ILUO
         </h4>
         <div style="text-align: center; background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 8px; padding: 12px;">
-          <img src="assets/image8.png" alt="Definition of ILUO" style="max-width: 100%; height: auto; border-radius: 6px;" onerror="this.src='assets/image5.png'">
+          <img src="assets/image8.png" alt="Definition of ILUO" loading="lazy" style="max-width: 100%; height: auto; border-radius: 6px;" onerror="this.onerror=null; this.src='assets/image5.png'">
         </div>
       </div>
 
@@ -1587,11 +1588,11 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
           <div style="background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 8px; padding: 10px; text-align: center;">
             <div style="font-size: 0.8rem; font-weight: 700; color: #475569; margin-bottom: 6px;">Induction Process Flow (Part 1)</div>
-            <img src="assets/image6.JPG" alt="Induction Training SOP Flow 1" style="max-width: 100%; height: auto; border-radius: 6px;">
+            <img src="assets/image6.JPG" alt="Induction Training SOP Flow 1" loading="lazy" style="max-width: 100%; height: auto; border-radius: 6px;">
           </div>
           <div style="background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 8px; padding: 10px; text-align: center;">
             <div style="font-size: 0.8rem; font-weight: 700; color: #475569; margin-bottom: 6px;">Skill Assessment Matrix (Part 2)</div>
-            <img src="assets/image7.JPG" alt="Induction Training SOP Flow 2" style="max-width: 100%; height: auto; border-radius: 6px;">
+            <img src="assets/image7.JPG" alt="Induction Training SOP Flow 2" loading="lazy" style="max-width: 100%; height: auto; border-radius: 6px;">
           </div>
         </div>
       </div>
@@ -1923,16 +1924,16 @@
 
   <div class="toast-msg" id="toast">Message notification</div>
 
-  <!-- Supporting Libraries (Loaded at bottom of body to eliminate render-blocking) -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="xlsx.full.min.js"></script>
-  <script src="mammoth.browser.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-  <script src="jszip.min.js"></script>
-  <script src="docx_generator.js"></script>
+  <!-- Supporting Libraries (Deferred execution so DOM renders instantly) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script defer src="xlsx.full.min.js"></script>
+  <script defer src="mammoth.browser.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script defer src="jszip.min.js"></script>
+  <script defer src="docx_generator.js"></script>
 
   <!-- Data Script & Application Router -->
-  <script src="data.js?v=30.0"></script>
-  <script src="app.js?v=30.0"></script>
+  <script defer src="data.js?v=31.0"></script>
+  <script defer src="app.js?v=31.0"></script>
 </body>
 </html>

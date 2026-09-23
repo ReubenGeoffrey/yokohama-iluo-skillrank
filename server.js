@@ -17,6 +17,12 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser(SESSION_SECRET));
 app.use(express.static(path.join(__dirname)));
 
+// Explicit favicon handler (prevents 120KB HTML response)
+app.get('/favicon.ico', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(__dirname, 'yokohama_logo.png'));
+});
+
 // Server-side active OTP storage (Email -> { otp, expiresAt, attempts, lastSendAt })
 const otpStore = new Map();
 
@@ -43,14 +49,16 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// Debug SMTP Connection on startup using transporter.verify()
-transporter.verify((error, success) => {
-  if (error) {
-    console.error(`SMTP connection failed: ${error.message}`);
-  } else {
-    console.log('SMTP connection successful');
-  }
-});
+// Debug SMTP Connection on startup (local development only to eliminate serverless cold-start latency)
+if (!process.env.VERCEL) {
+  transporter.verify((error, success) => {
+    if (error) {
+      console.error(`SMTP connection failed: ${error.message}`);
+    } else {
+      console.log('SMTP connection successful');
+    }
+  });
+}
 
 
 // ---------------------------------------------------------------------
@@ -794,8 +802,11 @@ app.get('/api/admin/dashboard-stats', requireAdminAuth, (req, res) => {
   });
 });
 
-// Fallback route to index.html for Client-Side Routing
+// Fallback route to index.html for Client-Side Routing (only for SPA page navigation, never static assets or APIs)
 app.use((req, res) => {
+  if (req.path.startsWith('/api/') || req.path.match(/\.(png|jpg|jpeg|gif|svg|ico|css|js|json|map|docx|xlsx|pdf|txt|woff2?|ttf|eot)$/i)) {
+    return res.status(404).json({ success: false, error: 'Not Found', path: req.path });
+  }
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
