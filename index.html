@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Yokohama ILUO Skill Assessment Portal | Tire Building QA</title>
   <link rel="icon" type="image/png" href="yokohama_logo.png">
-  <link rel="stylesheet" href="styles.css?v=40.0">
+  <link rel="stylesheet" href="styles.css?v=41.0">
 </head>
 <body>
 
@@ -238,44 +238,26 @@
         </div>
       </div>
 
-      <!-- 2 Core Assessment Cards: Knowledge Test & Practical OJT -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 20px;">
+      <!-- Core Assessment Card: Knowledge Test -->
+      <div style="margin-bottom: 20px;">
         <!-- Knowledge Test Card -->
-        <div style="background: #FFFFFF; border-radius: 12px; border: 2px solid #005B9E; padding: 20px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; justify-content: space-between;">
-          <div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <div style="background: #FFFFFF; border-radius: 12px; border: 2px solid #005B9E; padding: 24px; box-shadow: var(--shadow-sm); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
+          <div style="flex: 1; min-width: 280px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
               <div style="font-size: 0.8rem; font-weight: 800; color: #005B9E; letter-spacing: 1px; text-transform: uppercase;">MCQ ASSESSMENT</div>
               <span id="empKnowledgeStatusBadge" style="background: #EFF6FF; color: #1D4ED8; font-size: 0.76rem; font-weight: 700; padding: 3px 8px; border-radius: 4px;">Pending</span>
             </div>
-            <h3 style="color: var(--primary-dark); margin-bottom: 6px; font-size: 1.15rem;">Knowledge Test</h3>
-            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">45-min timed technical MCQ assessment covering Safety, 5S, TPM, and QA Process parameters.</p>
-            <div style="background: #F8FAFC; border-radius: 6px; padding: 8px 12px; margin-bottom: 16px;">
-              <div style="font-size: 0.78rem; color: #64748B;">Score: <strong id="empKnowledgeScoreText" style="color: #0F172A; font-size: 0.95rem;">Pending Exam</strong></div>
-              <div style="font-size: 0.78rem; color: #64748B;">Target Assessment: <strong id="infoTargetLevel" style="color: var(--accent-red);">-</strong></div>
+            <h3 style="color: var(--primary-dark); margin-bottom: 6px; font-size: 1.25rem;">Knowledge Test</h3>
+            <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 12px; max-width: 650px;">45-min timed technical MCQ assessment covering Safety, 5S, TPM, and QA Process parameters.</p>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap; background: #F8FAFC; border-radius: 8px; padding: 10px 16px;">
+              <div style="font-size: 0.82rem; color: #64748B;">Score: <strong id="empKnowledgeScoreText" style="color: #0F172A; font-size: 0.95rem;">Pending Exam</strong></div>
+              <div style="font-size: 0.82rem; color: #64748B;">Target Assessment: <strong id="infoTargetLevel" style="color: var(--accent-red); font-size: 0.95rem;">-</strong></div>
             </div>
           </div>
-          <button class="btn-primary" style="width: 100%; padding: 12px; font-weight: 700;" onclick="startOrResumeExam()">
-            Start Knowledge Test (45 Mins) &raquo;
-          </button>
-        </div>
-
-        <!-- Skill Assessment (OJT) Card -->
-        <div style="background: #FFFFFF; border-radius: 12px; border: 2px solid #059669; padding: 20px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; justify-content: space-between;">
-          <div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <div style="font-size: 0.8rem; font-weight: 800; color: #059669; letter-spacing: 1px; text-transform: uppercase;">SHOP-FLOOR PRACTICAL</div>
-              <span id="empOjtStatusBadge" style="background: #ECFDF5; color: #059669; font-size: 0.76rem; font-weight: 700; padding: 3px 8px; border-radius: 4px;">Pending</span>
-            </div>
-            <h3 style="color: #065F46; margin-bottom: 6px; font-size: 1.15rem;">Skill Assessment (OJT)</h3>
-            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">Shop-floor practical evaluation scored by supervisor on machine inspection, parameters, and defect detection.</p>
-            <div style="background: #F8FAFC; border-radius: 6px; padding: 8px 12px; margin-bottom: 16px;">
-              <div style="font-size: 0.78rem; color: #64748B;">Score: <strong id="empOjtScoreText" style="color: #0F172A; font-size: 0.95rem;">Pending Evaluation</strong></div>
-              <div style="font-size: 0.78rem; color: #64748B;">Evaluation: <strong>Assessed by Section Supervisor &amp; Admin</strong></div>
-            </div>
-          </div>
-          <div style="background: #F0FDF4; border: 1.5px dashed #86EFAC; border-radius: 8px; padding: 10px 14px; text-align: center;">
-            <div style="font-size: 0.82rem; font-weight: 800; color: #166534;">🔒 Evaluated by Section &amp; Admin</div>
-            <div style="font-size: 0.74rem; color: #15803D; margin-top: 2px;">Practical OJT evaluation is conducted and scored by your Section Supervisor.</div>
+          <div style="min-width: 240px;">
+            <button class="btn-primary" style="width: 100%; padding: 14px 24px; font-weight: 700; font-size: 1rem;" onclick="startOrResumeExam()">
+              Start Knowledge Test (45 Mins) &raquo;
+            </button>
           </div>
         </div>
       </div>
@@ -2247,11 +2229,11 @@
   <script defer src="mammoth.browser.min.js"></script>
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script defer src="jszip.min.js"></script>
-  <script defer src="docx_generator.js?v=40.0"></script>
+  <script defer src="docx_generator.js?v=41.0"></script>
 
   <!-- OJT Official Templates & Data Script & Application Router -->
-  <script src="ojt_templates_data.js?v=40.0"></script>
-  <script src="data.js?v=40.0"></script>
-  <script src="app.js?v=40.0"></script>
+  <script src="ojt_templates_data.js?v=41.0"></script>
+  <script src="data.js?v=41.0"></script>
+  <script src="app.js?v=41.0"></script>
 </body>
 </html>
