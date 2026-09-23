@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Yokohama ILUO Skill Assessment Portal | Tire Building QA</title>
   <link rel="icon" type="image/png" href="yokohama_logo.png">
-  <link rel="stylesheet" href="styles.css?v=34.0">
+  <link rel="stylesheet" href="styles.css?v=35.0">
 </head>
 <body>
 
@@ -854,64 +854,77 @@
 
         <!-- 3 KPI Cards -->
         <div class="stats-grid" style="margin-bottom: 24px;">
-          <div class="stat-card" style="border-left: 4px solid #005B9E;">
-            <div class="stat-label">Total Employees</div>
-            <div class="stat-value" id="ojtKpiTotalEmps">236</div>
-            <div class="stat-desc">Plant workforce directory</div>
+          <div class="stat-card" style="border-left: 4px solid #005B9E; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px; padding: 18px 22px;">
+            <div style="font-size: 0.8rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Total Employees</div>
+            <div style="font-size: 2rem; font-weight: 800; color: #0F172A; line-height: 1.1;" id="ojtKpiTotalEmps">236</div>
+            <div style="font-size: 0.78rem; color: #64748B;">Plant workforce directory</div>
           </div>
-          <div class="stat-card" style="border-left: 4px solid #059669;">
-            <div class="stat-label">OJT Qualified (&ge; 70%)</div>
-            <div class="stat-value" style="color: #059669;" id="ojtKpiQualified">0</div>
-            <div class="stat-desc">Passed practical checkpoint exam</div>
+          <div class="stat-card" style="border-left: 4px solid #059669; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px; padding: 18px 22px;">
+            <div style="font-size: 0.8rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">OJT Qualified (&ge; 70%)</div>
+            <div style="font-size: 2rem; font-weight: 800; color: #059669; line-height: 1.1;" id="ojtKpiQualified">0</div>
+            <div style="font-size: 0.78rem; color: #64748B;">Passed practical checkpoint exam</div>
           </div>
-          <div class="stat-card" style="border-left: 4px solid #E31B23;">
-            <div class="stat-label">Pending Practical Evaluation</div>
-            <div class="stat-value" style="color: #E31B23;" id="ojtKpiPending">0</div>
-            <div class="stat-desc">Awaiting evaluator scoring</div>
+          <div class="stat-card" style="border-left: 4px solid #E31B23; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px; padding: 18px 22px;">
+            <div style="font-size: 0.8rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Pending Practical Evaluation</div>
+            <div style="font-size: 2rem; font-weight: 800; color: #E31B23; line-height: 1.1;" id="ojtKpiPending">0</div>
+            <div style="font-size: 0.78rem; color: #64748B;">Awaiting evaluator scoring</div>
           </div>
         </div>
 
-        <!-- OJT Employees Table Container -->
-        <div class="instruction-card" style="margin-bottom: 24px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
-            <h3 style="margin: 0; color: var(--primary-dark); font-size: 1.15rem;">Shop-Floor Employee Practical Evaluation Roster</h3>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-              <input type="text" id="ojtEmpSearchInput" class="form-control" placeholder="Search by name or emp ID..." style="width: 220px; font-size: 0.85rem;" oninput="renderOjtDashboardTable()">
-              <select id="ojtQcSectionFilter" class="form-control" style="width: 180px; font-size: 0.85rem;" onchange="renderOjtDashboardTable()">
-                <option value="ALL">All QC Sections</option>
-                <option value="Final Finish QA">Final Finish QA</option>
-                <option value="Tire Building QA">Tire Building QA</option>
-                <option value="Tire Curing QA">Tire Curing QA</option>
-                <option value="Solid Tire QA">Solid Tire QA</option>
-                <option value="Preparatory QA">Preparatory QA</option>
-                <option value="Warehouse QA">Warehouse QA</option>
-                <option value="FID Inspector QA">FID Inspector QA</option>
-                <option value="Final Finish RRO & ALT QA">Final Finish RRO &amp; ALT QA</option>
-              </select>
-              <select id="ojtLevelFilter" class="form-control" style="width: 130px; font-size: 0.85rem;" onchange="renderOjtDashboardTable()">
-                <option value="ALL">All Levels</option>
-                <option value="I">Level I</option>
-                <option value="L">Level L</option>
-                <option value="U">Level U</option>
-                <option value="O">Level O</option>
-              </select>
+        <!-- OJT Employees Full-Width Evaluation Card (Spacious & Clean Layout) -->
+        <div class="dashboard-table-card" style="background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; padding: 24px; margin-bottom: 28px; box-shadow: var(--shadow-sm); width: 100%; box-sizing: border-box;">
+          
+          <!-- Filter & Search Controls with generous gaps -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 16px;">
+            <div style="display: flex; gap: 14px; flex-wrap: wrap; align-items: center; flex: 1;">
+              <div style="position: relative; min-width: 260px; max-width: 360px; flex: 1;">
+                <input type="text" id="ojtEmpSearchInput" class="form-control" placeholder="🔍 Search employee by name or emp ID..." style="width: 100%; font-size: 0.88rem; padding: 10px 14px; border-radius: 8px;" oninput="renderOjtDashboardTable()">
+              </div>
+              <div style="min-width: 200px;">
+                <select id="ojtQcSectionFilter" class="form-control" style="width: 100%; font-size: 0.88rem; padding: 10px 14px; border-radius: 8px; font-weight: 600;" onchange="renderOjtDashboardTable()">
+                  <option value="ALL">🏢 All QC Sections</option>
+                  <option value="Final Finish QA">Final Finish QA</option>
+                  <option value="Tire Building QA">Tire Building QA</option>
+                  <option value="Tire Curing QA">Tire Curing QA</option>
+                  <option value="Solid Tire QA">Solid Tire QA</option>
+                  <option value="Preparatory QA">Preparatory QA</option>
+                  <option value="Warehouse QA">Warehouse QA</option>
+                  <option value="FID Inspector QA">FID Inspector QA</option>
+                  <option value="Final Finish RRO & ALT QA">Final Finish RRO &amp; ALT QA</option>
+                </select>
+              </div>
+              <div style="min-width: 150px;">
+                <select id="ojtLevelFilter" class="form-control" style="width: 100%; font-size: 0.88rem; padding: 10px 14px; border-radius: 8px; font-weight: 600;" onchange="renderOjtDashboardTable()">
+                  <option value="ALL">🎯 All Levels</option>
+                  <option value="I">Level I</option>
+                  <option value="L">Level L</option>
+                  <option value="U">Level U</option>
+                  <option value="O">Level O</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Employee Count Indicator -->
+            <div id="ojtTableCounterBadge" style="font-size: 0.85rem; font-weight: 700; color: #059669; background: #ECFDF5; padding: 8px 16px; border-radius: 8px; border: 1px solid #A7F3D0; white-space: nowrap;">
+              Showing Employees
             </div>
           </div>
 
-          <div style="overflow-x: auto;">
-            <table class="admin-table" style="width: 100%; min-width: 820px;">
+          <!-- Data Table with generous column spacing -->
+          <div class="data-table-wrapper" style="overflow-x: auto; border: 1px solid #E2E8F0; border-radius: 10px;">
+            <table class="data-table" style="width: 100%; min-width: 1050px; border-collapse: separate; border-spacing: 0;">
               <thead>
-                <tr>
-                  <th style="width: 50px;">S.No</th>
-                  <th>Emp ID</th>
-                  <th>Employee Name</th>
-                  <th>QC Section</th>
-                  <th>Current Skill</th>
-                  <th>Target Skill</th>
-                  <th>Knowledge MCQ</th>
-                  <th>Practical OJT Mark</th>
-                  <th>Status</th>
-                  <th style="text-align: center;">Action</th>
+                <tr style="background: #F8FAFC;">
+                  <th style="width: 50px; text-align: center; padding: 14px 12px; font-size: 0.78rem; text-transform: uppercase;">S.No</th>
+                  <th style="padding: 14px 16px; min-width: 100px; font-size: 0.78rem; text-transform: uppercase;">Emp ID</th>
+                  <th style="padding: 14px 20px; min-width: 200px; font-size: 0.78rem; text-transform: uppercase;">Employee Name</th>
+                  <th style="padding: 14px 18px; min-width: 160px; font-size: 0.78rem; text-transform: uppercase;">QC Section</th>
+                  <th style="padding: 14px 14px; text-align: center; min-width: 100px; font-size: 0.78rem; text-transform: uppercase;">Current Skill</th>
+                  <th style="padding: 14px 14px; text-align: center; min-width: 100px; font-size: 0.78rem; text-transform: uppercase;">Target Skill</th>
+                  <th style="padding: 14px 18px; min-width: 170px; font-size: 0.78rem; text-transform: uppercase;">Knowledge MCQ</th>
+                  <th style="padding: 14px 18px; min-width: 150px; font-size: 0.78rem; text-transform: uppercase;">Practical OJT Mark</th>
+                  <th style="padding: 14px 18px; min-width: 130px; font-size: 0.78rem; text-transform: uppercase;">Status</th>
+                  <th style="padding: 14px 18px; text-align: center; min-width: 160px; font-size: 0.78rem; text-transform: uppercase;">Action</th>
                 </tr>
               </thead>
               <tbody id="ojtTableBody">
@@ -2174,7 +2187,7 @@
   <script defer src="docx_generator.js"></script>
 
   <!-- Data Script & Application Router -->
-  <script src="data.js?v=34.0"></script>
-  <script src="app.js?v=34.0"></script>
+  <script src="data.js?v=35.0"></script>
+  <script src="app.js?v=35.0"></script>
 </body>
 </html>

@@ -5346,8 +5346,13 @@ function renderOjtDashboardTable() {
     return true;
   });
 
+  const countBadge = document.getElementById('ojtTableCounterBadge');
+  if (countBadge) {
+    countBadge.innerText = `Showing ${filtered.length} of ${EMPLOYEES.length} Employees`;
+  }
+
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 24px; color: #94A3B8;">No employees match the selected criteria.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 36px 20px; color: #94A3B8; font-size: 0.95rem;">No employees match the selected search or filter criteria.</td></tr>`;
     return;
   }
 
@@ -5360,40 +5365,40 @@ function renderOjtDashboardTable() {
     const targetLvl = targetMap[currLvl] || 'L';
 
     // Knowledge MCQ status
-    let mcqText = `<span style="color: #94A3B8; font-size: 0.8rem;">Not Attempted</span>`;
+    let mcqText = `<span style="color: #94A3B8; font-size: 0.82rem; font-weight: 500;">Not Attempted</span>`;
     if (rec && rec.score !== undefined) {
       const mcqPassed = (rec.score >= 21);
-      mcqText = `<span class="${mcqPassed ? 'badge-pass' : 'badge-fail'}" style="font-size: 0.78rem;">${rec.score} / ${rec.total || 30} Marks (${mcqPassed ? 'PASS' : 'FAIL'})</span>`;
+      mcqText = `<span class="${mcqPassed ? 'badge-pass' : 'badge-fail'}" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 6px; display: inline-block;">${rec.score} / ${rec.total || 30} Marks (${mcqPassed ? 'PASS' : 'FAIL'})</span>`;
     }
 
     // Practical OJT Mark & Status
-    let ojtMarkText = `<span style="color: #94A3B8; font-size: 0.8rem;">Pending</span>`;
-    let statusBadge = `<span class="badge-pending" style="font-size: 0.78rem; padding: 3px 8px; border-radius: 4px; background: #FEF3C7; color: #D97706; font-weight: 700;">PENDING</span>`;
+    let ojtMarkText = `<span style="color: #94A3B8; font-size: 0.82rem; font-weight: 500;">Pending</span>`;
+    let statusBadge = `<span class="badge-pending" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 6px; background: #FEF3C7; color: #D97706; font-weight: 700; display: inline-block;">PENDING</span>`;
 
     if (ojt && ojt.totalScore !== undefined) {
       const maxScore = ojt.maxScore || 50;
       const isQualified = ojt.totalScore >= Math.round(maxScore * 0.7);
-      ojtMarkText = `<strong style="color: ${isQualified ? '#059669' : '#DC2626'};">${ojt.totalScore} / ${maxScore} Marks</strong>`;
+      ojtMarkText = `<strong style="color: ${isQualified ? '#059669' : '#DC2626'}; font-size: 0.95rem;">${ojt.totalScore} / ${maxScore} Marks</strong>`;
       if (isQualified) {
-        statusBadge = `<span class="badge-pass" style="font-size: 0.78rem; padding: 3px 8px;">QUALIFIED</span>`;
+        statusBadge = `<span class="badge-pass" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 6px; display: inline-block;">QUALIFIED</span>`;
       } else {
-        statusBadge = `<span class="badge-fail" style="font-size: 0.78rem; padding: 3px 8px;">NEEDS REFOCUS</span>`;
+        statusBadge = `<span class="badge-fail" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 6px; display: inline-block;">NEEDS REFOCUS</span>`;
       }
     }
 
     return `
-      <tr style="border-bottom: 1px solid #E2E8F0;">
-        <td style="text-align: center; color: #64748B; font-weight: 600;">${idx + 1}</td>
-        <td><strong style="color: var(--primary-dark);">${emp.empNo}</strong></td>
-        <td><strong style="color: #1E293B;">${emp.name}</strong></td>
-        <td><span style="font-size: 0.82rem; color: #475569;">${emp.section || emp.dept || 'QA'}</span></td>
-        <td style="text-align: center;"><span class="iluo-badge iluo-badge-${currLvl.toLowerCase()}" style="width: 24px; height: 24px; font-size: 0.75rem;">${currLvl}</span></td>
-        <td style="text-align: center;"><span class="iluo-badge iluo-badge-${targetLvl.toLowerCase()}" style="width: 24px; height: 24px; font-size: 0.75rem;">${targetLvl}</span></td>
-        <td>${mcqText}</td>
-        <td>${ojtMarkText}</td>
-        <td>${statusBadge}</td>
-        <td style="text-align: center;">
-          <button type="button" class="btn-primary" style="padding: 5px 12px; font-size: 0.78rem; background: #059669; border-color: #059669; font-weight: 700; white-space: nowrap;" onclick="openOjtModalForEmployee('${emp.empNo}')">
+      <tr style="border-bottom: 1px solid #E2E8F0; transition: background 0.15s ease;">
+        <td style="text-align: center; color: #64748B; font-weight: 600; padding: 14px 12px;">${idx + 1}</td>
+        <td style="padding: 14px 16px;"><strong style="color: var(--primary-dark); font-size: 0.95rem;">${emp.empNo}</strong></td>
+        <td style="padding: 14px 20px;"><strong style="color: #0F172A; font-size: 0.95rem;">${emp.name}</strong></td>
+        <td style="padding: 14px 18px;"><span style="font-size: 0.88rem; color: #334155; font-weight: 500; white-space: nowrap;">${emp.section || emp.dept || 'QA'}</span></td>
+        <td style="text-align: center; padding: 14px 12px;"><span class="iluo-badge iluo-badge-${currLvl.toLowerCase()}" style="width: 26px; height: 26px; font-size: 0.8rem;">${currLvl}</span></td>
+        <td style="text-align: center; padding: 14px 12px;"><span class="iluo-badge iluo-badge-${targetLvl.toLowerCase()}" style="width: 26px; height: 26px; font-size: 0.8rem;">${targetLvl}</span></td>
+        <td style="padding: 14px 18px;">${mcqText}</td>
+        <td style="padding: 14px 18px;">${ojtMarkText}</td>
+        <td style="padding: 14px 18px;">${statusBadge}</td>
+        <td style="text-align: center; padding: 14px 18px;">
+          <button type="button" class="btn-primary" style="padding: 7px 16px; font-size: 0.82rem; background: #059669; border-color: #059669; font-weight: 700; white-space: nowrap; border-radius: 6px; box-shadow: 0 2px 4px rgba(5,150,105,0.2); cursor: pointer; display: inline-flex; align-items: center; gap: 6px;" onclick="openOjtModalForEmployee('${emp.empNo}')">
             📋 Score OJT Form
           </button>
         </td>

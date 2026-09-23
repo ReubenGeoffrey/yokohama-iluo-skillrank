@@ -2020,3 +2020,23 @@ body {
   opacity: 1;
 }
 
+/* Full Width Table Card & Spacing */
+.dashboard-table-card {
+  max-width: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box;
+}
+
+.data-table th, .data-table td {
+  vertical-align: middle;
+}
+
+.data-table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.data-table tbody tr:hover {
+  background-color: #F8FAFC !important;
+}
+
+
