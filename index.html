@@ -4,16 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Yokohama ILUO Skill Assessment Portal | Tire Building QA</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="xlsx.full.min.js"></script>
-  <script>if (typeof XLSX === 'undefined') { document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"><\/script>'); }</script>
-  <script src="mammoth.browser.min.js"></script>
-  <script>if (typeof mammoth === 'undefined') { document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"><\/script>'); }</script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-  <script src="jszip.min.js"></script>
-  <script>if (typeof JSZip === 'undefined') { document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"><\/script>'); }</script>
-  <script src="docx_generator.js"></script>
-  <link rel="stylesheet" href="styles.css?v=26.0">
+  <link rel="stylesheet" href="styles.css?v=27.0">
 </head>
 <body>
 
@@ -1932,9 +1923,16 @@
 
   <div class="toast-msg" id="toast">Message notification</div>
 
-  <!-- Data Script -->
-  <script src="data.js?v=29.0"></script>
-  <!-- Application Logic -->
-  <script src="app.js?v=29.0"></script>
+  <!-- Supporting Libraries (Loaded at bottom of body to eliminate render-blocking) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="xlsx.full.min.js"></script>
+  <script src="mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="jszip.min.js"></script>
+  <script src="docx_generator.js"></script>
+
+  <!-- Data Script & Application Router -->
+  <script src="data.js?v=30.0"></script>
+  <script src="app.js?v=30.0"></script>
 </body>
 </html>

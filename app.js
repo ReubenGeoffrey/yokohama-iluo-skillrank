@@ -65,11 +65,14 @@ function initStorage() {
     }
   } catch (e) {}
 
-  syncCloudRecords();
-  syncCloudOjtEvaluations();
-  syncCloudQuestions();
-  syncCloudEmployees();
-  syncCloudSettings();
+  // Defer cloud syncs after initial page paint for instant loading
+  setTimeout(() => {
+    syncCloudRecords();
+    syncCloudOjtEvaluations();
+    syncCloudQuestions();
+    syncCloudEmployees();
+    syncCloudSettings();
+  }, 1000);
 }
 
 function getStoredRecords() {
@@ -448,49 +451,45 @@ function terminateExamOnViolation(reason) {
 }
 
 // ---------------------------------------------------------------------
-// Session & Navigation Check
+// Session & Navigation Check (Instant & Non-Blocking)
 // ---------------------------------------------------------------------
-async function checkExistingSession() {
-  try {
-    const res = await fetch('/api/auth/admin/session');
-    const data = await res.json();
-    if (data.authenticated && data.admin) {
-      localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify({ role: 'admin', email: data.admin.email, name: data.admin.name }));
-      updateUserBadge(data.admin.name);
-      handleRoute();
-      return;
-    }
-  } catch (e) {
-    console.error('Session check error:', e);
-  }
-
+function checkExistingSession() {
+  // 1. Instant local check (zero network delay)
   const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
   if (sessionStr) {
     try {
       const session = JSON.parse(sessionStr);
       if (session.role === 'admin') {
         updateUserBadge(session.name || 'Administrator');
-        handleRoute();
-        return;
       } else if (session.empNo) {
         const emp = EMPLOYEES.find(e => e.empNo === session.empNo);
         if (emp) {
           currentUser = emp;
           updateUserBadge(emp.name);
-          handleRoute();
-          return;
         }
       }
     } catch (e) {
       console.error(e);
     }
   }
-  
+
+  // 2. Render route immediately without waiting for network response
   if (!window.location.hash) {
     navigateTo('/');
   } else {
     handleRoute();
   }
+
+  // 3. Background asynchronous verification (non-blocking)
+  fetch('/api/auth/admin/session')
+    .then(res => res.json())
+    .then(data => {
+      if (data.authenticated && data.admin) {
+        localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify({ role: 'admin', email: data.admin.email, name: data.admin.name }));
+        updateUserBadge(data.admin.name);
+      }
+    })
+    .catch(() => {});
 }
 
 // Toast Notifications
