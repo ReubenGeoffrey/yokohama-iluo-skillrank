@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Yokohama ILUO Skill Assessment Portal | Tire Building QA</title>
   <link rel="icon" type="image/png" href="yokohama_logo.png">
-  <link rel="stylesheet" href="styles.css?v=35.0">
+  <link rel="stylesheet" href="styles.css?v=36.0">
 </head>
 <body>
 
@@ -590,14 +590,14 @@
           </div>
         </div>
 
-        <!-- Section Employee Assessment Roster -->
-        <div class="instruction-card" style="margin-bottom: 24px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
-            <h3 style="margin: 0; color: var(--primary-dark); font-size: 1.15rem;">Section Employee Roster &amp; Skill Assessments</h3>
-            <div style="display: flex; gap: 10px;">
-              <input type="text" id="secEmpSearchInput" class="form-control" placeholder="Search by name or emp ID..." style="width: 220px; font-size: 0.85rem;" oninput="filterSectionTable()">
-              <select id="secLevelFilter" class="form-control" style="width: 130px; font-size: 0.85rem;" onchange="filterSectionTable()">
-                <option value="ALL">All Levels</option>
+        <!-- Section Employee Assessment Roster (Full Width & Spacious) -->
+        <div class="dashboard-table-card" style="background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; padding: 24px; margin-bottom: 28px; box-shadow: var(--shadow-sm); width: 100%; box-sizing: border-box;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 16px;">
+            <h3 style="margin: 0; color: var(--primary-dark); font-size: 1.2rem; font-weight: 800;">Section Employee Roster &amp; Skill Assessments</h3>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+              <input type="text" id="secEmpSearchInput" class="form-control" placeholder="🔍 Search by name or emp ID..." style="min-width: 240px; font-size: 0.88rem; padding: 10px 14px; border-radius: 8px;" oninput="filterSectionTable()">
+              <select id="secLevelFilter" class="form-control" style="min-width: 140px; font-size: 0.88rem; padding: 10px 14px; border-radius: 8px; font-weight: 600;" onchange="filterSectionTable()">
+                <option value="ALL">🎯 All Levels</option>
                 <option value="I">Level I</option>
                 <option value="L">Level L</option>
                 <option value="U">Level U</option>
@@ -606,18 +606,18 @@
             </div>
           </div>
 
-          <div style="overflow-x: auto;">
-            <table class="admin-table" style="width: 100%; min-width: 750px;">
+          <div class="data-table-wrapper" style="overflow-x: auto; border: 1px solid #E2E8F0; border-radius: 10px;">
+            <table class="data-table" style="width: 100%; min-width: 980px; border-collapse: separate; border-spacing: 0;">
               <thead>
-                <tr>
-                  <th>Emp No</th>
-                  <th>Employee Name</th>
-                  <th>Current Skill</th>
-                  <th>Target Skill</th>
-                  <th>Knowledge Test</th>
-                  <th>Skill Assessment (OJT)</th>
-                  <th>Overall Status</th>
-                  <th>Actions</th>
+                <tr style="background: #F8FAFC;">
+                  <th style="padding: 14px 16px; min-width: 90px; font-size: 0.78rem; text-transform: uppercase;">Emp No</th>
+                  <th style="padding: 14px 20px; min-width: 220px; font-size: 0.78rem; text-transform: uppercase;">Employee Name</th>
+                  <th style="padding: 14px 14px; text-align: center; min-width: 100px; font-size: 0.78rem; text-transform: uppercase;">Current Skill</th>
+                  <th style="padding: 14px 14px; text-align: center; min-width: 100px; font-size: 0.78rem; text-transform: uppercase;">Target Skill</th>
+                  <th style="padding: 14px 18px; min-width: 160px; font-size: 0.78rem; text-transform: uppercase;">Knowledge Test</th>
+                  <th style="padding: 14px 18px; min-width: 170px; font-size: 0.78rem; text-transform: uppercase;">Skill Assessment (OJT)</th>
+                  <th style="padding: 14px 18px; min-width: 140px; font-size: 0.78rem; text-transform: uppercase;">Overall Status</th>
+                  <th style="padding: 14px 18px; text-align: center; min-width: 170px; font-size: 0.78rem; text-transform: uppercase;">Actions</th>
                 </tr>
               </thead>
               <tbody id="secEmpTableBody">
@@ -627,12 +627,12 @@
           </div>
         </div>
 
-        <!-- Section Training Requirements -->
-        <div class="instruction-card" style="border-left: 4px solid #F59E0B;">
-          <h3 style="margin-top: 0; color: #B45309; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+        <!-- Section Training Requirements (Full Width) -->
+        <div class="dashboard-table-card" style="background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; border-left: 4px solid #F59E0B; padding: 24px; margin-bottom: 28px; box-shadow: var(--shadow-sm); width: 100%; box-sizing: border-box;">
+          <h3 style="margin-top: 0; color: #B45309; font-size: 1.15rem; display: flex; align-items: center; gap: 8px; font-weight: 800;">
             <span>⚠️</span> Section Training &amp; Re-assessment Requirements
           </h3>
-          <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 12px;">
+          <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 14px;">
             The following employees require scheduled training, re-assessment, or skill level up-gradation:
           </p>
           <div id="secTrainingReqContainer">
@@ -724,25 +724,25 @@
           </div>
         </div>
 
-        <!-- Section-Wise Summary Table -->
-        <div class="instruction-card" style="margin-bottom: 24px;">
-          <h3 style="margin-top: 0; color: var(--primary-dark); font-size: 1.15rem; margin-bottom: 16px;">
+        <!-- Section-Wise Summary Table (Full Width & Spacious) -->
+        <div class="dashboard-table-card" style="background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; padding: 24px; margin-bottom: 28px; box-shadow: var(--shadow-sm); width: 100%; box-sizing: border-box;">
+          <h3 style="margin-top: 0; color: var(--primary-dark); font-size: 1.2rem; margin-bottom: 20px; font-weight: 800;">
             Section-Wise ILUO Distribution &amp; Assessment Completion Summary
           </h3>
-          <div style="overflow-x: auto;">
-            <table class="admin-table" style="width: 100%; min-width: 800px;">
+          <div class="data-table-wrapper" style="overflow-x: auto; border: 1px solid #E2E8F0; border-radius: 10px;">
+            <table class="data-table" style="width: 100%; min-width: 980px; border-collapse: separate; border-spacing: 0;">
               <thead>
-                <tr>
-                  <th>QA Section Name</th>
-                  <th>Total Staff</th>
-                  <th>Level I</th>
-                  <th>Level L</th>
-                  <th>Level U</th>
-                  <th>Level O</th>
-                  <th>Knowledge Assessed</th>
-                  <th>OJT Assessed</th>
-                  <th>Training Needed</th>
-                  <th>Action</th>
+                <tr style="background: #F8FAFC;">
+                  <th style="padding: 14px 18px; min-width: 180px; font-size: 0.78rem; text-transform: uppercase;">QA Section Name</th>
+                  <th style="padding: 14px 14px; text-align: center; min-width: 90px; font-size: 0.78rem; text-transform: uppercase;">Total Staff</th>
+                  <th style="padding: 14px 12px; text-align: center; min-width: 80px; font-size: 0.78rem; text-transform: uppercase;">Level I</th>
+                  <th style="padding: 14px 12px; text-align: center; min-width: 80px; font-size: 0.78rem; text-transform: uppercase;">Level L</th>
+                  <th style="padding: 14px 12px; text-align: center; min-width: 80px; font-size: 0.78rem; text-transform: uppercase;">Level U</th>
+                  <th style="padding: 14px 12px; text-align: center; min-width: 80px; font-size: 0.78rem; text-transform: uppercase;">Level O</th>
+                  <th style="padding: 14px 16px; min-width: 150px; font-size: 0.78rem; text-transform: uppercase;">Knowledge Assessed</th>
+                  <th style="padding: 14px 16px; min-width: 140px; font-size: 0.78rem; text-transform: uppercase;">OJT Assessed</th>
+                  <th style="padding: 14px 16px; min-width: 140px; font-size: 0.78rem; text-transform: uppercase;">Training Needed</th>
+                  <th style="padding: 14px 18px; text-align: center; min-width: 120px; font-size: 0.78rem; text-transform: uppercase;">Action</th>
                 </tr>
               </thead>
               <tbody id="deptSectionTableBody">
@@ -752,9 +752,9 @@
           </div>
         </div>
 
-        <!-- Department Training Requirements & Gap Analysis -->
-        <div class="instruction-card" style="border-left: 4px solid #8B5CF6;">
-          <h3 style="margin-top: 0; color: #6D28D9; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+        <!-- Department Training Requirements & Gap Analysis (Full Width) -->
+        <div class="dashboard-table-card" style="background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; border-left: 4px solid #8B5CF6; padding: 24px; margin-bottom: 28px; box-shadow: var(--shadow-sm); width: 100%; box-sizing: border-box;">
+          <h3 style="margin-top: 0; color: #6D28D9; font-size: 1.15rem; display: flex; align-items: center; gap: 8px; font-weight: 800;">
             <span>🎯</span> Department Skill Gap &amp; Training Action Plan
           </h3>
           <div id="deptTrainingPlanContainer">
@@ -2187,7 +2187,7 @@
   <script defer src="docx_generator.js"></script>
 
   <!-- Data Script & Application Router -->
-  <script src="data.js?v=35.0"></script>
-  <script src="app.js?v=35.0"></script>
+  <script src="data.js?v=36.0"></script>
+  <script src="app.js?v=36.0"></script>
 </body>
 </html>

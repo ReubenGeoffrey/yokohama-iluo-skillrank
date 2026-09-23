@@ -5496,44 +5496,48 @@ function renderSectionEmployeesTable(emps) {
     const ojt = ojtRecords[e.empNo];
 
     // Knowledge marks & status
-    let knowText = '<span style="color: #64748B;">Pending</span>';
+    let knowText = '<span style="color: #64748B; font-size: 0.82rem; font-weight: 500;">Pending</span>';
     let isKnowPass = false;
     if (rec && rec.isCompleted) {
       const qCount = rec.submittedQuestions ? rec.submittedQuestions.length : 20;
       const marks = rec.totalMark !== undefined ? rec.totalMark : (rec.submittedQuestions ? rec.submittedQuestions.filter(q => q.isCorrect).length : 0);
       isKnowPass = rec.status === 'Passed' || marks >= Math.ceil(qCount * 0.7);
-      knowText = `<span style="font-weight: 700; color: ${isKnowPass ? '#059669' : '#DC2626'};">${marks} / ${qCount} Marks</span>`;
+      knowText = `<span style="font-weight: 700; color: ${isKnowPass ? '#059669' : '#DC2626'}; font-size: 0.88rem; white-space: nowrap;">${marks} / ${qCount} Marks</span>`;
     }
 
     // OJT marks & status
-    let ojtText = '<span style="color: #64748B;">Pending</span>';
+    let ojtText = '<span style="color: #64748B; font-size: 0.82rem; font-weight: 500;">Pending</span>';
     let isOjtPass = false;
-    if (ojt && ojt.isCompleted) {
+    if (ojt && ojt.totalScore !== undefined) {
+      const maxScore = ojt.maxScore || 50;
+      isOjtPass = ojt.totalScore >= Math.round(maxScore * 0.7);
+      ojtText = `<span style="font-weight: 700; color: ${isOjtPass ? '#059669' : '#DC2626'}; font-size: 0.88rem; white-space: nowrap;">${ojt.totalScore} / ${maxScore} Marks</span>`;
+    } else if (ojt && ojt.isCompleted) {
       isOjtPass = true;
-      ojtText = `<span style="font-weight: 700; color: #059669;">${ojt.totalScore || 0} / ${ojt.totalPossibleMarks || 20} Marks</span>`;
+      ojtText = `<span style="font-weight: 700; color: #059669; font-size: 0.88rem; white-space: nowrap;">${ojt.totalScore || 0} / ${ojt.totalPossibleMarks || 20} Marks</span>`;
     }
 
     // Overall Status
-    let overallStatus = '<span style="background: #F1F5F9; color: #64748B; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 0.76rem;">Pending</span>';
+    let overallStatus = '<span style="background: #F1F5F9; color: #64748B; padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 0.8rem; display: inline-block; white-space: nowrap;">Pending</span>';
     if (isKnowPass && isOjtPass) {
-      overallStatus = `<span style="background: #ECFDF5; color: #166534; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.76rem;">Qualified (${tgtLvl})</span>`;
+      overallStatus = `<span style="background: #ECFDF5; color: #166534; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; display: inline-block; white-space: nowrap;">Qualified (${tgtLvl})</span>`;
     } else if (rec && rec.isCompleted && !isKnowPass) {
-      overallStatus = `<span style="background: #FEF2F2; color: #DC2626; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.76rem;">Retest Req.</span>`;
+      overallStatus = `<span style="background: #FEF2F2; color: #DC2626; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; display: inline-block; white-space: nowrap;">Retest Req.</span>`;
     }
 
     html += `
-      <tr>
-        <td style="font-weight: 700; color: var(--primary-dark);">${e.empNo}</td>
-        <td><strong>${e.name}</strong></td>
-        <td><span class="iluo-badge iluo-badge-${curLvl.toLowerCase()}">${curLvl}</span></td>
-        <td><strong style="color: var(--accent-red);">${tgtLvl}</strong></td>
-        <td>${knowText}</td>
-        <td>${ojtText}</td>
-        <td>${overallStatus}</td>
-        <td>
-          <div style="display: flex; gap: 6px;">
-            <button class="btn-sm" style="background: #059669; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 0.75rem; cursor: pointer;" onclick="openOjtModalForEmp('${e.empNo}')" title="Score OJT">OJT</button>
-            <button class="btn-sm" style="background: #005B9E; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 0.75rem; cursor: pointer;" onclick="downloadEmployeeDocxReport('${e.empNo}')" title="Download DOCX Report">DOCX</button>
+      <tr style="border-bottom: 1px solid #E2E8F0; transition: background 0.15s ease;">
+        <td style="font-weight: 700; color: var(--primary-dark); padding: 14px 16px; font-size: 0.95rem;">${e.empNo}</td>
+        <td style="padding: 14px 20px;"><strong style="color: #0F172A; font-size: 0.95rem;">${e.name}</strong></td>
+        <td style="text-align: center; padding: 14px 12px;"><span class="iluo-badge iluo-badge-${curLvl.toLowerCase()}" style="width: 26px; height: 26px; font-size: 0.8rem;">${curLvl}</span></td>
+        <td style="text-align: center; padding: 14px 12px;"><strong style="color: var(--accent-red); font-size: 0.95rem;">${tgtLvl}</strong></td>
+        <td style="padding: 14px 18px;">${knowText}</td>
+        <td style="padding: 14px 18px;">${ojtText}</td>
+        <td style="padding: 14px 18px;">${overallStatus}</td>
+        <td style="padding: 14px 18px; text-align: center;">
+          <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
+            <button class="btn-sm" style="background: #059669; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 0.78rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(5,150,105,0.2);" onclick="openOjtModalForEmployee('${e.empNo}')" title="Score OJT Evaluation Form">📋 OJT</button>
+            <button class="btn-sm" style="background: #005B9E; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 0.78rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(0,91,158,0.2);" onclick="downloadEmployeeDocxReport('${e.empNo}')" title="Download Official DOCX Report">📄 DOCX</button>
           </div>
         </td>
       </tr>
