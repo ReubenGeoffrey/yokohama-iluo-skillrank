@@ -253,6 +253,11 @@ function handleRoute() {
 
   // Quick Direct OJT Modal Route (/ojt-modal, /ojt-evaluation, /ojt-form)
   if (hash === '/ojt-modal' || hash === '/ojt-evaluation' || hash === '/ojt-form') {
+    if (typeof hasOjtEvaluationAccess === 'function' && !hasOjtEvaluationAccess()) {
+      showToast('Access Restricted: OJT practical evaluations are only accessible to Section Supervisors and Admins.');
+      navigateTo('/section');
+      return;
+    }
     showView('viewPublicLanding');
     openOjtModalQuick();
     return;
@@ -4649,7 +4654,38 @@ function populateOjtEmployeeSwitcher() {
   if (currentVal) switcher.value = currentVal;
 }
 
+function hasOjtEvaluationAccess() {
+  // 1. Admin login check
+  try {
+    const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
+    if (sessionStr) {
+      const session = JSON.parse(sessionStr);
+      if (session && (session.role === 'admin' || session.username === 'admin')) {
+        return true;
+      }
+    }
+  } catch (e) {}
+
+  // 2. Section portal login check
+  if (sessionStorage.getItem('iluo_section_session')) {
+    return true;
+  }
+
+  // 3. OJT 5-Section login check (Safety, CI & TPM, Quality, Technical, HR)
+  if (sessionStorage.getItem('iluo_ojt_session')) {
+    return true;
+  }
+
+  return false;
+}
+
 function openOjtModalQuick() {
+  if (!hasOjtEvaluationAccess()) {
+    showToast('Access Restricted: OJT practical evaluations can only be accessed by Section Supervisors and Admins.');
+    navigateTo('/section');
+    return;
+  }
+
   populateOjtEmployeeSwitcher();
   populateOjtTemplateSwitcher();
 
@@ -4693,10 +4729,19 @@ function openOjtModalQuick() {
 }
 
 function openOjtModalForCurrentEmployee() {
+  if (!hasOjtEvaluationAccess()) {
+    showToast('Access Restricted: Employees cannot access the OJT practical evaluation form.');
+    return;
+  }
   openOjtModalQuick();
 }
 
 function openOjtModalForEmployee(empNo, optTemplateId) {
+  if (!hasOjtEvaluationAccess()) {
+    showToast('Access Restricted: OJT practical evaluations can only be accessed and scored by Section Supervisors and Admins.');
+    return;
+  }
+
   const emp = EMPLOYEES.find(e => String(e.empNo).trim() === String(empNo).trim());
   if (!emp) {
     showToast(`Employee ${empNo} not found in directory.`);
@@ -4963,6 +5008,10 @@ function updateOjtTotals() {
 }
 
 function saveOjtEvaluationForm() {
+  if (!hasOjtEvaluationAccess()) {
+    showToast('Access Denied: Only Section Supervisors and Admins can save OJT evaluations.');
+    return;
+  }
   if (!activeOjtEmployee || !activeOjtTemplate) return;
 
   const numCheckpoints = activeOjtTemplate.checkpointCount || activeOjtTemplate.checkpoints.length;
@@ -5023,6 +5072,10 @@ function saveOjtEvaluationForm() {
 }
 
 function downloadCurrentOjtExcel() {
+  if (!hasOjtEvaluationAccess()) {
+    showToast('Access Denied: Only Section Supervisors and Admins can download OJT Excel files.');
+    return;
+  }
   if (!activeOjtEmployee || !activeOjtTemplate) return;
 
   saveOjtEvaluationForm();
