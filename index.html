@@ -28,25 +28,28 @@
     </div>
   </header>
 
-  <!-- 4-Role Navigation Bar (ui.pptx) -->
-  <nav class="role-nav-bar" id="roleNavBar" style="display: none;">
+  <!-- Quick Portal Navigation Bar (Windows Desktop & Browser Access) -->
+  <nav class="role-nav-bar" id="roleNavBar" style="display: flex;">
     <button class="role-tab-btn" id="tabRoleHome" onclick="navigateTo('/')">
       <span class="tab-icon">🏠</span> <span>Home</span>
-    </button>
-    <button class="role-tab-btn" id="tabRoleEmp" onclick="switchRolePortal('employee')">
-      <span class="tab-icon">👤</span> <span>Employee Portal</span>
     </button>
     <button class="role-tab-btn" id="tabRoleSection" onclick="switchRolePortal('section')">
       <span class="tab-icon">🏢</span> <span>Section Portal</span>
     </button>
-    <button class="role-tab-btn" id="tabRoleDept" onclick="switchRolePortal('department')">
-      <span class="tab-icon">🏛️</span> <span>Department</span>
-    </button>
     <button class="role-tab-btn" id="tabRoleAdmin" onclick="switchRolePortal('admin')">
       <span class="tab-icon">⚙️</span> <span>Admin</span>
     </button>
+    <button class="role-tab-btn" id="tabRoleDept" onclick="switchRolePortal('department')">
+      <span class="tab-icon">🏛️</span> <span>Department</span>
+    </button>
     <button class="role-tab-btn" id="tabRoleOjt" onclick="switchRolePortal('ojt')">
-      <span class="tab-icon">📋</span> <span>OJT Login</span>
+      <span class="tab-icon">📋</span> <span>OJT Center</span>
+    </button>
+    <button class="role-tab-btn" id="tabRoleEmp" onclick="switchRolePortal('employee')">
+      <span class="tab-icon">👤</span> <span>Employee</span>
+    </button>
+    <button class="role-tab-btn" id="tabRoleCompleteAll" onclick="applyAll234CompletedRecords()" style="background: #ECFDF5; border-color: #059669; color: #065F46; font-weight: 700;" title="Click to ensure all 234 employees are completed for Exam & OJT">
+      <span class="tab-icon">⚡</span> <span>All 234 Completed</span>
     </button>
   </nav>
 
@@ -760,7 +763,7 @@
               </button>
               <button type="button" class="ojt-section-btn" id="ojtSecBtnCi" onclick="selectOjtLoginSection('CI & TPM')" ondblclick="quickEnterOjtSection('CI & TPM')">
                 <div class="ojt-sec-icon">⚙️</div>
-                <div class="ojt-sec-title">CI &amp; TPM</div>
+                <div class="ojt-sec-title">CI &amp; CPM</div>
                 <div class="ojt-sec-desc">Continuous improvement, 5S &amp; autonomous maintenance</div>
                 <div class="ojt-sec-action" onclick="quickEnterOjtSection('CI & TPM')">Enter Section &rarr;</div>
               </button>
@@ -1283,10 +1286,10 @@
               <div class="sec-tab-pane" id="secPaneEmployees">
                 <div class="table-header-tools" style="margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                   <div class="search-box" style="flex: 1; max-width: 360px;">
-                    <input type="text" id="secEmpSearchInput" class="form-control" placeholder="Search employee by ID, Name or Skill..." onkeyup="filterSectionEmployees()">
+                    <input type="text" id="explorerSecEmpSearchInput" class="form-control" placeholder="Search employee by ID, Name or Skill..." onkeyup="filterSectionEmployees()">
                   </div>
                   <div style="font-size: 0.85rem; color: var(--text-muted);">
-                    Showing <strong id="secEmpTableCount">0</strong> employees in this section
+                    Showing <strong id="explorerSecEmpTableCount">0</strong> employees in this section
                   </div>
                 </div>
                 <div class="data-table-wrapper">
@@ -1308,7 +1311,7 @@
                         <th>Actions</th>
                       </tr>
                     </thead>
-                    <tbody id="secEmpTableBody">
+                    <tbody id="explorerSecEmpTableBody">
                       <!-- Dynamic rows -->
                     </tbody>
                   </table>
@@ -2266,6 +2269,7 @@
   <!-- OJT Official Templates & Data Script & Application Router -->
   <script src="ojt_templates_data.js?v=44.0"></script>
   <script src="data.js?v=44.0"></script>
+  <script src="seed_data.js?v=44.0"></script>
   <script src="app.js?v=44.0"></script>
 </body>
 </html>

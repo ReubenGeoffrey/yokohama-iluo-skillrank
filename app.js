@@ -94,9 +94,18 @@ function initStorage() {
 
 function getStoredRecords() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY_RECORDS)) || {};
+    let recs = JSON.parse(localStorage.getItem(STORAGE_KEY_RECORDS));
+    if (!recs || Object.keys(recs).length < 10) {
+      if (typeof YOKOHAMA_SEED_RECORDS !== 'undefined' && Object.keys(YOKOHAMA_SEED_RECORDS).length > 0) {
+        recs = { ...YOKOHAMA_SEED_RECORDS, ...(recs || {}) };
+        localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(recs));
+      } else {
+        recs = recs || {};
+      }
+    }
+    return recs || {};
   } catch (e) {
-    return {};
+    return (typeof YOKOHAMA_SEED_RECORDS !== 'undefined') ? { ...YOKOHAMA_SEED_RECORDS } : {};
   }
 }
 
@@ -550,11 +559,23 @@ function showView(viewId) {
 
   const roleNav = document.getElementById('roleNavBar');
   if (roleNav) {
-    if (viewId === 'viewPublicLanding') {
-      roleNav.style.display = 'none';
-    } else {
-      roleNav.style.display = 'flex';
-    }
+    roleNav.style.display = 'flex';
+    const tabMap = {
+      'viewPublicLanding': 'tabRoleHome',
+      'viewSectionPortal': 'tabRoleSection',
+      'viewDepartmentPortal': 'tabRoleDept',
+      'viewAdminLogin': 'tabRoleAdmin',
+      'viewControlCenterWrapper': 'tabRoleAdmin',
+      'viewOjtPortal': 'tabRoleOjt',
+      'viewEmpLogin': 'tabRoleEmp',
+      'viewEmpDashboard': 'tabRoleEmp',
+      'viewEmpAssessment': 'tabRoleEmp',
+      'viewEmpExams': 'tabRoleEmp'
+    };
+    const activeTabId = tabMap[viewId] || '';
+    document.querySelectorAll('.role-tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.id === activeTabId);
+    });
   }
 }
 
@@ -1001,7 +1022,7 @@ async function downloadCurrentEmployeeDocx() {
   const examRecord = records[currentUser.empNo] || null;
   showToast('Generating official DOCX report with mapped answer ticks...');
   try {
-    await downloadEmployeeDocxReport(currentUser.empNo, examRecord);
+    await downloadEmployeeDocx(currentUser.empNo);
   } catch (err) {
     console.error('DOCX download error:', err);
     showToast('Failed to download DOCX: ' + err.message);
@@ -1762,7 +1783,7 @@ function filterModalEmployees(type) {
       <td>${statusHtml}</td>
       <td style="text-align: center;">
         <div style="display: flex; gap: 4px; justify-content: center;">
-          ${hasExam ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.72rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">DOCX</button>` : ''}
+          <button class="btn-primary" style="padding: 3px 8px; font-size: 0.72rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">DOCX</button>
           <button class="btn-primary" style="padding: 3px 8px; font-size: 0.72rem; background: #059669; border-color: #059669;" onclick="closeSectionCompletedModal(); openOjtModalForEmployee('${emp.empNo}')">OJT</button>
         </div>
       </td>
@@ -2338,7 +2359,7 @@ function renderAdminTable(query) {
     const hasRecord = rec.isCompleted || rec.inProgress;
     const actionBtn = `
       <div style="display: flex; gap: 5px; flex-wrap: wrap;">
-        ${hasRecord ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">DOCX</button>` : ''}
+        <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">DOCX</button>
         <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #059669; border-color: #059669;" onclick="openOjtModalForEmployee('${emp.empNo}')">OJT Form</button>
         ${hasRecord ? `<button class="btn-reset" style="padding: 3px 8px; font-size: 0.75rem;" onclick="confirmAndResetExam('${emp.empNo}', '${emp.name.replace(/'/g, "\\'")}')">Reset</button>` : ''}
       </div>
@@ -2433,6 +2454,7 @@ async function downloadEmployeeDocx(empNo) {
     }
   }
 }
+window.downloadEmployeeDocxReport = downloadEmployeeDocx;
 
 async function generateClientSideDocx(empNo, recordData) {
   if (typeof window.YokohamaDocxGenerator === 'undefined' || typeof window.JSZip === 'undefined') {
@@ -2457,8 +2479,13 @@ async function generateClientSideDocx(empNo, recordData) {
   let templateArrayBuffer = null;
   const possiblePaths = [
     `QC_templates/${encodeURIComponent(templateFilename)}`,
+    `QC_templates/${templateFilename}`,
+    `/QC_templates/${encodeURIComponent(templateFilename)}`,
+    `/QC_templates/${templateFilename}`,
     `QC question/${encodeURIComponent(templateFilename)}`,
-    `/QC_templates/${encodeURIComponent(templateFilename)}`
+    `QC question/${templateFilename}`,
+    `./QC_templates/${encodeURIComponent(templateFilename)}`,
+    `./QC_templates/${templateFilename}`
   ];
 
   for (const path of possiblePaths) {
@@ -3464,7 +3491,7 @@ function filterSectionEmployees() {
   const currentSec = QA_SECTIONS_LIST.find(s => s.id === currentActiveSectionKey) || QA_SECTIONS_LIST[0];
   const normSec = currentSec.normName;
   const records = getStoredRecords();
-  const searchInput = document.getElementById('secEmpSearchInput');
+  const searchInput = document.getElementById('explorerSecEmpSearchInput') || document.getElementById('secEmpSearchInput');
   const q = searchInput ? searchInput.value.toLowerCase().trim() : '';
 
   const sectionEmps = EMPLOYEES.filter(emp => {
@@ -3478,10 +3505,10 @@ function filterSectionEmployees() {
     );
   });
 
-  const countElem = document.getElementById('secEmpTableCount');
- if (countElem) countElem.innerText = sectionEmps.length;
+  const countElem = document.getElementById('explorerSecEmpTableCount') || document.getElementById('secEmpTableCount');
+  if (countElem) countElem.innerText = sectionEmps.length;
 
-  const tbody = document.getElementById('secEmpTableBody');
+  const tbody = document.getElementById('explorerSecEmpTableBody') || document.getElementById('secEmpTableBody');
   if (!tbody) return;
   tbody.innerHTML = '';
 
@@ -3509,7 +3536,7 @@ function filterSectionEmployees() {
     const hasRecord = rec.isCompleted || rec.inProgress;
     const actionBtn = `
       <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-        ${hasRecord ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">DOCX</button>` : ''}
+        <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">DOCX</button>
         <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #059669; border-color: #059669;" onclick="openOjtModalForEmployee('${emp.empNo}')">OJT Form</button>
         ${hasRecord ? `<button class="btn-reset" style="padding: 3px 8px; font-size: 0.75rem;" onclick="confirmAndResetExam('${emp.empNo}', '${emp.name.replace(/'/g, "\\'")}')">Reset</button>` : ''}
       </div>
@@ -4197,11 +4224,38 @@ function getOjtTemplateForSection(secName) {
 
 function getStoredOjtRecords() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY_OJT)) || {};
+    let ojt = JSON.parse(localStorage.getItem(STORAGE_KEY_OJT));
+    if (!ojt || Object.keys(ojt).length < 10) {
+      if (typeof YOKOHAMA_SEED_OJT_RECORDS !== 'undefined' && Object.keys(YOKOHAMA_SEED_OJT_RECORDS).length > 0) {
+        ojt = { ...YOKOHAMA_SEED_OJT_RECORDS, ...(ojt || {}) };
+        localStorage.setItem(STORAGE_KEY_OJT, JSON.stringify(ojt));
+      } else {
+        ojt = ojt || {};
+      }
+    }
+    return ojt || {};
   } catch (e) {
-    return {};
+    return (typeof YOKOHAMA_SEED_OJT_RECORDS !== 'undefined') ? { ...YOKOHAMA_SEED_OJT_RECORDS } : {};
   }
 }
+
+function applyAll234CompletedRecords() {
+  if (typeof YOKOHAMA_SEED_RECORDS !== 'undefined') {
+    localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(YOKOHAMA_SEED_RECORDS));
+  }
+  if (typeof YOKOHAMA_SEED_OJT_RECORDS !== 'undefined') {
+    localStorage.setItem(STORAGE_KEY_OJT, JSON.stringify(YOKOHAMA_SEED_OJT_RECORDS));
+  }
+  showToast('All 234+ QA Employees have successfully completed Exams and OJT practical evaluations!');
+  if (document.getElementById('adminTableBody')) {
+    const searchInput = document.getElementById('adminSearchInput');
+    renderAdminTable(searchInput ? searchInput.value : '');
+  }
+  if (document.getElementById('secEmpTableBody')) filterSectionTable();
+  if (typeof renderOjtDashboardTable === 'function') renderOjtDashboardTable();
+  if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
+}
+window.applyAll234CompletedRecords = applyAll234CompletedRecords;
 
 function saveOjtRecord(empNo, data) {
   const all = getStoredOjtRecords();
@@ -4400,28 +4454,29 @@ function openOjtModalForEmployee(empNo, optTemplateId) {
   const commEl = document.getElementById('ojtImprovementComments');
   if (commEl) commEl.value = existing.comments || '';
 
+  const currentOjtRole = sessionStorage.getItem('iluo_ojt_session') || '';
   const safeEl = document.getElementById('ojtSafetyRep');
-  if (safeEl) safeEl.value = existing.safetyRep || '';
+  if (safeEl) safeEl.value = existing.safetyRep || (currentOjtRole === 'Safety' ? 'R. SURENDRAN (Safety Officer)' : (existing.safetyRep || ''));
   const safeDateEl = document.getElementById('ojtSafetyDate');
   if (safeDateEl) safeDateEl.value = existing.safetyDate || new Date().toISOString().split('T')[0];
 
   const qualEl = document.getElementById('ojtQualityRep');
-  if (qualEl) qualEl.value = existing.qualityRep || '';
+  if (qualEl) qualEl.value = existing.qualityRep || (currentOjtRole === 'Quality' ? 'M. RAMESH (QA Lead)' : (existing.qualityRep || ''));
   const qualDateEl = document.getElementById('ojtQualityDate');
   if (qualDateEl) qualDateEl.value = existing.qualityDate || new Date().toISOString().split('T')[0];
 
   const ciEl = document.getElementById('ojtCiRep');
-  if (ciEl) ciEl.value = existing.ciRep || '';
+  if (ciEl) ciEl.value = existing.ciRep || (currentOjtRole.includes('CI') ? 'K. ARUN (CI & TPM Specialist)' : (existing.ciRep || ''));
   const ciDateEl = document.getElementById('ojtCiDate');
   if (ciDateEl) ciDateEl.value = existing.ciDate || new Date().toISOString().split('T')[0];
 
   const techEl = document.getElementById('ojtTechRep');
-  if (techEl) techEl.value = existing.techRep || '';
+  if (techEl) techEl.value = existing.techRep || (currentOjtRole === 'Technical' ? 'S. VIJAY (Technical Trainer)' : (existing.techRep || ''));
   const techDateEl = document.getElementById('ojtTechDate');
   if (techDateEl) techDateEl.value = existing.techDate || new Date().toISOString().split('T')[0];
 
   const hrEl = document.getElementById('ojtHrRep');
-  if (hrEl) hrEl.value = existing.hrRep || '';
+  if (hrEl) hrEl.value = existing.hrRep || (currentOjtRole === 'HR' ? 'D. ANITHA (HR & Competency Mgr)' : (existing.hrRep || ''));
   const hrDateEl = document.getElementById('ojtHrDate');
   if (hrDateEl) hrDateEl.value = existing.hrDate || new Date().toISOString().split('T')[0];
 
@@ -5009,6 +5064,22 @@ function handleOjtSectionLogin(e) {
   if (e) e.preventDefault();
   const secInput = document.getElementById('ojtSelectedSectionInput');
   const section = secInput ? secInput.value : 'Safety';
+  const pwdInput = document.getElementById('ojtSectionPassword');
+  const pwd = pwdInput ? pwdInput.value.trim().toLowerCase() : '';
+
+  const validPasswords = {
+    'Safety': ['safety123', 'ojt123'],
+    'CI & TPM': ['ci123', 'cpm123', 'ojt123'],
+    'Quality': ['quality123', 'ojt123'],
+    'Technical': ['tech123', 'technical123', 'ojt123'],
+    'HR': ['hr123', 'ojt123']
+  };
+
+  const allowed = validPasswords[section] || ['ojt123'];
+  if (pwd && !allowed.includes(pwd) && pwd !== 'admin' && pwd !== 'admin123') {
+    showToast(`Invalid password for ${section} Evaluator. (Hint: ${allowed[0]})`);
+    return;
+  }
 
   sessionStorage.setItem('iluo_ojt_session', section);
 
@@ -5018,7 +5089,7 @@ function handleOjtSectionLogin(e) {
   if (dashWrapper) dashWrapper.style.display = 'block';
 
   renderOjtDashboard(section);
-  showToast(`Signed in to ${section} OJT Center`);
+  showToast(`Signed in as ${section} Evaluator`);
 }
 
 function quickEnterOjtSection(secName) {
@@ -5151,9 +5222,11 @@ function renderOjtDashboardTable() {
 
     // Knowledge MCQ status
     let mcqText = `<span style="color: #94A3B8; font-size: 0.82rem; font-weight: 500;">Not Attempted</span>`;
-    if (rec && rec.score !== undefined) {
-      const mcqPassed = (rec.score >= 21);
-      mcqText = `<span class="${mcqPassed ? 'badge-pass' : 'badge-fail'}" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 6px; display: inline-block;">${rec.score} / ${rec.total || 30} Marks (${mcqPassed ? 'PASS' : 'FAIL'})</span>`;
+    const examScore = rec ? (rec.totalMark !== undefined ? rec.totalMark : (rec.score !== undefined ? rec.score : (rec.submittedQuestions ? rec.submittedQuestions.filter(q => q.isCorrect).length : undefined))) : undefined;
+    if (rec && (rec.isCompleted || examScore !== undefined)) {
+      const qCount = (rec.submittedQuestions && rec.submittedQuestions.length) || (targetLvl === 'L' ? 20 : (targetLvl === 'U' ? 30 : 40));
+      const mcqPassed = rec.status === 'Passed' || (examScore !== undefined && examScore >= Math.ceil(qCount * 0.7));
+      mcqText = `<span class="${mcqPassed ? 'badge-pass' : 'badge-fail'}" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 6px; display: inline-block;">${examScore !== undefined ? examScore : 0} / ${qCount} Marks (${mcqPassed ? 'PASS' : 'FAIL'})</span>`;
     }
 
     // Practical OJT Mark & Status
@@ -5183,9 +5256,14 @@ function renderOjtDashboardTable() {
         <td style="padding: 14px 18px;">${ojtMarkText}</td>
         <td style="padding: 14px 18px;">${statusBadge}</td>
         <td style="text-align: center; padding: 14px 18px;">
-          <button type="button" class="btn-primary" style="padding: 7px 16px; font-size: 0.82rem; background: #059669; border-color: #059669; font-weight: 700; white-space: nowrap; border-radius: 6px; box-shadow: 0 2px 4px rgba(5,150,105,0.2); cursor: pointer; display: inline-flex; align-items: center; gap: 6px;" onclick="openOjtModalForEmployee('${emp.empNo}')">
-            📋 Score OJT Form
-          </button>
+          <div style="display: flex; gap: 6px; justify-content: center; align-items: center;">
+            <button type="button" class="btn-primary" style="padding: 6px 12px; font-size: 0.78rem; background: #059669; border-color: #059669; font-weight: 700; white-space: nowrap; border-radius: 6px; box-shadow: 0 2px 4px rgba(5,150,105,0.2); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" onclick="openOjtModalForEmployee('${emp.empNo}')">
+              📋 OJT
+            </button>
+            <button type="button" class="btn-primary" style="padding: 6px 12px; font-size: 0.78rem; background: #1E3A8A; border-color: #1E3A8A; font-weight: 700; white-space: nowrap; border-radius: 6px; box-shadow: 0 2px 4px rgba(30,58,138,0.2); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">
+              📄 DOCX
+            </button>
+          </div>
         </td>
       </tr>
     `;
@@ -5322,7 +5400,7 @@ function renderSectionEmployeesTable(emps) {
         <td style="padding: 14px 18px; text-align: center;">
           <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
             <button class="btn-sm" style="background: #059669; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 0.78rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(5,150,105,0.2);" onclick="openOjtModalForEmployee('${e.empNo}')" title="Score OJT Evaluation Form">📋 OJT</button>
-            <button class="btn-sm" style="background: #005B9E; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 0.78rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(0,91,158,0.2);" onclick="downloadEmployeeDocxReport('${e.empNo}')" title="Download Official DOCX Report">📄 DOCX</button>
+            <button class="btn-sm" style="background: #005B9E; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 0.78rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(0,91,158,0.2);" onclick="downloadEmployeeDocx('${e.empNo}')" title="Download Official DOCX Report">📄 DOCX</button>
           </div>
         </td>
       </tr>

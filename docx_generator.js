@@ -175,7 +175,7 @@
     return bestQ;
   }
 
-  async function mapExactTemplate(templateBuf, emp, examRecord, jszipInstance, questionBankList) {
+  async function mapExactTemplate(templateBuf, emp, examRecord, jszipInstance, questionBankList, optionalOjtData, optionalOjtTemplate) {
     const JSZip = jszipInstance || (typeof window !== 'undefined' ? window.JSZip : null);
     if (!JSZip) throw new Error('JSZip library is required to map DOCX template');
 
