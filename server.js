@@ -30,6 +30,13 @@ app.get('/ojt_templates_data.js', (req, res) => {
   res.sendFile(path.join(__dirname, 'ojt_templates_data.js'));
 });
 
+// Explicit Seed Completed Records script handler
+app.get('/seed_data.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.sendFile(path.join(__dirname, 'seed_data.js'));
+});
+
 // Server-side active OTP storage (Email -> { otp, expiresAt, attempts, lastSendAt })
 const otpStore = new Map();
 
