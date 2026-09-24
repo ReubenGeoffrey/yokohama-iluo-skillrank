@@ -5501,6 +5501,8 @@ function renderOjtDashboardTable() {
   const allOjt = getStoredOjtRecords();
   const records = getStoredRecords();
 
+  const targetMap = { 'I': 'L', 'L': 'U', 'U': 'O', 'O': 'O' };
+
   let filtered = EMPLOYEES.filter(emp => {
     if (query) {
       const matchName = (emp.name || '').toLowerCase().includes(query);
@@ -5512,7 +5514,13 @@ function renderOjtDashboardTable() {
       if (!empSec.includes(selectedSec.toLowerCase())) return false;
     }
     if (selectedLvl !== 'ALL') {
-      if ((emp.currentLevel || 'I').toUpperCase() !== selectedLvl) return false;
+      const currLvl = (emp.currentLevel || 'I').toUpperCase();
+      const targetLvl = targetMap[currLvl] || 'L';
+      if (selectedLvl === 'I') {
+        if (currLvl !== 'I') return false;
+      } else {
+        if (targetLvl !== selectedLvl) return false;
+      }
     }
     return true;
   });
@@ -5526,8 +5534,6 @@ function renderOjtDashboardTable() {
     tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 36px 20px; color: #94A3B8; font-size: 0.95rem;">No employees match the selected search or filter criteria.</td></tr>`;
     return;
   }
-
-  const targetMap = { 'I': 'L', 'L': 'U', 'U': 'O', 'O': 'O' };
 
   tbody.innerHTML = filtered.map((emp, idx) => {
     const ojt = allOjt[emp.empNo];
@@ -5721,12 +5727,21 @@ function renderSectionEmployeesTable(emps) {
 function filterSectionTable() {
   const search = (document.getElementById('secEmpSearchInput')?.value || '').toLowerCase().trim();
   const lvl = document.getElementById('secLevelFilter')?.value || 'ALL';
+  const targetMap = { 'I': 'L', 'L': 'U', 'U': 'O', 'O': 'O' };
 
   const secNorm = currentActiveSection.toLowerCase().replace(/\s+/g, ' ').trim();
   const emps = EMPLOYEES.filter(e => {
     const s = (e.section || '').toLowerCase().replace(/\s+/g, ' ').trim();
     if (!s.includes(secNorm) && !secNorm.includes(s)) return false;
-    if (lvl !== 'ALL' && (e.currentLevel || 'L').toUpperCase() !== lvl) return false;
+    if (lvl !== 'ALL') {
+      const curLvl = (e.currentLevel || 'I').toUpperCase();
+      const tgtLvl = targetMap[curLvl] || 'L';
+      if (lvl === 'I') {
+        if (curLvl !== 'I') return false;
+      } else {
+        if (tgtLvl !== lvl) return false;
+      }
+    }
     if (search && !e.name.toLowerCase().includes(search) && !String(e.empNo).toLowerCase().includes(search)) return false;
     return true;
   });

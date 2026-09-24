@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Yokohama ILUO Skill Assessment Portal | Tire Building QA</title>
   <link rel="icon" type="image/png" href="yokohama_logo.png">
-  <link rel="stylesheet" href="styles.css?v=42.0">
+  <link rel="stylesheet" href="styles.css?v=43.0">
 </head>
 <body>
 
@@ -576,12 +576,12 @@
             <h3 style="margin: 0; color: var(--primary-dark); font-size: 1.2rem; font-weight: 800;">Section Employee Roster &amp; Skill Assessments</h3>
             <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
               <input type="text" id="secEmpSearchInput" class="form-control" placeholder="🔍 Search by name or emp ID..." style="min-width: 240px; font-size: 0.88rem; padding: 10px 14px; border-radius: 8px;" oninput="filterSectionTable()">
-              <select id="secLevelFilter" class="form-control" style="min-width: 140px; font-size: 0.88rem; padding: 10px 14px; border-radius: 8px; font-weight: 600;" onchange="filterSectionTable()">
-                <option value="ALL">🎯 All Levels</option>
-                <option value="I">Level I</option>
-                <option value="L">Level L</option>
-                <option value="U">Level U</option>
-                <option value="O">Level O</option>
+              <select id="secLevelFilter" class="form-control" style="min-width: 175px; font-size: 0.88rem; padding: 10px 14px; border-radius: 8px; font-weight: 600;" onchange="filterSectionTable()">
+                <option value="ALL">🎯 All Assessment Levels</option>
+                <option value="L">Level L (Assessment: I → L)</option>
+                <option value="U">Level U (Assessment: L → U)</option>
+                <option value="O">Level O (Assessment: U → O)</option>
+                <option value="I">Level I (Induction)</option>
               </select>
             </div>
           </div>
@@ -873,13 +873,13 @@
                   <option value="Final Finish RRO & ALT QA">Final Finish RRO &amp; ALT QA</option>
                 </select>
               </div>
-              <div style="min-width: 150px;">
+              <div style="min-width: 175px;">
                 <select id="ojtLevelFilter" class="form-control" style="width: 100%; font-size: 0.88rem; padding: 10px 14px; border-radius: 8px; font-weight: 600;" onchange="renderOjtDashboardTable()">
-                  <option value="ALL">🎯 All Levels</option>
-                  <option value="I">Level I</option>
-                  <option value="L">Level L</option>
-                  <option value="U">Level U</option>
-                  <option value="O">Level O</option>
+                  <option value="ALL">🎯 All Assessment Levels</option>
+                  <option value="L">Level L (Assessment: I → L)</option>
+                  <option value="U">Level U (Assessment: L → U)</option>
+                  <option value="O">Level O (Assessment: U → O)</option>
+                  <option value="I">Level I (Induction)</option>
                 </select>
               </div>
             </div>
@@ -2270,11 +2270,11 @@
   <script defer src="mammoth.browser.min.js"></script>
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script defer src="jszip.min.js"></script>
-  <script defer src="docx_generator.js?v=42.0"></script>
+  <script defer src="docx_generator.js?v=43.0"></script>
 
   <!-- OJT Official Templates & Data Script & Application Router -->
-  <script src="ojt_templates_data.js?v=42.0"></script>
-  <script src="data.js?v=42.0"></script>
-  <script src="app.js?v=42.0"></script>
+  <script src="ojt_templates_data.js?v=43.0"></script>
+  <script src="data.js?v=43.0"></script>
+  <script src="app.js?v=43.0"></script>
 </body>
 </html>
