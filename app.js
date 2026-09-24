@@ -4831,6 +4831,22 @@ function openOjtModalForEmployee(empNo, optTemplateId) {
 
   renderOjtForm();
 
+  if (existing.qualificationStatus === 'Qualified') {
+    const radioYes = document.getElementById('ojtQualRadioYes');
+    if (radioYes) radioYes.checked = true;
+    const radioNo = document.getElementById('ojtQualRadioNo');
+    if (radioNo) radioNo.checked = false;
+    const recEl = document.getElementById('ojtFinalRecommendationDisplay');
+    if (recEl) { recEl.innerText = 'Approved (Qualified)'; recEl.style.color = '#166534'; }
+  } else if (existing.qualificationStatus === 'Not Qualified') {
+    const radioNo = document.getElementById('ojtQualRadioNo');
+    if (radioNo) radioNo.checked = true;
+    const radioYes = document.getElementById('ojtQualRadioYes');
+    if (radioYes) radioYes.checked = false;
+    const recEl = document.getElementById('ojtFinalRecommendationDisplay');
+    if (recEl) { recEl.innerText = 'Reassessment Required (Not Qualified)'; recEl.style.color = '#B91C1C'; }
+  }
+
   const modal = document.getElementById('modalOjtEvaluation');
   if (modal) {
     modal.style.display = 'flex';
@@ -4884,7 +4900,7 @@ function renderOjtForm() {
   const dateEl = document.getElementById('ojtAssessmentDate');
   if (dateEl) dateEl.innerText = assessmentDate;
 
-  // Render Checkpoint Rows
+  // Render Checkpoint Rows (Exact 10-column layout matching D:\OJT official sheets)
   const tbody = document.getElementById('ojtCheckpointsBody');
   if (tbody) {
     tbody.innerHTML = tmpl.checkpoints.map((cp, idx) => {
@@ -4904,19 +4920,20 @@ function renderOjtForm() {
       }).join('');
 
       return `
-        <tr style="border-bottom: 1px solid #CBD5E1; background: ${idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
-          <td style="padding: 10px 12px; text-align: center; font-weight: 700; color: #475569; border-right: 1px solid #CBD5E1;">${cp.sno}</td>
-          <td style="padding: 10px 16px; color: #1E293B; font-weight: 600; line-height: 1.4; border-right: 1px solid #CBD5E1;">${cp.text}</td>
-          <td style="padding: 10px 12px; text-align: center; border-right: 1px solid #CBD5E1;">
-            <div class="ojt-score-group">
+        <tr style="background: ${idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA'};">
+          <td style="border: 1px solid #000; padding: 6px 8px; text-align: center; font-weight: 700; color: #000000; width: 50px;">${cp.sno}</td>
+          <td colspan="6" style="border: 1px solid #000; padding: 6px 12px; color: #000000; font-weight: 600; line-height: 1.35; font-size: 0.86rem;">${cp.text}</td>
+          <td colspan="2" style="border: 1px solid #000; padding: 4px 6px; text-align: center; width: 170px;">
+            <div class="ojt-score-group" style="display: inline-flex; gap: 4px; justify-content: center; align-items: center;">
               ${buttonsHtml}
             </div>
           </td>
-          <td style="padding: 10px 12px; text-align: center;">
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; width: 85px;">
             <button type="button" 
                     id="ojtWiCheckBtn_${cp.sno}"
                     class="ojt-wicheck-btn ${isWiChecked ? 'active' : ''}" 
-                    onclick="toggleOjtWiCheck(${cp.sno})">
+                    onclick="toggleOjtWiCheck(${cp.sno})"
+                    style="font-size: 0.78rem; padding: 4px 8px;">
               ${isWiChecked ? '✓ OK' : 'Check'}
             </button>
           </td>
@@ -4974,7 +4991,16 @@ function toggleOjtWiCheck(sno) {
 }
 
 function onOjtRadioChange(status) {
-  // Handled via user choice
+  const recEl = document.getElementById('ojtFinalRecommendationDisplay');
+  if (recEl) {
+    if (status === 'Qualified') {
+      recEl.innerText = 'Approved (Qualified)';
+      recEl.style.color = '#166534';
+    } else {
+      recEl.innerText = 'Reassessment Required (Not Qualified)';
+      recEl.style.color = '#B91C1C';
+    }
+  }
 }
 
 function updateOjtTotals() {
@@ -5004,26 +5030,39 @@ function updateOjtTotals() {
   const badge = document.getElementById('ojtQualificationBadge');
   const radioYes = document.getElementById('ojtQualRadioYes');
   const radioNo = document.getElementById('ojtQualRadioNo');
+  const recEl = document.getElementById('ojtFinalRecommendationDisplay');
 
   if (badge) {
     if (scoredCount === 0) {
       badge.style.background = '#FEF3C7';
       badge.style.color = '#D97706';
-      badge.innerText = 'PENDING SCORING';
+      badge.innerText = 'PENDING';
       if (radioYes) radioYes.checked = false;
       if (radioNo) radioNo.checked = false;
+      if (recEl) {
+        recEl.innerText = 'Pending Evaluation';
+        recEl.style.color = '#D97706';
+      }
     } else if (isQualified) {
       badge.style.background = '#DCFCE7';
       badge.style.color = '#166534';
       badge.innerText = `QUALIFIED (${totalScore} / ${maxScore} = ${pct}%)`;
       if (radioYes) radioYes.checked = true;
       if (radioNo) radioNo.checked = false;
+      if (recEl) {
+        recEl.innerText = 'Approved (Qualified)';
+        recEl.style.color = '#166534';
+      }
     } else {
       badge.style.background = '#FEE2E2';
       badge.style.color = '#B91C1C';
       badge.innerText = `NOT QUALIFIED (${totalScore} / ${maxScore} = ${pct}%)`;
       if (radioYes) radioYes.checked = false;
       if (radioNo) radioNo.checked = true;
+      if (recEl) {
+        recEl.innerText = 'Reassessment Required (Not Qualified)';
+        recEl.style.color = '#B91C1C';
+      }
     }
   }
 }

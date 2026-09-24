@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Yokohama ILUO Skill Assessment Portal | Tire Building QA</title>
   <link rel="icon" type="image/png" href="yokohama_logo.png">
-  <link rel="stylesheet" href="styles.css?v=41.0">
+  <link rel="stylesheet" href="styles.css?v=42.0">
 </head>
 <body>
 
@@ -1983,20 +1983,11 @@
 
   <!-- On-The-Job Training Evaluation (OJT) Form Modal -->
   <!-- On-The-Job Training Evaluation (OJT) Form Modal -->
-  <div class="modal-overlay" id="modalOjtEvaluation" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.75); z-index: 99999; overflow-y: auto; padding: 20px; opacity: 1; pointer-events: auto;">
-    <div class="security-modal-box" style="max-width: 980px; width: 100%; text-align: left; background: #FFFFFF; border-radius: 12px; padding: 24px 28px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.25); margin: 30px auto; max-height: 90vh; overflow-y: auto;">
-      <!-- Modal Header (Official Yokohama / ATC Layout) -->
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #005B9E; padding-bottom: 12px; margin-bottom: 16px;">
-        <div style="flex: 1; text-align: center;">
-          <div style="font-size: 0.95rem; font-weight: 800; color: #0F172A; letter-spacing: 1.5px; text-transform: uppercase;">ATC TIRES PRIVATE LIMITED</div>
-          <h2 id="ojtModalHeaderTitle" style="margin: 4px 0 0 0; color: #005B9E; font-size: 1.25rem; font-weight: 800; text-transform: uppercase;">TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION</h2>
-          <div id="ojtModalFormatNo" style="font-size: 0.82rem; color: #475569; font-weight: 700; margin-top: 4px;">Format No: ATC/T/FOR/HR/87D</div>
-        </div>
-        <button onclick="closeOjtModal()" style="background: none; border: none; font-size: 1.8rem; cursor: pointer; color: #64748B; line-height: 1; margin-left: 12px;">&times;</button>
-      </div>
-
-      <!-- Quick Selectors Bar (Employee Switcher & Official Template Switcher) -->
-      <div style="background: #F0FDF4; border: 1.5px solid #86EFAC; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+  <div class="modal-overlay" id="modalOjtEvaluation" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.85); z-index: 99999; overflow-y: auto; padding: 20px; opacity: 1; pointer-events: auto;">
+    <div class="security-modal-box" style="max-width: 1040px; width: 100%; text-align: left; background: #E2E8F0; border-radius: 12px; padding: 20px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3); margin: 20px auto; max-height: 94vh; overflow-y: auto;">
+      
+      <!-- Top Toolbar (Employee & Template Switchers + Close Button) -->
+      <div style="background: #FFFFFF; border: 1.5px solid #CBD5E1; border-radius: 8px; padding: 10px 16px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
         <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 250px;">
           <label for="ojtEmployeeSwitcher" style="font-size: 0.82rem; font-weight: 800; color: #166534; white-space: nowrap; text-transform: uppercase;">Evaluate Employee:</label>
           <select id="ojtEmployeeSwitcher" class="form-control" style="font-weight: 700; color: #0F172A; border-color: #86EFAC; font-size: 0.88rem; background: #FFFFFF;" onchange="openOjtModalForEmployee(this.value)">
@@ -2009,147 +2000,197 @@
             <option value="">-- Choose Official OJT Template --</option>
           </select>
         </div>
+        <button onclick="closeOjtModal()" style="background: none; border: none; font-size: 1.8rem; cursor: pointer; color: #64748B; line-height: 1; margin-left: 8px;" title="Close Modal">&times;</button>
       </div>
 
-      <!-- Official Employee Info Grid (Exact 2-Row Layout from Excel Form) -->
-      <div class="ojt-info-grid" style="border: 1.5px solid #CBD5E1; border-radius: 6px; overflow: hidden; margin-bottom: 14px; background: #FFFFFF;">
-        <!-- Row 1 -->
-        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; border-bottom: 1px solid #CBD5E1; font-size: 0.85rem;">
-          <div style="padding: 8px 12px; border-right: 1px solid #CBD5E1;"><strong style="color: #475569;">Name:</strong> <span id="ojtEmpName" style="font-weight: 700; color: #0F172A;">-</span></div>
-          <div style="padding: 8px 12px; border-right: 1px solid #CBD5E1;"><strong style="color: #475569;">Emp ID:</strong> <span id="ojtEmpNo" style="font-weight: 700; color: #005B9E; font-family: monospace;">-</span></div>
-          <div style="padding: 8px 12px;"><strong style="color: #475569;">Joining Date:</strong> <span id="ojtEmpDoj" style="font-weight: 600;">-</span></div>
-        </div>
-        <!-- Row 2 -->
-        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; font-size: 0.85rem;">
-          <div style="padding: 8px 12px; border-right: 1px solid #CBD5E1;"><strong style="color: #475569;">Section &amp; Dept.:</strong> <span id="ojtEmpSection" style="font-weight: 600;">-</span></div>
-          <div style="padding: 8px 12px; border-right: 1px solid #CBD5E1;"><strong style="color: #475569;">Skill Level:</strong> <span id="ojtEmpSkillLevel" style="font-weight: 800; color: #0284C7;">( I )   TO   ( L )</span></div>
-          <div style="padding: 8px 12px;"><strong style="color: #475569;">Assessment Date:</strong> <span id="ojtAssessmentDate" style="font-weight: 600;">-</span></div>
-        </div>
-      </div>
-
-      <!-- Rating Scale Legend Bar (Official Excel Scale) -->
-      <div style="background: #F8FAFC; border: 1.5px solid #CBD5E1; border-radius: 6px; padding: 8px 14px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.82rem;">
-        <strong style="color: #0F172A; text-transform: uppercase; letter-spacing: 0.5px;">Rank</strong>
-        <span style="font-weight: 700; color: #DC2626;">1 = POOR</span>
-        <span style="font-weight: 700; color: #EA580C;">2 = FAIR</span>
-        <span style="font-weight: 700; color: #D97706;">3 = GOOD</span>
-        <span style="font-weight: 700; color: #2563EB;">4 = VERY GOOD</span>
-        <span style="font-weight: 700; color: #16A34A;">5 = EXCELLENT</span>
-      </div>
-
-      <!-- Checkpoints Form Table (With WI Check Column) -->
-      <div class="ojt-table-container" style="margin-bottom: 16px; border: 1.5px solid #CBD5E1; border-radius: 6px; overflow-x: auto;">
-        <table class="ojt-table" style="width: 100%; border-collapse: collapse; font-size: 0.86rem;">
-          <thead style="background: #F1F5F9; border-bottom: 1.5px solid #CBD5E1;">
+      <!-- OFFICIAL SHEET TABLE CONTAINER (Exact 1:1 format from D:\OJT) -->
+      <div style="background: #FFFFFF; border: 2px solid #000000; box-shadow: 0 4px 15px rgba(0,0,0,0.12); padding: 0; font-family: Calibri, 'Segoe UI', Arial, sans-serif; overflow-x: auto; margin-bottom: 16px;">
+        <table style="width: 100%; border-collapse: collapse; font-family: Calibri, 'Segoe UI', Arial, sans-serif; color: #000000; font-size: 0.86rem; background: #FFFFFF;">
+          <thead>
             <tr>
-              <th style="padding: 10px 12px; width: 50px; text-align: center; border-right: 1px solid #CBD5E1; font-weight: 800; color: #1E293B;">S.No</th>
-              <th style="padding: 10px 16px; text-align: left; border-right: 1px solid #CBD5E1; font-weight: 800; color: #1E293B;">Training Content / Check Point</th>
-              <th style="padding: 10px 12px; width: 220px; text-align: center; border-right: 1px solid #CBD5E1; font-weight: 800; color: #1E293B;">Score</th>
-              <th style="padding: 10px 12px; width: 95px; text-align: center; font-weight: 800; color: #1E293B;">WI Check</th>
+              <th colspan="10" style="border: 1px solid #000; padding: 8px 12px; text-align: center; font-size: 1.15rem; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; background: #FFFFFF; color: #000000;">
+                ATC TIRES PRIVATE LIMITED
+              </th>
+            </tr>
+            <tr>
+              <th colspan="10" id="ojtModalHeaderTitle" style="border: 1px solid #000; padding: 10px 12px; text-align: center; font-size: 1.25rem; font-weight: 800; text-transform: uppercase; background: #FFFFFF; color: #005B9E;">
+                TN PLANT - INDIVIDUAL ON THE JOB TRAINING EVALUATION
+              </th>
             </tr>
           </thead>
+          <tbody>
+            <!-- Row 4: Employee Info Row 1 -->
+            <tr>
+              <td colspan="5" style="border: 1px solid #000; padding: 6px 10px; font-size: 0.88rem;">
+                <strong>Name:</strong> <span id="ojtEmpName" style="font-weight: 700; color: #0F172A;">-</span>
+              </td>
+              <td colspan="2" style="border: 1px solid #000; padding: 6px 10px; font-size: 0.88rem;">
+                <strong>Emp ID:</strong> <span id="ojtEmpNo" style="font-weight: 700; font-family: monospace; color: #005B9E;">-</span>
+              </td>
+              <td colspan="3" style="border: 1px solid #000; padding: 6px 10px; font-size: 0.88rem;">
+                <strong>Joining Date:</strong> <span id="ojtEmpDoj" style="font-weight: 600;">-</span>
+              </td>
+            </tr>
+            <!-- Row 5: Employee Info Row 2 -->
+            <tr>
+              <td colspan="5" style="border: 1px solid #000; padding: 6px 10px; font-size: 0.88rem;">
+                <strong>Section &amp; Dept:</strong> <span id="ojtEmpSection" style="font-weight: 600;">-</span>
+              </td>
+              <td colspan="2" style="border: 1px solid #000; padding: 6px 10px; font-size: 0.88rem;">
+                <strong>Skill Level:</strong> <span id="ojtEmpSkillLevel" style="font-weight: 800; color: #0284C7;">( I )   TO   ( L )</span>
+              </td>
+              <td colspan="3" style="border: 1px solid #000; padding: 6px 10px; font-size: 0.88rem;">
+                <strong>Assessment Date:</strong> <span id="ojtAssessmentDate" style="font-weight: 600;">-</span>
+              </td>
+            </tr>
+            <!-- Row 6: Rank Scale Row -->
+            <tr style="background: #FFFFFF;">
+              <td style="border: 1px solid #000; padding: 6px 8px; text-align: center; font-weight: 800;">Rank</td>
+              <td colspan="3" style="border: 1px solid #000; padding: 6px 8px; text-align: center; font-weight: 700;">1 = &nbsp; POOR</td>
+              <td style="border: 1px solid #000; padding: 6px 8px; text-align: center; font-weight: 700;">2 = &nbsp; FAIR</td>
+              <td colspan="2" style="border: 1px solid #000; padding: 6px 8px; text-align: center; font-weight: 700;">3 = &nbsp; GOOD</td>
+              <td colspan="2" style="border: 1px solid #000; padding: 6px 8px; text-align: center; font-weight: 700;">4 = &nbsp; VERY GOOD</td>
+              <td style="border: 1px solid #000; padding: 6px 8px; text-align: center; font-weight: 700;">5 = &nbsp; EXCELLENT</td>
+            </tr>
+            <!-- Row 7: Checkpoints Header -->
+            <tr style="background: #F8FAFC;">
+              <td style="border: 1px solid #000; padding: 8px; text-align: center; font-weight: 800; width: 50px;">S.No</td>
+              <td colspan="6" style="border: 1px solid #000; padding: 8px 12px; font-weight: 800;">Training Content / Check Point</td>
+              <td colspan="2" style="border: 1px solid #000; padding: 8px; text-align: center; font-weight: 800; width: 170px;">Score</td>
+              <td style="border: 1px solid #000; padding: 8px; text-align: center; font-weight: 800; width: 85px;">WI Check</td>
+            </tr>
+          </tbody>
           <tbody id="ojtCheckpointsBody">
             <!-- Dynamic rows generated by app.js -->
           </tbody>
+          <tbody>
+            <!-- Row 18: Total Score -->
+            <tr style="background: #FFFFFF;">
+              <td colspan="7" style="border: 1px solid #000; padding: 8px 12px; font-weight: 800; font-size: 0.95rem;">Total Score</td>
+              <td colspan="2" id="ojtTotalScoreDisplay" style="border: 1px solid #000; padding: 8px; text-align: center; font-weight: 800; font-size: 1rem; color: #005B9E;">____/50 = ____%</td>
+              <td style="border: 1px solid #000; padding: 8px; text-align: center;">
+                <span id="ojtQualificationBadge" style="font-size: 0.74rem; font-weight: 800; padding: 3px 6px; border-radius: 4px; background: #FEF3C7; color: #D97706; display: inline-block;">PENDING</span>
+              </td>
+            </tr>
+            <!-- Row 19: Improvement / Training requirement -->
+            <tr>
+              <td colspan="4" style="border: 1px solid #000; padding: 8px 12px; vertical-align: top; font-weight: 700; font-size: 0.88rem;">
+                Improvement / Training requirement :
+              </td>
+              <td colspan="6" style="border: 1px solid #000; padding: 6px;">
+                <textarea id="ojtImprovementComments" class="form-control" rows="2" style="width: 100%; border: 1px solid #CBD5E1; font-family: inherit; font-size: 0.85rem;" placeholder="Enter improvement / training requirements observed..."></textarea>
+              </td>
+            </tr>
+            <!-- Row 24: Evaluation By Header -->
+            <tr style="background: #F8FAFC;">
+              <td colspan="10" style="border: 1px solid #000; padding: 6px 10px; text-align: center; font-weight: 800; font-size: 0.88rem;">
+                Evaluation By (Name &amp; Sign with date)
+              </td>
+            </tr>
+            <!-- Row 25: Representatives Names (Safety, Quality, CI) -->
+            <tr>
+              <td colspan="2" style="border: 1px solid #000; padding: 6px; text-align: center; font-weight: 800; font-size: 0.9rem; width: 25%;">Safety</td>
+              <td colspan="6" style="border: 1px solid #000; padding: 6px; text-align: center; font-weight: 800; font-size: 0.9rem; width: 50%;">Quality</td>
+              <td colspan="2" style="border: 1px solid #000; padding: 6px; text-align: center; font-weight: 800; font-size: 0.9rem; width: 25%;">CI</td>
+            </tr>
+            <!-- Row 26: Representative Titles -->
+            <tr>
+              <td colspan="2" style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 0.8rem; color: #475569;">Section Representative</td>
+              <td colspan="6" style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 0.8rem; color: #475569;">Section Representative</td>
+              <td colspan="2" style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 0.8rem; color: #475569;">Representative</td>
+            </tr>
+            <!-- Row 27: Representative Inputs -->
+            <tr>
+              <td colspan="2" style="border: 1px solid #000; padding: 6px;">
+                <input type="text" id="ojtSafetyRep" class="form-control" placeholder="Name &amp; Sign" style="font-size: 0.82rem; margin-bottom: 4px;">
+                <input type="date" id="ojtSafetyDate" class="form-control" style="font-size: 0.78rem;">
+              </td>
+              <td colspan="6" style="border: 1px solid #000; padding: 6px;">
+                <input type="text" id="ojtQualityRep" class="form-control" placeholder="Name &amp; Sign" style="font-size: 0.82rem; margin-bottom: 4px;">
+                <input type="date" id="ojtQualityDate" class="form-control" style="font-size: 0.78rem;">
+              </td>
+              <td colspan="2" style="border: 1px solid #000; padding: 6px;">
+                <input type="text" id="ojtCiRep" class="form-control" placeholder="Name &amp; Sign" style="font-size: 0.82rem; margin-bottom: 4px;">
+                <input type="date" id="ojtCiDate" class="form-control" style="font-size: 0.78rem;">
+              </td>
+            </tr>
+            <!-- Row 28: Final Comment Header -->
+            <tr style="background: #F8FAFC;">
+              <td colspan="10" style="border: 1px solid #000; padding: 6px 10px; text-align: center; font-weight: 800; font-size: 0.88rem;">
+                Final Comment by:
+              </td>
+            </tr>
+            <!-- Row 29-30: Safety Section Head -->
+            <tr>
+              <td colspan="3" style="border: 1px solid #000; padding: 6px 10px; font-weight: 700; font-size: 0.85rem;">
+                Safety Section Head:<br>
+                <span style="font-weight: 400; font-size: 0.78rem; color: #64748B;">Sign &amp; Name with Date</span>
+              </td>
+              <td colspan="7" style="border: 1px solid #000; padding: 6px;">
+                <input type="text" id="ojtSafetyHeadSign" class="form-control" placeholder="Sign, Name &amp; Comments" style="font-size: 0.85rem;">
+              </td>
+            </tr>
+            <!-- Row 31-32: Quality Section Head -->
+            <tr>
+              <td colspan="3" style="border: 1px solid #000; padding: 6px 10px; font-weight: 700; font-size: 0.85rem;">
+                Quality Section Head:<br>
+                <span style="font-weight: 400; font-size: 0.78rem; color: #64748B;">Sign &amp; Name with Date</span>
+              </td>
+              <td colspan="7" style="border: 1px solid #000; padding: 6px;">
+                <input type="text" id="ojtQualityHeadSign" class="form-control" placeholder="Sign, Name &amp; Comments" style="font-size: 0.85rem;">
+              </td>
+            </tr>
+            <!-- Row 33-34: CI Head -->
+            <tr>
+              <td colspan="3" style="border: 1px solid #000; padding: 6px 10px; font-weight: 700; font-size: 0.85rem;">
+                CI Head:<br>
+                <span style="font-weight: 400; font-size: 0.78rem; color: #64748B;">Sign &amp; Name with Date</span>
+              </td>
+              <td colspan="7" style="border: 1px solid #000; padding: 6px;">
+                <input type="text" id="ojtCiHeadSign" class="form-control" placeholder="Sign, Name &amp; Comments" style="font-size: 0.85rem;">
+              </td>
+            </tr>
+            <!-- Row 35-36: Qualification Status -->
+            <tr>
+              <td colspan="3" style="border: 1px solid #000; padding: 6px 10px; font-weight: 700; font-size: 0.85rem;">
+                Qualification Status:<br>
+                <span style="font-weight: 400; font-size: 0.75rem; color: #64748B; font-style: italic;">(Tick on status &amp; Strike through other)</span>
+              </td>
+              <td colspan="2" style="border: 1px solid #000; padding: 6px 10px; text-align: center;">
+                <label style="display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; font-weight: 700; color: #166534;">
+                  <input type="radio" name="ojtQualStatusRadio" id="ojtQualRadioYes" value="Qualified" onchange="onOjtRadioChange('Qualified')">
+                  <span>Qualified</span>
+                </label>
+              </td>
+              <td colspan="2" style="border: 1px solid #000; padding: 6px 10px; text-align: center;">
+                <label style="display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; font-weight: 700; color: #B91C1C;">
+                  <input type="radio" name="ojtQualStatusRadio" id="ojtQualRadioNo" value="Not Qualified" onchange="onOjtRadioChange('Not Qualified')">
+                  <span>Not Qualified</span>
+                </label>
+              </td>
+              <td colspan="3" style="border: 1px solid #000; padding: 6px 10px;">
+                <div style="font-size: 0.78rem; color: #64748B; margin-bottom: 2px;">Date of Reassessment:</div>
+                <input type="date" id="ojtReassessmentDate" class="form-control" style="font-size: 0.8rem; padding: 3px 6px;">
+              </td>
+            </tr>
+            <!-- Row 37-38: Final Recommendation & Approval -->
+            <tr>
+              <td colspan="3" style="border: 1px solid #000; padding: 6px 10px; font-weight: 700; font-size: 0.85rem;">
+                Final Recommendation &amp; Approval:<br>
+                <span style="font-weight: 700; color: #005B9E;">QUALITY - Head</span>
+              </td>
+              <td colspan="7" id="ojtFinalRecommendationDisplay" style="border: 1px solid #000; padding: 6px 12px; font-weight: 700; color: #166534; font-size: 0.9rem;">
+                Approved (Qualified)
+              </td>
+            </tr>
+            <!-- Row 39: Format No -->
+            <tr>
+              <td colspan="10" id="ojtModalFooterFormatNo" style="border: 1px solid #000; padding: 6px 10px; text-align: center; font-weight: 700; font-family: monospace; font-size: 0.82rem; color: #475569;">
+                Format No: ATC/T/FOR/HR/87D
+              </td>
+            </tr>
+          </tbody>
         </table>
-      </div>
-
-      <!-- Score Summary Bar -->
-      <div style="background: #F8FAFC; border: 1.5px solid #CBD5E1; border-radius: 6px; padding: 12px 18px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
-        <div style="display: flex; gap: 24px; align-items: center;">
-          <div>
-            <div style="font-size: 0.72rem; color: #64748B; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px;">Total Score</div>
-            <div style="font-size: 1.35rem; font-weight: 800; color: #0F172A;" id="ojtTotalScoreDisplay">0 / 50 = 0%</div>
-          </div>
-          <div>
-            <div style="font-size: 0.72rem; color: #64748B; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px;">Qualification Status</div>
-            <div id="ojtQualificationBadge" style="font-size: 0.85rem; font-weight: 800; padding: 5px 14px; border-radius: 6px; background: #FEF3C7; color: #D97706; display: inline-block;">PENDING SCORING</div>
-          </div>
-        </div>
-        <div style="font-size: 0.8rem; color: #475569; font-weight: 700; background: #EFF6FF; padding: 6px 12px; border-radius: 6px; border: 1px solid #BFDBFE;">Passing Benchmark: &gt;= 70%</div>
-      </div>
-
-      <!-- Improvement Comments -->
-      <div style="margin-bottom: 16px; border: 1px solid #CBD5E1; border-radius: 6px; padding: 12px 14px; background: #FFFFFF;">
-        <label style="font-weight: 800; font-size: 0.82rem; color: #1E293B; display: block; margin-bottom: 6px; text-transform: uppercase;">Improvement / Training requirement :</label>
-        <textarea id="ojtImprovementComments" class="form-control" rows="2" placeholder="Enter improvement / training requirements observed during evaluation..."></textarea>
-      </div>
-
-      <!-- Evaluation By (Name & Sign with date) -->
-      <div style="margin-bottom: 16px; border: 1px solid #CBD5E1; border-radius: 6px; padding: 12px 14px; background: #F8FAFC;">
-        <div style="font-weight: 800; font-size: 0.82rem; color: #1E293B; margin-bottom: 10px; text-transform: uppercase;">Evaluation By (Name &amp; Sign with date)</div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px;">
-          <div>
-            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">🦺 Safety (Section Representative)</label>
-            <input type="text" id="ojtSafetyRep" class="form-control" placeholder="Name &amp; Sign" style="font-size: 0.82rem; margin-bottom: 4px;">
-            <input type="date" id="ojtSafetyDate" class="form-control" style="font-size: 0.78rem;">
-          </div>
-          <div>
-            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">⚙️ CI (Representative)</label>
-            <input type="text" id="ojtCiRep" class="form-control" placeholder="Name &amp; Sign" style="font-size: 0.82rem; margin-bottom: 4px;">
-            <input type="date" id="ojtCiDate" class="form-control" style="font-size: 0.78rem;">
-          </div>
-          <div>
-            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">🎯 Quality (Section Representative)</label>
-            <input type="text" id="ojtQualityRep" class="form-control" placeholder="Name &amp; Sign" style="font-size: 0.82rem; margin-bottom: 4px;">
-            <input type="date" id="ojtQualityDate" class="form-control" style="font-size: 0.78rem;">
-          </div>
-          <div>
-            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">🔧 Technical (Representative)</label>
-            <input type="text" id="ojtTechRep" class="form-control" placeholder="Name &amp; Sign" style="font-size: 0.82rem; margin-bottom: 4px;">
-            <input type="date" id="ojtTechDate" class="form-control" style="font-size: 0.78rem;">
-          </div>
-          <div>
-            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">👥 HR (Representative)</label>
-            <input type="text" id="ojtHrRep" class="form-control" placeholder="Name &amp; Sign" style="font-size: 0.82rem; margin-bottom: 4px;">
-            <input type="date" id="ojtHrDate" class="form-control" style="font-size: 0.78rem;">
-          </div>
-        </div>
-      </div>
-
-      <!-- Final Comment by Section Heads -->
-      <div style="margin-bottom: 16px; border: 1px solid #CBD5E1; border-radius: 6px; padding: 12px 14px; background: #FFFFFF;">
-        <div style="font-weight: 800; font-size: 0.82rem; color: #1E293B; margin-bottom: 10px; text-transform: uppercase;">Final Comment by:</div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px;">
-          <div style="background: #F8FAFC; padding: 10px; border-radius: 6px; border: 1px solid #E2E8F0;">
-            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">Safety Section Head: Sign &amp; Name with Date</label>
-            <input type="text" id="ojtSafetyHeadSign" class="form-control" placeholder="Sign, Name &amp; Comments" style="font-size: 0.82rem;">
-          </div>
-          <div style="background: #F8FAFC; padding: 10px; border-radius: 6px; border: 1px solid #E2E8F0;">
-            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">Quality Section Head: Sign &amp; Name with Date</label>
-            <input type="text" id="ojtQualityHeadSign" class="form-control" placeholder="Sign, Name &amp; Comments" style="font-size: 0.82rem;">
-          </div>
-          <div style="background: #F8FAFC; padding: 10px; border-radius: 6px; border: 1px solid #E2E8F0;">
-            <label style="font-size: 0.78rem; font-weight: 700; color: #475569; display: block; margin-bottom: 4px;">CI Head: Sign &amp; Name with Date</label>
-            <input type="text" id="ojtCiHeadSign" class="form-control" placeholder="Sign, Name &amp; Comments" style="font-size: 0.82rem;">
-          </div>
-        </div>
-      </div>
-
-      <!-- Qualification Status Box & Recommendation -->
-      <div style="margin-bottom: 16px; border: 1px solid #CBD5E1; border-radius: 6px; padding: 12px 14px; background: #F8FAFC;">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 8px;">
-          <div style="display: flex; align-items: center; gap: 18px; flex-wrap: wrap;">
-            <strong style="font-size: 0.84rem; color: #1E293B;">Qualification Status:</strong>
-            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 700; color: #166534;">
-              <input type="radio" name="ojtQualStatusRadio" id="ojtQualRadioYes" value="Qualified" onchange="onOjtRadioChange('Qualified')">
-              <span>Qualified</span>
-            </label>
-            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 700; color: #B91C1C;">
-              <input type="radio" name="ojtQualStatusRadio" id="ojtQualRadioNo" value="Not Qualified" onchange="onOjtRadioChange('Not Qualified')">
-              <span>Not Qualified</span>
-            </label>
-          </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <label for="ojtReassessmentDate" style="font-size: 0.8rem; font-weight: 700; color: #64748B;">Date of Reassessment:</label>
-            <input type="date" id="ojtReassessmentDate" class="form-control" style="font-size: 0.8rem; padding: 4px 8px; width: 150px;">
-          </div>
-        </div>
-        <div style="font-size: 0.75rem; color: #64748B; font-style: italic;">(Tick on status &amp; Strike through other)</div>
-        <div style="border-top: 1px solid #E2E8F0; margin-top: 10px; padding-top: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;">
-          <div><strong style="color: #475569;">Final Recommendation &amp; Approval:</strong> <span style="font-weight: 700; color: #005B9E;">QUALITY - Head</span></div>
-          <div id="ojtModalFooterFormatNo" style="font-weight: 700; color: #64748B; font-family: monospace;">Format No: ATC/T/FOR/HR/87D</div>
-        </div>
       </div>
 
       <!-- Action Footer -->
@@ -2229,11 +2270,11 @@
   <script defer src="mammoth.browser.min.js"></script>
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script defer src="jszip.min.js"></script>
-  <script defer src="docx_generator.js?v=41.0"></script>
+  <script defer src="docx_generator.js?v=42.0"></script>
 
   <!-- OJT Official Templates & Data Script & Application Router -->
-  <script src="ojt_templates_data.js?v=41.0"></script>
-  <script src="data.js?v=41.0"></script>
-  <script src="app.js?v=41.0"></script>
+  <script src="ojt_templates_data.js?v=42.0"></script>
+  <script src="data.js?v=42.0"></script>
+  <script src="app.js?v=42.0"></script>
 </body>
 </html>
