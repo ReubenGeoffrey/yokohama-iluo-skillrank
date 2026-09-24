@@ -1482,10 +1482,7 @@ function showResultView(record, isImmediateCompletion = false) {
 }
 
 function downloadCurrentEmployeePDF() {
-  const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
-  const session = sessionStr ? JSON.parse(sessionStr) : null;
-  if (!session || !session.empNo) return alert('Session expired or employee not logged in.');
-  downloadEmployeePDF(session.empNo);
+  downloadCurrentEmployeeDocx();
 }
 
 function downloadCurrentEmployeeDocx() {
@@ -1765,7 +1762,6 @@ function filterModalEmployees(type) {
       <td>${statusHtml}</td>
       <td style="text-align: center;">
         <div style="display: flex; gap: 4px; justify-content: center;">
-          ${hasExam ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.72rem; background: #0284C7; border-color: #0284C7;" onclick="downloadEmployeePDF('${emp.empNo}')" title="Download PDF Report">PDF</button>` : ''}
           ${hasExam ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.72rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">DOCX</button>` : ''}
           <button class="btn-primary" style="padding: 3px 8px; font-size: 0.72rem; background: #059669; border-color: #059669;" onclick="closeSectionCompletedModal(); openOjtModalForEmployee('${emp.empNo}')">OJT</button>
         </div>
@@ -2342,7 +2338,6 @@ function renderAdminTable(query) {
     const hasRecord = rec.isCompleted || rec.inProgress;
     const actionBtn = `
       <div style="display: flex; gap: 5px; flex-wrap: wrap;">
-        ${hasRecord ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #0284C7; border-color: #0284C7;" onclick="downloadEmployeePDF('${emp.empNo}')" title="Download PDF Report">PDF</button>` : ''}
         ${hasRecord ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">DOCX</button>` : ''}
         <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #059669; border-color: #059669;" onclick="openOjtModalForEmployee('${emp.empNo}')">OJT Form</button>
         ${hasRecord ? `<button class="btn-reset" style="padding: 3px 8px; font-size: 0.75rem;" onclick="confirmAndResetExam('${emp.empNo}', '${emp.name.replace(/'/g, "\\'")}')">Reset</button>` : ''}
@@ -2371,389 +2366,9 @@ function renderAdminTable(query) {
   });
 }
 
-// Download PDF Evaluation Report for Employee Assessment
+// PDF export completely removed - redirects to official Word (.docx) report
 function downloadEmployeePDF(empNo) {
-  const records = getStoredRecords();
-  const rec = records[empNo] || {};
-  const emp = (typeof EMPLOYEES !== 'undefined' ? EMPLOYEES : []).find(e => e.empNo === empNo);
-  const allOjt = typeof getStoredOjtRecords === 'function' ? getStoredOjtRecords() : {};
-  const ojt = allOjt[empNo] || null;
-
-  const empName = emp ? emp.name : (rec.name || empNo);
-  const empDept = emp ? emp.dept : (rec.dept || 'QUALITY CONTROL');
-  const empSection = emp ? (emp.section || rec.section || '-') : (rec.section || '-');
-  const empDoj = emp ? (emp.doj || rec.doj || '-') : (rec.doj || '-');
-  const currLevel = emp ? (emp.currentLevel || 'I') : 'I';
-
-  const targetMap = { 'I': 'L', 'L': 'U', 'U': 'O', 'O': 'O' };
-  const targetLevel = rec.targetLevel || targetMap[currLevel] || 'L';
-  const isAttempted = !!(rec.isCompleted || rec.inProgress);
-  const status = isAttempted ? (rec.status || (rec.isCompleted ? 'Completed' : 'In Progress')) : 'Not Attempted';
-  const isPass = status === 'Passed';
-
-  // Practical OJT status
-  const hasOjt = !!(ojt && (ojt.totalScore !== undefined || ojt.scorePct !== undefined));
-  const ojtScore = hasOjt ? (ojt.totalScore || 0) : 0;
-  const ojtMax = hasOjt ? (ojt.maxScore || 50) : 50;
-  const ojtMinPass = Math.ceil(ojtMax * 0.7);
-  const ojtQualified = hasOjt && (ojt.qualificationStatus === 'Qualified' || ojtScore >= ojtMinPass);
-
-  // Build question list for PDF
-  let qList = rec.submittedQuestions || [];
-  if (qList.length === 0 && rec.responses) {
-    const matchedQs = typeof getQuestionsForSection === 'function' ? getQuestionsForSection(targetLevel, empSection) : [];
-    qList = matchedQs.map((q, idx) => {
-      const selKey = rec.responses[q.id] || 'Not Answered';
-      const selOpt = q.options ? q.options.find(o => o.key === selKey) : null;
-      const corrOpt = q.options ? q.options.find(o => o.key === q.correctAnswer) : null;
-      return {
-        index: idx + 1,
-        id: q.id,
-        category: q.category || 'General QA',
-        question: q.question,
-        selectedKey: selKey,
-        selectedText: selOpt ? selOpt.text : 'Not Answered',
-        correctKey: q.correctAnswer,
-        correctText: corrOpt ? corrOpt.text : '',
-        isCorrect: selKey === q.correctAnswer,
-        options: q.options || []
-      };
-    });
-  }
-
-  const totalQs = qList.length > 0 ? qList.length : 30;
-  const mcqMinPass = Math.ceil(totalQs * 0.7);
-  const mcqScore = rec.totalMark !== undefined ? rec.totalMark : (isAttempted ? 0 : null);
-
-  // Overall status evaluation (Strictly Marks Only, Zero %)
-  let overallBadgeText = 'ASSESSMENT PENDING';
-  let overallBadgeBg = '#F1F5F9';
-  let overallBadgeColor = '#475569';
-  let overallBadgeBorder = '#CBD5E1';
-
-  if (isPass && ojtQualified) {
-    overallBadgeText = `QUALIFIED • PROMOTED TO ${targetLevel} LEVEL`;
-    overallBadgeBg = '#DCFCE7';
-    overallBadgeColor = '#166534';
-    overallBadgeBorder = '#86EFAC';
-  } else if (isPass && !hasOjt) {
-    overallBadgeText = 'THEORY PASSED • OJT EVALUATION PENDING';
-    overallBadgeBg = '#E0F2FE';
-    overallBadgeColor = '#0369A1';
-    overallBadgeBorder = '#BAE6FD';
-  } else if (!isPass && isAttempted && hasOjt && ojtQualified) {
-    overallBadgeText = 'OJT QUALIFIED • THEORY RETEST REQUIRED';
-    overallBadgeBg = '#FEF3C7';
-    overallBadgeColor = '#92400E';
-    overallBadgeBorder = '#FDE68A';
-  } else if (isAttempted && !isPass) {
-    overallBadgeText = 'RETEST REQUIRED • MINIMUM MARKS NOT MET';
-    overallBadgeBg = '#FEE2E2';
-    overallBadgeColor = '#991B1B';
-    overallBadgeBorder = '#FCA5A5';
-  }
-
-  // Anti-cheating & Tab switches
-  const tabSwitches = rec.tabSwitchCount || 0;
-  const isTerminated = tabSwitches > 3;
-
-  // Build OJT Checkpoints summary block
-  let ojtSectionHtml = '';
-  if (hasOjt) {
-    const ojtTemplate = typeof getOjtTemplateForSection === 'function' ? getOjtTemplateForSection(empSection) : null;
-    const checkpoints = (ojtTemplate && ojtTemplate.checkpoints) ? ojtTemplate.checkpoints : [];
-    const scores = ojt.scores || {};
-
-    const cpRows = checkpoints.length > 0 ? checkpoints.map(cp => {
-      const sc = scores[cp.sno] !== undefined ? scores[cp.sno] : '-';
-      return `
-        <tr style="border-bottom: 1px solid #E2E8F0; font-size: 10px;">
-          <td style="padding: 4px 6px; text-align: center; font-weight: 700; color: #64748B;">${cp.sno}</td>
-          <td style="padding: 4px 8px; color: #1E293B;">${cp.text}</td>
-          <td style="padding: 4px 8px; text-align: center; font-weight: 800; color: #005B9E;">${sc} / 5 Marks</td>
-        </tr>
-      `;
-    }).join('') : '';
-
-    ojtSectionHtml = `
-      <div class="pdf-avoid-break" style="page-break-inside: avoid !important; break-inside: avoid !important; margin-bottom: 14px; border: 1px solid #E2E8F0; border-radius: 6px; background: #FFFFFF; overflow: hidden;">
-        <div style="background: #F8FAFC; padding: 7px 12px; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center;">
-          <div>
-            <span style="font-size: 11px; font-weight: 800; color: #002B49; letter-spacing: 0.3px;">PRACTICAL ON-THE-JOB TRAINING (OJT) EVALUATION</span>
-            <span style="font-size: 9.5px; color: #64748B; margin-left: 8px;">${ojt.formatNo || (ojtTemplate ? ojtTemplate.formatNo : '')}</span>
-          </div>
-          <span style="font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 10px; background: ${ojtQualified ? '#DCFCE7' : '#FEE2E2'}; color: ${ojtQualified ? '#166534' : '#991B1B'}; border: 1px solid ${ojtQualified ? '#86EFAC' : '#FCA5A5'};">
-            ${ojt.qualificationStatus || (ojtQualified ? 'Qualified' : 'Not Qualified')} &bull; ${ojtScore} / ${ojtMax} Marks
-          </span>
-        </div>
-        ${cpRows ? `
-          <table style="width: 100%; border-collapse: collapse; text-align: left;">
-            <thead>
-              <tr style="background: #F1F5F9; font-size: 9.5px; text-transform: uppercase; color: #475569; border-bottom: 1px solid #CBD5E1;">
-                <th style="padding: 4px 6px; width: 35px; text-align: center;">S.No</th>
-                <th style="padding: 4px 8px;">Evaluation Practical Checkpoint</th>
-                <th style="padding: 4px 8px; width: 100px; text-align: center;">Marks Awarded</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${cpRows}
-            </tbody>
-          </table>
-        ` : ''}
-        <div style="padding: 6px 10px; background: #F8FAFC; border-top: 1px solid #E2E8F0; font-size: 9.5px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-          <div><strong>Improvement Comments:</strong> ${ojt.comments || 'Practical evaluation satisfactory.'}</div>
-          <div style="text-align: right; color: #475569;">
-            <span>Safety: <strong>${ojt.safetyRep || '-'}</strong></span> | 
-            <span>Quality: <strong>${ojt.qualityRep || '-'}</strong></span> | 
-            <span>CI: <strong>${ojt.ciRep || '-'}</strong></span>
-          </div>
-        </div>
-      </div>
-    `;
-  } else {
-    ojtSectionHtml = `
-      <div class="pdf-avoid-break" style="page-break-inside: avoid !important; break-inside: avoid !important; margin-bottom: 14px; padding: 7px 12px; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 6px; font-size: 10px; color: #64748B; display: flex; justify-content: space-between; align-items: center;">
-        <div><strong>Practical OJT Status:</strong> In-section evaluation is pending for this employee. Practical evaluation marks will append upon supervisor submission.</div>
-        <span style="font-weight: 700; color: #D97706; background: #FEF3C7; padding: 2px 7px; border-radius: 8px; font-size: 9.5px; border: 1px solid #FDE68A;">Pending</span>
-      </div>
-    `;
-  }
-
-  // Build Questions HTML (compact, unbreakable rows)
-  const questionsHtml = qList.length > 0 ? qList.map((q, idx) => {
-    const qIndex = q.index || (idx + 1);
-    const isCorr = !!q.isCorrect;
-    const borderLeftColor = isCorr ? '#10B981' : '#EF4444';
-    const bgBadge = isCorr ? '#DCFCE7' : '#FEE2E2';
-    const textBadge = isCorr ? '#166534' : '#991B1B';
-    const badgeText = isCorr ? 'Correct (1 Mark)' : 'Incorrect (0 Marks)';
-
-    return `
-      <div class="pdf-avoid-break" style="page-break-inside: avoid !important; break-inside: avoid !important; margin-bottom: 6px; border: 1px solid #E2E8F0; border-radius: 5px; padding: 5px 8px; background: ${isCorr ? '#FFFFFF' : '#FFF9F9'}; border-left: 3.5px solid ${borderLeftColor};">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 3px;">
-          <div style="font-size: 10.5px; font-weight: 700; color: #1E293B; line-height: 1.35; padding-right: 8px;">
-            <span style="color: #005B9E; margin-right: 3px;">Q${qIndex}.</span>
-            <span style="color: #64748B; font-weight: 600; font-size: 9px; margin-right: 5px;">[${q.category || 'General QA'}]</span>
-            <span style="color: #0F172A;">${q.question}</span>
-          </div>
-          <div style="white-space: nowrap;">
-            <span style="font-size: 9px; font-weight: 700; padding: 1.5px 6px; border-radius: 3px; background: ${bgBadge}; color: ${textBadge}; border: 1px solid ${isCorr ? '#86EFAC' : '#FCA5A5'};">
-              ${badgeText}
-            </span>
-          </div>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 9.5px; margin-top: 3px;">
-          <div style="background: ${isCorr ? '#ECFDF5' : '#FEF2F2'}; border: 1px solid ${isCorr ? '#A7F3D0' : '#FECACA'}; padding: 3px 6px; border-radius: 3px;">
-            <strong style="color: ${isCorr ? '#065F46' : '#991B1B'};">Candidate:</strong>
-            <span style="color: #0F172A;">[${q.selectedKey}] ${q.selectedText}</span>
-          </div>
-          <div style="background: #F8FAFC; border: 1px solid #CBD5E1; padding: 3px 6px; border-radius: 3px;">
-            <strong style="color: #334155;">Key:</strong>
-            <span style="color: #0F172A;">[${q.correctKey}] ${q.correctText}</span>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join('') : `
-    <div style="padding: 14px; border: 1px dashed #CBD5E1; border-radius: 6px; background: #F8FAFC; text-align: center; color: #64748B; font-size: 11px;">
-      Candidate has not attempted this assessment yet. Question and response audit will appear once submitted.
-    </div>
-  `;
-
-  // Build temporary printable container
-  const reportDiv = document.createElement('div');
-  reportDiv.id = 'pdfReportTempContainer';
-  reportDiv.style.width = '730px';
-  reportDiv.style.margin = '0 auto';
-  reportDiv.style.padding = '12px 14px';
-  reportDiv.style.boxSizing = 'border-box';
-  reportDiv.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
-  reportDiv.style.color = '#0F172A';
-  reportDiv.style.background = '#FFFFFF';
-
-  reportDiv.innerHTML = `
-    <!-- Top Yokohama Brand Bar -->
-    <div style="display: flex; height: 5px; margin-bottom: 12px; border-radius: 3px; overflow: hidden;">
-      <div style="width: 35%; background: #E31B23;"></div>
-      <div style="width: 65%; background: #002B49;"></div>
-    </div>
-
-    <!-- Header Block -->
-    <div class="pdf-avoid-break" style="page-break-inside: avoid !important; break-inside: avoid !important; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #005B9E; padding-bottom: 8px; margin-bottom: 12px;">
-      <div>
-        <div style="font-size: 17px; font-weight: 800; color: #002B49; letter-spacing: 0.5px;">YOKOHAMA OFF-HIGHWAY TIRES</div>
-        <div style="font-size: 10px; font-weight: 700; color: #64748B; letter-spacing: 0.3px; margin-top: 1px;">
-          ATC TIRES PVT. LTD. &bull; QUALITY ASSURANCE &mdash; ILUO QUALIFICATION REPORT
-        </div>
-      </div>
-      <div style="text-align: right;">
-        <span style="background: ${overallBadgeBg}; color: ${overallBadgeColor}; border: 1px solid ${overallBadgeBorder}; padding: 4px 12px; border-radius: 16px; font-weight: 800; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.3px; display: inline-block;">
-          ${overallBadgeText}
-        </span>
-      </div>
-    </div>
-
-    <!-- Employee Metadata Grid -->
-    <div class="pdf-avoid-break" style="page-break-inside: avoid !important; break-inside: avoid !important; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;">
-      <div style="display: grid; grid-template-columns: 1fr 1.2fr 1fr 1fr; gap: 8px 12px; font-size: 10.5px;">
-        <div><strong style="color: #64748B;">Emp No:</strong> <span style="color: #005B9E; font-weight: 800;">${empNo}</span></div>
-        <div><strong style="color: #64748B;">Name:</strong> <strong style="color: #0F172A;">${empName}</strong></div>
-        <div><strong style="color: #64748B;">Department:</strong> <span>${empDept}</span></div>
-        <div><strong style="color: #64748B;">Section:</strong> <strong style="color: #005B9E;">${empSection}</strong></div>
-        <div><strong style="color: #64748B;">DOJ:</strong> <span>${empDoj}</span></div>
-        <div><strong style="color: #64748B;">Skill Level:</strong> <span style="font-weight: 700; color: #0284C7;">${currLevel} &rarr; ${targetLevel} Assessment</span></div>
-        <div><strong style="color: #64748B;">Exam Date:</strong> <span>${rec.attemptDate || new Date().toLocaleDateString('en-GB')}</span></div>
-        <div><strong style="color: #64748B;">Proctoring:</strong> <span style="color: ${tabSwitches > 0 ? '#E31B23' : '#166534'}; font-weight: 700;">${tabSwitches === 0 ? '0 Warnings (Clean)' : `${tabSwitches} Tab Alerts`}</span></div>
-      </div>
-    </div>
-
-    <!-- Scorecard Summary Box (Strictly Marks Only, No %) -->
-    <div class="pdf-avoid-break" style="page-break-inside: avoid !important; break-inside: avoid !important; display: grid; grid-template-columns: 1fr 1fr 1.15fr; gap: 8px; margin-bottom: 14px; text-align: center;">
-      <!-- Theory MCQ Card -->
-      <div style="background: #EFF6FF; border: 1px solid #BFDBFE; padding: 8px 6px; border-radius: 6px;">
-        <div style="font-size: 9.5px; color: #1E40AF; text-transform: uppercase; font-weight: 800;">MCQ Theory Assessment</div>
-        <div style="font-size: 18px; font-weight: 800; color: #1E3A8A; margin: 2px 0;">
-          ${mcqScore !== null ? `${mcqScore} / ${totalQs} Marks` : '-'}
-        </div>
-        <div style="font-size: 9px; color: #3B82F6; font-weight: 600;">Standard: ${mcqMinPass} Marks Required</div>
-        <div style="margin-top: 3px;">
-          <span style="font-size: 9px; font-weight: 800; padding: 1px 6px; border-radius: 8px; background: ${isPass ? '#DCFCE7' : (isAttempted ? '#FEE2E2' : '#F1F5F9')}; color: ${isPass ? '#166534' : (isAttempted ? '#991B1B' : '#475569')};">
-            ${isPass ? 'Passed Standard' : (isAttempted ? 'Failed Standard' : 'Pending')}
-          </span>
-        </div>
-      </div>
-
-      <!-- Practical OJT Card -->
-      <div style="background: #F0FDF4; border: 1px solid #BBF7D0; padding: 8px 6px; border-radius: 6px;">
-        <div style="font-size: 9.5px; color: #166534; text-transform: uppercase; font-weight: 800;">Practical OJT Evaluation</div>
-        <div style="font-size: 18px; font-weight: 800; color: #14532D; margin: 2px 0;">
-          ${hasOjt ? `${ojtScore} / ${ojtMax} Marks` : 'Pending'}
-        </div>
-        <div style="font-size: 9px; color: #16A34A; font-weight: 600;">Standard: ${ojtMinPass} Marks Required</div>
-        <div style="margin-top: 3px;">
-          <span style="font-size: 9px; font-weight: 800; padding: 1px 6px; border-radius: 8px; background: ${hasOjt ? (ojtQualified ? '#DCFCE7' : '#FEE2E2') : '#FEF3C7'}; color: ${hasOjt ? (ojtQualified ? '#166534' : '#991B1B') : '#92400E'};">
-            ${hasOjt ? (ojtQualified ? 'Qualified' : 'Not Qualified') : 'Pending Practical'}
-          </span>
-        </div>
-      </div>
-
-      <!-- Combined Overall Score Card -->
-      <div style="background: #FAF5FF; border: 1px solid #E9D5FF; padding: 8px 6px; border-radius: 6px;">
-        <div style="font-size: 9.5px; color: #6B21A8; text-transform: uppercase; font-weight: 800;">Total Assessment Marks</div>
-        <div style="font-size: 18px; font-weight: 800; color: #581C87; margin: 2px 0;">
-          ${(mcqScore || 0) + ojtScore} / ${totalQs + (hasOjt ? ojtMax : 50)} Marks
-        </div>
-        <div style="font-size: 9px; color: #9333EA; font-weight: 600;">
-          ILUO Level Target: <strong>${targetLevel} Level</strong>
-        </div>
-        <div style="margin-top: 3px;">
-          <span style="font-size: 9px; font-weight: 800; padding: 1px 6px; border-radius: 8px; background: ${overallBadgeBg}; color: ${overallBadgeColor}; border: 1px solid ${overallBadgeBorder};">
-            ${overallBadgeText.split('•')[0].trim()}
-          </span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Practical OJT Checkpoints Section -->
-    ${ojtSectionHtml}
-
-    <!-- Question & Answer Audit Sheet -->
-    <div style="margin-bottom: 14px;">
-      <div class="pdf-avoid-break" style="page-break-inside: avoid !important; break-inside: avoid !important; display: flex; justify-content: space-between; align-items: center; border-bottom: 1.5px solid #CBD5E1; padding-bottom: 4px; margin-bottom: 8px;">
-        <h3 style="font-size: 12px; font-weight: 800; color: #0F172A; margin: 0; text-transform: uppercase; letter-spacing: 0.3px;">
-          MCQ Theory Examination Audit Trail (${qList.length} Questions)
-        </h3>
-        <div style="font-size: 10px; font-weight: 700; color: #64748B;">
-          <span style="color: #166534;">${rec.totalMark !== undefined ? rec.totalMark : 0} Correct</span> &bull; 
-          <span style="color: #991B1B;">${totalQs - (rec.totalMark !== undefined ? rec.totalMark : 0)} Incorrect</span>
-        </div>
-      </div>
-
-      <!-- Question List -->
-      ${questionsHtml}
-    </div>
-
-    <!-- Signatures Block (Unbreakable) -->
-    <div class="pdf-avoid-break" style="page-break-inside: avoid !important; break-inside: avoid !important; margin-top: 14px; padding-top: 10px; border-top: 1.5px solid #CBD5E1; font-size: 10px;">
-      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; text-align: center;">
-        <div style="border: 1px solid #E2E8F0; border-radius: 6px; padding: 8px 6px; background: #F8FAFC;">
-          <div style="height: 32px; border-bottom: 1px dashed #94A3B8; margin-bottom: 5px;"></div>
-          <strong style="color: #0F172A; display: block; font-size: 10px;">Candidate Signature</strong>
-          <span style="color: #64748B; font-size: 9px;">${empName} (${empNo})</span>
-        </div>
-        <div style="border: 1px solid #E2E8F0; border-radius: 6px; padding: 8px 6px; background: #F8FAFC;">
-          <div style="height: 32px; border-bottom: 1px dashed #94A3B8; margin-bottom: 5px;"></div>
-          <strong style="color: #0F172A; display: block; font-size: 10px;">QA Section Evaluator</strong>
-          <span style="color: #64748B; font-size: 9px;">Technical Incharge / Supervisor</span>
-        </div>
-        <div style="border: 1px solid #E2E8F0; border-radius: 6px; padding: 8px 6px; background: #F8FAFC;">
-          <div style="height: 32px; border-bottom: 1px dashed #94A3B8; margin-bottom: 5px;"></div>
-          <strong style="color: #0F172A; display: block; font-size: 10px;">QA Department Manager</strong>
-          <span style="color: #64748B; font-size: 9px;">Plant Quality Approval &amp; Seal</span>
-        </div>
-      </div>
-      <div style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center; font-size: 8.5px; color: #94A3B8;">
-        <span>YOKOHAMA OFF-HIGHWAY TIRES &bull; OFFICIAL QA ILUO AUDIT RECORD &bull; STRICTLY CONFIDENTIAL</span>
-        <span>Generated: ${new Date().toLocaleString('en-GB')}</span>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(reportDiv);
-  showToast(`Generating optimized PDF report for ${empNo}...`);
-
-  if (typeof html2pdf !== 'undefined') {
-    const opt = {
-      margin: [8, 8, 8, 8],
-      filename: `Yokohama_ILUO_Report_${empNo}_${empName.replace(/\s+/g, '_')}.pdf`,
-      image: { type: 'jpeg', quality: 0.90 },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        scrollY: 0,
-        scrollX: 0,
-        logging: false,
-        letterRendering: true
-      },
-      jsPDF: {
-        unit: 'mm',
-        format: 'a4',
-        orientation: 'portrait',
-        compress: true
-      },
-      pagebreak: {
-        mode: ['avoid-all', 'css', 'legacy'],
-        avoid: ['.pdf-avoid-break', 'tr']
-      }
-    };
-
-    html2pdf().from(reportDiv).set(opt).toContainer().toCanvas().toImg().toPdf().get('pdf').then(function(pdf) {
-      const totalPages = pdf.internal.getNumberOfPages();
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      for (let i = 1; i <= totalPages; i++) {
-        pdf.setPage(i);
-        pdf.setFontSize(8);
-        pdf.setTextColor(148, 163, 184);
-        pdf.text(
-          `Yokohama Off-Highway Tires  •  QA ILUO Evaluation Report  •  Page ${i} of ${totalPages}`,
-          pageWidth / 2,
-          pageHeight - 4,
-          { align: 'center' }
-        );
-      }
-    }).save().then(() => {
-      if (document.body.contains(reportDiv)) document.body.removeChild(reportDiv);
-      showToast('PDF Report downloaded successfully!');
-    }).catch(err => {
-      console.error('PDF export error:', err);
-      if (document.body.contains(reportDiv)) document.body.removeChild(reportDiv);
-      window.print();
-    });
-  } else {
-    window.print();
-    if (document.body.contains(reportDiv)) document.body.removeChild(reportDiv);
-  }
+  return downloadEmployeeDocx(empNo);
 }
 
 // Download Official DOCX Evaluation Report for Employee Assessment (Universal Client + Server)
@@ -3093,13 +2708,7 @@ function exportFullQuestionBankExcel() {
 }
 
 function generateSelectedEmployeePDF() {
-  const selectEl = document.getElementById('reportEmpSelect');
-  const empNo = selectEl ? selectEl.value : '';
-  if (!empNo) {
- showToast('Please select an employee from the dropdown list first.');
-    return;
-  }
-  downloadEmployeePDF(empNo);
+  generateSelectedEmployeeDocx();
 }
 
 function generateSelectedEmployeeDocx() {
@@ -3900,7 +3509,6 @@ function filterSectionEmployees() {
     const hasRecord = rec.isCompleted || rec.inProgress;
     const actionBtn = `
       <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-        ${hasRecord ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #0284C7; border-color: #0284C7;" onclick="downloadEmployeePDF('${emp.empNo}')" title="Download PDF Report">PDF</button>` : ''}
         ${hasRecord ? `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">DOCX</button>` : ''}
         <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #059669; border-color: #059669;" onclick="openOjtModalForEmployee('${emp.empNo}')">OJT Form</button>
         ${hasRecord ? `<button class="btn-reset" style="padding: 3px 8px; font-size: 0.75rem;" onclick="confirmAndResetExam('${emp.empNo}', '${emp.name.replace(/'/g, "\\'")}')">Reset</button>` : ''}
