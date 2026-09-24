@@ -1014,18 +1014,44 @@ function showEmpDashboard() {
 }
 
 async function downloadCurrentEmployeeDocx() {
-  if (!currentUser) {
+  let empNo = (currentUser && currentUser.empNo) ? currentUser.empNo : null;
+  if (!empNo) {
+    try {
+      const s = localStorage.getItem(STORAGE_KEY_SESSION);
+      if (s) empNo = JSON.parse(s)?.empNo;
+    } catch (e) {}
+  }
+  if (!empNo) {
     showToast('Please sign in to download your report.');
     return;
   }
-  const records = getStoredRecords();
-  const examRecord = records[currentUser.empNo] || null;
   showToast('Generating official DOCX report with mapped answer ticks...');
   try {
-    await downloadEmployeeDocx(currentUser.empNo);
+    await downloadEmployeeDocx(empNo);
   } catch (err) {
     console.error('DOCX download error:', err);
     showToast('Failed to download DOCX: ' + err.message);
+  }
+}
+
+async function downloadCurrentEmployeePDF() {
+  let empNo = (currentUser && currentUser.empNo) ? currentUser.empNo : null;
+  if (!empNo) {
+    try {
+      const s = localStorage.getItem(STORAGE_KEY_SESSION);
+      if (s) empNo = JSON.parse(s)?.empNo;
+    } catch (e) {}
+  }
+  if (!empNo) {
+    showToast('Please sign in to download your PDF report.');
+    return;
+  }
+  showToast('Generating official PDF report...');
+  try {
+    await downloadEmployeePDF(empNo);
+  } catch (err) {
+    console.error('PDF download error:', err);
+    showToast('Failed to download PDF: ' + err.message);
   }
 }
 
@@ -1502,17 +1528,6 @@ function showResultView(record, isImmediateCompletion = false) {
   showView('viewResult');
 }
 
-function downloadCurrentEmployeePDF() {
-  downloadCurrentEmployeeDocx();
-}
-
-function downloadCurrentEmployeeDocx() {
-  const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
-  const session = sessionStr ? JSON.parse(sessionStr) : null;
-  if (!session || !session.empNo) return alert('Session expired or employee not logged in.');
-  downloadEmployeeDocx(session.empNo);
-}
-
 // ---------------------------------------------------------------------
 // CONTROL CENTER VIEWS (/control-center/*)
 // ---------------------------------------------------------------------
@@ -1784,6 +1799,7 @@ function filterModalEmployees(type) {
       <td style="text-align: center;">
         <div style="display: flex; gap: 4px; justify-content: center;">
           <button class="btn-primary" style="padding: 3px 8px; font-size: 0.72rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">DOCX</button>
+          <button class="btn-primary" style="padding: 3px 8px; font-size: 0.72rem; background: #DC2626; border-color: #DC2626;" onclick="downloadEmployeePDF('${emp.empNo}')" title="Download Official PDF Report">PDF</button>
           <button class="btn-primary" style="padding: 3px 8px; font-size: 0.72rem; background: #059669; border-color: #059669;" onclick="closeSectionCompletedModal(); openOjtModalForEmployee('${emp.empNo}')">OJT</button>
         </div>
       </td>
@@ -2360,6 +2376,7 @@ function renderAdminTable(query) {
     const actionBtn = `
       <div style="display: flex; gap: 5px; flex-wrap: wrap;">
         <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">DOCX</button>
+        <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #DC2626; border-color: #DC2626;" onclick="downloadEmployeePDF('${emp.empNo}')" title="Download Official PDF Report">PDF</button>
         <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #059669; border-color: #059669;" onclick="openOjtModalForEmployee('${emp.empNo}')">OJT Form</button>
         ${hasRecord ? `<button class="btn-reset" style="padding: 3px 8px; font-size: 0.75rem;" onclick="confirmAndResetExam('${emp.empNo}', '${emp.name.replace(/'/g, "\\'")}')">Reset</button>` : ''}
       </div>
@@ -2387,10 +2404,71 @@ function renderAdminTable(query) {
   });
 }
 
-// PDF export completely removed - redirects to official Word (.docx) report
-function downloadEmployeePDF(empNo) {
-  return downloadEmployeeDocx(empNo);
+// Download Official PDF Evaluation Report for Employee Assessment (Word Vector PDF)
+async function downloadEmployeePDF(empNo) {
+  if (!empNo) return alert('Employee ID is required.');
+  showToast(`Generating official PDF report for Employee ${empNo}...`);
+
+  try {
+    const records = getStoredRecords();
+    const recordData = records[empNo] || null;
+
+    let res = null;
+    try {
+      res = await fetch('/api/generate-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empNo: String(empNo), recordData })
+      });
+
+      if (!res.ok) {
+        res = await fetch(`/api/generate-pdf/${encodeURIComponent(empNo)}`);
+      }
+    } catch (netErr) {
+      console.warn('Server native PDF generation unreachable, using client fallback:', netErr.message);
+      res = null;
+    }
+
+    if (res && res.ok) {
+      const contentType = res.headers.get('Content-Type') || '';
+      if (contentType.includes('application/pdf')) {
+        const blob = await res.blob();
+        const contentDisp = res.headers.get('Content-Disposition') || '';
+        let filename = `Yokohama_ILUO_Report_${empNo}.pdf`;
+        const fnMatch = contentDisp.match(/filename="?([^"]+)"?/);
+        if (fnMatch && fnMatch[1]) {
+          filename = fnMatch[1];
+        }
+
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        showToast(`Official PDF report for Employee ${empNo} downloaded successfully!`);
+        return;
+      }
+    }
+
+    // Client-side fallback if server COM conversion is not available
+    console.log('Generating PDF on client-side for Employee', empNo);
+    await generateClientSidePdf(empNo, recordData);
+
+  } catch (err) {
+    console.error('PDF Download error:', err);
+    try {
+      const records = getStoredRecords();
+      await generateClientSidePdf(empNo, records[empNo] || null);
+    } catch (clientErr) {
+      console.error('Client-side PDF fallback error:', clientErr);
+      showToast(`Could not generate PDF: ${clientErr.message}`);
+    }
+  }
 }
+window.downloadEmployeePDFReport = downloadEmployeePDF;
 
 // Download Official DOCX Evaluation Report for Employee Assessment (Universal Client + Server)
 async function downloadEmployeeDocx(empNo) {
@@ -2456,7 +2534,8 @@ async function downloadEmployeeDocx(empNo) {
 }
 window.downloadEmployeeDocxReport = downloadEmployeeDocx;
 
-async function generateClientSideDocx(empNo, recordData) {
+// Helper: Build exact Word (.docx) binary package in browser
+async function buildClientSideDocxBlob(empNo, recordData) {
   if (typeof window.YokohamaDocxGenerator === 'undefined' || typeof window.JSZip === 'undefined') {
     throw new Error('DOCX generator library is loading. Please try again in a moment.');
   }
@@ -2475,7 +2554,6 @@ async function generateClientSideDocx(empNo, recordData) {
   const targetLevel = (examRecord && examRecord.targetLevel) || emp.targetLevel || emp.currentLevel || 'O';
   const templateFilename = window.YokohamaDocxGenerator.getTemplateFilename(targetLevel, emp.section);
 
-  // Fetch template arrayBuffer
   let templateArrayBuffer = null;
   const possiblePaths = [
     `QC_templates/${encodeURIComponent(templateFilename)}`,
@@ -2503,7 +2581,6 @@ async function generateClientSideDocx(empNo, recordData) {
   }
 
   const qbQuestions = (typeof QUESTION_BANK !== 'undefined' && QUESTION_BANK[targetLevel]) ? QUESTION_BANK[targetLevel] : [];
-
   const allOjt = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
   const ojtRec = allOjt[empNo] || null;
   const ojtTmpl = (typeof getOjtTemplateForSection === 'function') ? getOjtTemplateForSection(emp.section) : null;
@@ -2526,6 +2603,11 @@ async function generateClientSideDocx(empNo, recordData) {
   const safeName = (emp.name || empNo).replace(/[\s\\/]+/g, '_');
   const filename = `Yokohama_ILUO_Report_${empNo}_${safeName}.docx`;
 
+  return { blob, emp, filename };
+}
+
+async function generateClientSideDocx(empNo, recordData) {
+  const { blob, filename } = await buildClientSideDocxBlob(empNo, recordData);
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -2534,8 +2616,121 @@ async function generateClientSideDocx(empNo, recordData) {
   a.click();
   window.URL.revokeObjectURL(url);
   document.body.removeChild(a);
-
   showToast(`Official DOCX report for Employee ${empNo} downloaded successfully!`);
+}
+
+async function generateClientSidePdf(empNo, recordData) {
+  const { blob, emp, filename } = await buildClientSideDocxBlob(empNo, recordData);
+
+  // 1. Attempt server-side DOCX-to-PDF conversion endpoint
+  try {
+    const convertRes = await fetch('/api/convert-docx-to-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+      body: blob
+    });
+    if (convertRes.ok) {
+      const pdfBlob = await convertRes.blob();
+      const pdfUrl = window.URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = pdfUrl;
+      const safeName = (emp.name || empNo).replace(/[\s\\/]+/g, '_');
+      a.download = `Yokohama_ILUO_Report_${empNo}_${safeName}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(pdfUrl);
+      document.body.removeChild(a);
+      showToast(`Official PDF report for Employee ${empNo} downloaded successfully!`);
+      return;
+    }
+  } catch (convErr) {
+    console.warn('Server docx-to-pdf converter unreachable, rendering via docx-preview print:', convErr.message);
+  }
+
+  // 2. High-fidelity in-browser Print to PDF using docx-preview
+  if (typeof window.docx !== 'undefined' && typeof window.docx.renderAsync === 'function') {
+    showToast('Rendering exact Word layout for Print to PDF...');
+    let iframe = document.getElementById('docxPrintFrame');
+    if (iframe) {
+      try { iframe.remove(); } catch(e) {}
+    }
+    iframe = document.createElement('iframe');
+    iframe.id = 'docxPrintFrame';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.opacity = '0.01';
+    iframe.style.pointerEvents = 'none';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Yokohama ILUO Assessment Report - ${empNo}</title>
+        <meta charset="utf-8">
+        <style>
+          @page { size: A4 portrait; margin: 10mm; }
+          html, body { margin: 0; padding: 0; background: #ffffff !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+          .docx-wrapper { background: #ffffff !important; padding: 0 !important; }
+          .docx { box-shadow: none !important; margin: 0 auto !important; padding: 0 !important; width: 100% !important; }
+          table { border-collapse: collapse !important; width: 100% !important; }
+          td, th { padding: 4px 6px !important; }
+          @media print {
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
+        </style>
+      </head>
+      <body>
+        <div id="docxPrintContent"></div>
+      </body>
+      </html>
+    `);
+    doc.close();
+
+    const targetDiv = doc.getElementById('docxPrintContent');
+    const arrayBuffer = await blob.arrayBuffer();
+    await window.docx.renderAsync(arrayBuffer, targetDiv, null, {
+      className: "docx",
+      inWrapper: true,
+      breakPages: true,
+      renderHeaders: true,
+      renderFooters: true,
+      ignoreHeight: false,
+      ignoreWidth: false
+    });
+
+    setTimeout(() => {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+        showToast(`Print dialog opened. Select "Save as PDF" to save exact report.`);
+      } catch(printErr) {
+        console.error('Print window error:', printErr);
+      }
+      setTimeout(() => {
+        try { iframe.remove(); } catch(e) {}
+      }, 30000);
+    }, 700);
+
+    return;
+  }
+
+  // 3. Fallback: Download DOCX so employee or supervisor can save as PDF in Word
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+  showToast(`Downloaded DOCX report for Employee ${empNo}. (Open in MS Word to Save As PDF)`);
 }
 
 function confirmAndResetExam(empNo, empName) {
@@ -2735,7 +2930,13 @@ function exportFullQuestionBankExcel() {
 }
 
 function generateSelectedEmployeePDF() {
-  generateSelectedEmployeeDocx();
+  const selectEl = document.getElementById('reportEmpSelect');
+  const empNo = selectEl ? selectEl.value : '';
+  if (!empNo) {
+    showToast('Please select an employee from the dropdown list first.');
+    return;
+  }
+  downloadEmployeePDF(empNo);
 }
 
 function generateSelectedEmployeeDocx() {
@@ -3537,6 +3738,7 @@ function filterSectionEmployees() {
     const actionBtn = `
       <div style="display: flex; gap: 6px; flex-wrap: wrap;">
         <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">DOCX</button>
+        <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #DC2626; border-color: #DC2626;" onclick="downloadEmployeePDF('${emp.empNo}')" title="Download Official PDF Report">PDF</button>
         <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #059669; border-color: #059669;" onclick="openOjtModalForEmployee('${emp.empNo}')">OJT Form</button>
         ${hasRecord ? `<button class="btn-reset" style="padding: 3px 8px; font-size: 0.75rem;" onclick="confirmAndResetExam('${emp.empNo}', '${emp.name.replace(/'/g, "\\'")}')">Reset</button>` : ''}
       </div>
@@ -5263,6 +5465,9 @@ function renderOjtDashboardTable() {
             <button type="button" class="btn-primary" style="padding: 6px 12px; font-size: 0.78rem; background: #1E3A8A; border-color: #1E3A8A; font-weight: 700; white-space: nowrap; border-radius: 6px; box-shadow: 0 2px 4px rgba(30,58,138,0.2); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">
               📄 DOCX
             </button>
+            <button type="button" class="btn-primary" style="padding: 6px 12px; font-size: 0.78rem; background: #DC2626; border-color: #DC2626; font-weight: 700; white-space: nowrap; border-radius: 6px; box-shadow: 0 2px 4px rgba(220,38,38,0.2); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" onclick="downloadEmployeePDF('${emp.empNo}')" title="Download Official PDF Report">
+              📑 PDF
+            </button>
           </div>
         </td>
       </tr>
@@ -5401,6 +5606,7 @@ function renderSectionEmployeesTable(emps) {
           <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
             <button class="btn-sm" style="background: #059669; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 0.78rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(5,150,105,0.2);" onclick="openOjtModalForEmployee('${e.empNo}')" title="Score OJT Evaluation Form">📋 OJT</button>
             <button class="btn-sm" style="background: #005B9E; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 0.78rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(0,91,158,0.2);" onclick="downloadEmployeeDocx('${e.empNo}')" title="Download Official DOCX Report">📄 DOCX</button>
+            <button class="btn-sm" style="background: #DC2626; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 0.78rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(220,38,38,0.2);" onclick="downloadEmployeePDF('${e.empNo}')" title="Download Official PDF Report">📑 PDF</button>
           </div>
         </td>
       </tr>

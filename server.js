@@ -37,6 +37,13 @@ app.get('/seed_data.js', (req, res) => {
   res.sendFile(path.join(__dirname, 'seed_data.js'));
 });
 
+// Explicit docx-preview library script handler
+app.get('/docx-preview.min.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(__dirname, 'docx-preview.min.js'));
+});
+
 // Server-side active OTP storage (Email -> { otp, expiresAt, attempts, lastSendAt })
 const otpStore = new Map();
 
@@ -611,6 +618,103 @@ app.get('/api/employee-docx/:empNo', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------
+// NATIVE WORD COM DOCX-TO-PDF CONVERSION ENGINE (Windows Native)
+// ---------------------------------------------------------------------
+async function convertDocxBufferToPdf(docxBuf, identifier = 'doc') {
+  const tempDir = path.join(__dirname, 'temp_docx');
+  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
+  const tempDocx = path.join(tempDir, `temp_${identifier}_${Date.now()}_${Math.random().toString(36).slice(2)}.docx`);
+  const tempPdf = path.join(tempDir, `temp_${identifier}_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`);
+
+  fs.writeFileSync(tempDocx, docxBuf);
+
+  const psScript = path.join(__dirname, 'word_to_pdf.ps1');
+  if (process.platform === 'win32' && fs.existsSync(psScript)) {
+    try {
+      await new Promise((resolve, reject) => {
+        execFile('powershell', ['-ExecutionPolicy', 'Bypass', '-File', psScript, '-srcPath', tempDocx, '-dstPath', tempPdf], (err, stdout, stderr) => {
+          if (err) return reject(new Error(stderr || err.message));
+          resolve();
+        });
+      });
+
+      if (fs.existsSync(tempPdf)) {
+        const pdfBytes = fs.readFileSync(tempPdf);
+        try { fs.unlinkSync(tempDocx); } catch(e){}
+        try { fs.unlinkSync(tempPdf); } catch(e){}
+        return pdfBytes;
+      }
+    } catch (conversionErr) {
+      try { if (fs.existsSync(tempDocx)) fs.unlinkSync(tempDocx); } catch(e){}
+      try { if (fs.existsSync(tempPdf)) fs.unlinkSync(tempPdf); } catch(e){}
+      throw conversionErr;
+    }
+  }
+
+  try { if (fs.existsSync(tempDocx)) fs.unlinkSync(tempDocx); } catch(e){}
+  throw new Error('Native Word-to-PDF conversion requires Windows with Microsoft Word installed.');
+}
+
+// API ROUTE: GET /api/generate-pdf/:empNo (Direct exact DOCX -> Native Word PDF)
+app.get('/api/generate-pdf/:empNo', async (req, res) => {
+  const empNo = String(req.params.empNo).trim();
+  try {
+    const docxBuf = await buildDocxBufferForEmployee(empNo);
+    const pdfBuf = await convertDocxBufferToPdf(docxBuf, empNo);
+    const fileName = `Yokohama_ILUO_Report_${empNo}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', pdfBuf.length);
+    return res.send(pdfBuf);
+  } catch (err) {
+    console.error(`PDF generation error for ${empNo}:`, err.message);
+    return res.status(500).json({ success: false, message: 'Failed to generate native PDF: ' + err.message });
+  }
+});
+
+// API ROUTE: POST /api/generate-pdf (Direct exact DOCX -> Native Word PDF with optional client state)
+app.post('/api/generate-pdf', async (req, res) => {
+  const { empNo, recordData } = req.body || {};
+  if (!empNo) {
+    return res.status(400).json({ success: false, message: 'empNo is required' });
+  }
+  const strEmpNo = String(empNo).trim();
+  try {
+    const docxBuf = await buildDocxBufferForEmployee(strEmpNo, recordData);
+    const pdfBuf = await convertDocxBufferToPdf(docxBuf, strEmpNo);
+    const fileName = `Yokohama_ILUO_Report_${strEmpNo}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', pdfBuf.length);
+    return res.send(pdfBuf);
+  } catch (err) {
+    console.error(`PDF generation error for ${strEmpNo}:`, err.message);
+    return res.status(500).json({ success: false, message: 'Failed to generate native PDF: ' + err.message });
+  }
+});
+
+// API ROUTE: POST /api/convert-docx-to-pdf (Convert provided DOCX blob to native PDF)
+app.post('/api/convert-docx-to-pdf', express.raw({ type: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/octet-stream'], limit: '50mb' }), async (req, res) => {
+  try {
+    let buf = req.body;
+    if (!Buffer.isBuffer(buf) && req.body && req.body.base64) {
+      buf = Buffer.from(req.body.base64, 'base64');
+    }
+    if (!buf || !Buffer.isBuffer(buf) || buf.length === 0) {
+      return res.status(400).json({ success: false, message: 'Valid DOCX buffer required' });
+    }
+    const pdfBuf = await convertDocxBufferToPdf(buf, 'converted');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="converted_report.pdf"');
+    res.setHeader('Content-Length', pdfBuf.length);
+    return res.send(pdfBuf);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.get('/api/ojt-docx/:empNo', async (req, res) => {
   const empNo = String(req.params.empNo).trim();
   try {
@@ -894,5 +998,8 @@ if (require.main === module) {
     console.log(`🚀 Yokohama Admin Portal running at http://localhost:${PORT}`);
   });
 }
+
+app.buildDocxBufferForEmployee = buildDocxBufferForEmployee;
+app.convertDocxBufferToPdf = convertDocxBufferToPdf;
 
 module.exports = app;

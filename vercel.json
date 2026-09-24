@@ -20,6 +20,7 @@
             "jszip.min.js",
             "yokohama_logo.png",
             "mammoth.browser.min.js",
+            "docx-preview.min.js",
             "xlsx.full.min.js",
             "QC_templates/**",
             "assets/**"

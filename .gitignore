@@ -17,6 +17,7 @@ extracted_ppt_images/
 *.pptx
 *.xlsx
 *.bat
+!batch_convert_all_to_pdf.bat
 dump_*.txt
 clean_out.txt
 cur_out.txt
