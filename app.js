@@ -2424,14 +2424,19 @@ async function downloadEmployeePDF(empNo) {
       if (!res.ok) {
         res = await fetch(`/api/generate-pdf/${encodeURIComponent(empNo)}`);
       }
+      if (!res.ok) {
+        res = await fetch(`/pdf_reports/Yokohama_ILUO_Report_${encodeURIComponent(empNo)}.pdf`);
+      }
     } catch (netErr) {
-      console.warn('Server native PDF generation unreachable, using client fallback:', netErr.message);
-      res = null;
+      console.warn('Server native PDF generation unreachable, trying static path:', netErr.message);
+      try {
+        res = await fetch(`/pdf_reports/Yokohama_ILUO_Report_${encodeURIComponent(empNo)}.pdf`);
+      } catch(e) {}
     }
 
     if (res && res.ok) {
       const contentType = res.headers.get('Content-Type') || '';
-      if (contentType.includes('application/pdf')) {
+      if (contentType.includes('application/pdf') || res.url.endsWith('.pdf')) {
         const blob = await res.blob();
         const contentDisp = res.headers.get('Content-Disposition') || '';
         let filename = `Yokohama_ILUO_Report_${empNo}.pdf`;
@@ -2453,19 +2458,13 @@ async function downloadEmployeePDF(empNo) {
       }
     }
 
-    // Client-side fallback if server COM conversion is not available
-    console.log('Generating PDF on client-side for Employee', empNo);
-    await generateClientSidePdf(empNo, recordData);
+    // Direct fallback: Download the official DOCX report so the user has the 100% accurate file
+    showToast(`Downloading official Word Document (.docx) report for Employee ${empNo}...`);
+    await downloadEmployeeDocx(empNo);
 
   } catch (err) {
     console.error('PDF Download error:', err);
-    try {
-      const records = getStoredRecords();
-      await generateClientSidePdf(empNo, records[empNo] || null);
-    } catch (clientErr) {
-      console.error('Client-side PDF fallback error:', clientErr);
-      showToast(`Could not generate PDF: ${clientErr.message}`);
-    }
+    await downloadEmployeeDocx(empNo);
   }
 }
 window.downloadEmployeePDFReport = downloadEmployeePDF;

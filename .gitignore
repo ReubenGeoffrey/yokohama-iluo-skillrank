@@ -7,6 +7,7 @@ __pycache__/
 !update_ojt_excel.py
 !generate_employee_docx.py
 output_docx/
+/pdf_reports/
 test_*.docx
 extracted_logo.jpg
 parsed_qc_questions.json

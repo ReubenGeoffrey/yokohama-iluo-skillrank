@@ -621,8 +621,13 @@ app.get('/api/employee-docx/:empNo', async (req, res) => {
 // ---------------------------------------------------------------------
 // NATIVE WORD COM DOCX-TO-PDF CONVERSION ENGINE (Windows Native)
 // ---------------------------------------------------------------------
+const os = require('os');
+
+// Explicit static serving of exact Word COM pre-generated PDFs
+app.use('/pdf_reports', express.static(path.join(__dirname, 'pdf_reports')));
+
 async function convertDocxBufferToPdf(docxBuf, identifier = 'doc') {
-  const tempDir = path.join(__dirname, 'temp_docx');
+  const tempDir = path.join(os.tmpdir(), 'temp_docx');
   if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
   const tempDocx = path.join(tempDir, `temp_${identifier}_${Date.now()}_${Math.random().toString(36).slice(2)}.docx`);
@@ -657,10 +662,32 @@ async function convertDocxBufferToPdf(docxBuf, identifier = 'doc') {
   throw new Error('Native Word-to-PDF conversion requires Windows with Microsoft Word installed.');
 }
 
+function getPregeneratedPdfPath(empNo) {
+  const candidates = [
+    path.join(__dirname, 'public', 'pdf_reports', `Yokohama_ILUO_Report_${empNo}.pdf`),
+    path.join(__dirname, 'pdf_reports', `Yokohama_ILUO_Report_${empNo}.pdf`)
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return null;
+}
+
 // API ROUTE: GET /api/generate-pdf/:empNo (Direct exact DOCX -> Native Word PDF)
 app.get('/api/generate-pdf/:empNo', async (req, res) => {
   const empNo = String(req.params.empNo).trim();
   try {
+    // 1. Check if exact pre-generated Native Word COM PDF exists
+    const pregenPath = getPregeneratedPdfPath(empNo);
+    if (pregenPath) {
+      const pdfBuf = fs.readFileSync(pregenPath);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="Yokohama_ILUO_Report_${empNo}.pdf"`);
+      res.setHeader('Content-Length', pdfBuf.length);
+      return res.send(pdfBuf);
+    }
+
+    // 2. On Windows host, convert on the fly using Word COM
     const docxBuf = await buildDocxBufferForEmployee(empNo);
     const pdfBuf = await convertDocxBufferToPdf(docxBuf, empNo);
     const fileName = `Yokohama_ILUO_Report_${empNo}.pdf`;
@@ -669,6 +696,14 @@ app.get('/api/generate-pdf/:empNo', async (req, res) => {
     res.setHeader('Content-Length', pdfBuf.length);
     return res.send(pdfBuf);
   } catch (err) {
+    const pregenPath = getPregeneratedPdfPath(empNo);
+    if (pregenPath) {
+      const pdfBuf = fs.readFileSync(pregenPath);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="Yokohama_ILUO_Report_${empNo}.pdf"`);
+      res.setHeader('Content-Length', pdfBuf.length);
+      return res.send(pdfBuf);
+    }
     console.error(`PDF generation error for ${empNo}:`, err.message);
     return res.status(500).json({ success: false, message: 'Failed to generate native PDF: ' + err.message });
   }
@@ -682,6 +717,17 @@ app.post('/api/generate-pdf', async (req, res) => {
   }
   const strEmpNo = String(empNo).trim();
   try {
+    if (!recordData) {
+      const pregenPath = getPregeneratedPdfPath(strEmpNo);
+      if (pregenPath) {
+        const pdfBuf = fs.readFileSync(pregenPath);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="Yokohama_ILUO_Report_${strEmpNo}.pdf"`);
+        res.setHeader('Content-Length', pdfBuf.length);
+        return res.send(pdfBuf);
+      }
+    }
+
     const docxBuf = await buildDocxBufferForEmployee(strEmpNo, recordData);
     const pdfBuf = await convertDocxBufferToPdf(docxBuf, strEmpNo);
     const fileName = `Yokohama_ILUO_Report_${strEmpNo}.pdf`;
@@ -690,6 +736,14 @@ app.post('/api/generate-pdf', async (req, res) => {
     res.setHeader('Content-Length', pdfBuf.length);
     return res.send(pdfBuf);
   } catch (err) {
+    const pregenPath = getPregeneratedPdfPath(strEmpNo);
+    if (pregenPath) {
+      const pdfBuf = fs.readFileSync(pregenPath);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="Yokohama_ILUO_Report_${strEmpNo}.pdf"`);
+      res.setHeader('Content-Length', pdfBuf.length);
+      return res.send(pdfBuf);
+    }
     console.error(`PDF generation error for ${strEmpNo}:`, err.message);
     return res.status(500).json({ success: false, message: 'Failed to generate native PDF: ' + err.message });
   }
