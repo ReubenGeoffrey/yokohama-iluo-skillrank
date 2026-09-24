@@ -662,6 +662,132 @@ async function convertDocxBufferToPdf(docxBuf, identifier = 'doc') {
   throw new Error('Native Word-to-PDF conversion requires Windows with Microsoft Word installed.');
 }
 
+const { generateOfficialReportHtml } = require('./report_html_generator.js');
+
+let logoBase64Cache = null;
+function getLogoBase64() {
+  if (logoBase64Cache) return logoBase64Cache;
+  const p = path.join(__dirname, 'yokohama_logo.png');
+  if (fs.existsSync(p)) {
+    logoBase64Cache = 'data:image/png;base64,' + fs.readFileSync(p).toString('base64');
+  } else {
+    logoBase64Cache = '';
+  }
+  return logoBase64Cache;
+}
+
+function buildHtmlReportForEmployee(empNo, optionalRecordData) {
+  let emp = null;
+  if (customEmployeesMemory && Array.isArray(customEmployeesMemory)) {
+    emp = customEmployeesMemory.find(e => String(e.empNo).trim() === String(empNo).trim());
+  }
+  if (!emp && fs.existsSync(EMPLOYEES_JSON_FILE)) {
+    try {
+      const emps = JSON.parse(fs.readFileSync(EMPLOYEES_JSON_FILE, 'utf-8'));
+      emp = emps.find(e => String(e.empNo).trim() === String(empNo).trim());
+    } catch (e) {}
+  }
+  if (!emp) {
+    emp = { empNo: empNo, name: `Employee ${empNo}`, dept: 'QUALITY CONTROL', section: 'Tire building QA', doj: '-', targetLevel: 'O' };
+  }
+
+  const examRecord = optionalRecordData || globalAssessmentRecords.get(String(empNo)) || null;
+  const targetLevel = (examRecord && examRecord.targetLevel) || emp.targetLevel || emp.currentLevel || 'O';
+
+  let qbQuestions = [];
+  if (customQuestionBankMemory && customQuestionBankMemory[targetLevel]) {
+    qbQuestions = customQuestionBankMemory[targetLevel];
+  } else if (fs.existsSync(QUESTIONS_JSON_FILE)) {
+    try {
+      const qb = JSON.parse(fs.readFileSync(QUESTIONS_JSON_FILE, 'utf-8'));
+      qbQuestions = qb[targetLevel] || [];
+    } catch (e) {}
+  }
+
+  const ojtRec = globalOjtEvaluations ? (globalOjtEvaluations.get(String(empNo)) || {}) : {};
+  let ojtTmpl = null;
+  if (serverOjtTemplates && emp && emp.section) {
+    const s = emp.section.toLowerCase();
+    if (s.includes('solid')) ojtTmpl = serverOjtTemplates['86D'];
+    else if (s.includes('rro') || s.includes('alt')) ojtTmpl = serverOjtTemplates['83D'];
+    else if (s.includes('preparatory')) ojtTmpl = serverOjtTemplates['85D'];
+    else if (s.includes('building') || s.includes('tbm')) ojtTmpl = serverOjtTemplates['87D'];
+    else if (s.includes('curing')) ojtTmpl = serverOjtTemplates['88D'];
+    else if (s.includes('warehouse') || s.includes('data entry')) ojtTmpl = serverOjtTemplates['89D'];
+    else if (s.includes('fid')) ojtTmpl = serverOjtTemplates['90D'];
+    else if (s.includes('buffer') || s.includes('compound') || s.includes('replate')) ojtTmpl = serverOjtTemplates['90G'];
+    else ojtTmpl = serverOjtTemplates['84D'];
+  }
+
+  return generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmpl, getLogoBase64());
+}
+
+let browserInstance = null;
+async function getChromiumBrowser() {
+  if (browserInstance && browserInstance.isConnected()) {
+    return browserInstance;
+  }
+  const puppeteer = require('puppeteer-core');
+  
+  if (process.env.VERCEL || process.platform === 'linux') {
+    const chromium = require('@sparticuz/chromium');
+    browserInstance = await puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless,
+      ignoreHTTPSErrors: true
+    });
+  } else {
+    // Windows local host
+    const possiblePaths = [
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
+    ];
+    let execPath = possiblePaths.find(p => fs.existsSync(p));
+    browserInstance = await puppeteer.launch({
+      executablePath: execPath,
+      headless: true,
+      args: ['--no-sandbox', '--disable-gpu']
+    });
+  }
+  return browserInstance;
+}
+
+async function renderHtmlToPdf(html) {
+  const browser = await getChromiumBrowser();
+  const page = await browser.newPage();
+  try {
+    await page.setContent(html, { waitUntil: 'load' });
+    const pdfBuf = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '10mm', bottom: '10mm', left: '12mm', right: '12mm' }
+    });
+    return pdfBuf;
+  } finally {
+    try { await page.close(); } catch(e){}
+  }
+}
+
+async function renderDynamicPdf(empNo, optionalRecordData) {
+  // If running on Windows host and Word COM is available, try Word COM
+  if (process.platform === 'win32') {
+    try {
+      const docxBuf = await buildDocxBufferForEmployee(empNo, optionalRecordData);
+      return await convertDocxBufferToPdf(docxBuf, empNo);
+    } catch (wordErr) {
+      console.warn('Word COM conversion failed, falling back to Chromium/Puppeteer:', wordErr.message);
+    }
+  }
+
+  // Pure cloud-based headless Chromium PDF generation (works on Vercel Linux & all platforms)
+  const html = buildHtmlReportForEmployee(empNo, optionalRecordData);
+  return await renderHtmlToPdf(html);
+}
+
 function getPregeneratedPdfPath(empNo) {
   const candidates = [
     path.join(__dirname, 'public', 'pdf_reports', `Yokohama_ILUO_Report_${empNo}.pdf`),
@@ -673,23 +799,26 @@ function getPregeneratedPdfPath(empNo) {
   return null;
 }
 
-// API ROUTE: GET /api/generate-pdf/:empNo (Direct exact DOCX -> Native Word PDF)
+// API ROUTE: GET /api/generate-pdf/:empNo (Exact Dynamic PDF)
 app.get('/api/generate-pdf/:empNo', async (req, res) => {
   const empNo = String(req.params.empNo).trim();
+  const force = req.query.force === '1';
+
   try {
-    // 1. Check if exact pre-generated Native Word COM PDF exists
-    const pregenPath = getPregeneratedPdfPath(empNo);
-    if (pregenPath) {
-      const pdfBuf = fs.readFileSync(pregenPath);
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="Yokohama_ILUO_Report_${empNo}.pdf"`);
-      res.setHeader('Content-Length', pdfBuf.length);
-      return res.send(pdfBuf);
+    // 1. If not forcing dynamic, serve instant pre-generated file if available
+    if (!force) {
+      const pregenPath = getPregeneratedPdfPath(empNo);
+      if (pregenPath) {
+        const pdfBuf = fs.readFileSync(pregenPath);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="Yokohama_ILUO_Report_${empNo}.pdf"`);
+        res.setHeader('Content-Length', pdfBuf.length);
+        return res.send(pdfBuf);
+      }
     }
 
-    // 2. On Windows host, convert on the fly using Word COM
-    const docxBuf = await buildDocxBufferForEmployee(empNo);
-    const pdfBuf = await convertDocxBufferToPdf(docxBuf, empNo);
+    // 2. Dynamic on-the-fly generation (Chromium/Puppeteer or Word COM)
+    const pdfBuf = await renderDynamicPdf(empNo);
     const fileName = `Yokohama_ILUO_Report_${empNo}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -705,11 +834,11 @@ app.get('/api/generate-pdf/:empNo', async (req, res) => {
       return res.send(pdfBuf);
     }
     console.error(`PDF generation error for ${empNo}:`, err.message);
-    return res.status(500).json({ success: false, message: 'Failed to generate native PDF: ' + err.message });
+    return res.status(500).json({ success: false, message: 'Failed to generate PDF: ' + err.message });
   }
 });
 
-// API ROUTE: POST /api/generate-pdf (Direct exact DOCX -> Native Word PDF with optional client state)
+// API ROUTE: POST /api/generate-pdf (Exact Dynamic PDF with live/updated state)
 app.post('/api/generate-pdf', async (req, res) => {
   const { empNo, recordData } = req.body || {};
   if (!empNo) {
@@ -728,8 +857,8 @@ app.post('/api/generate-pdf', async (req, res) => {
       }
     }
 
-    const docxBuf = await buildDocxBufferForEmployee(strEmpNo, recordData);
-    const pdfBuf = await convertDocxBufferToPdf(docxBuf, strEmpNo);
+    // Live updated test data: Render dynamically on the fly
+    const pdfBuf = await renderDynamicPdf(strEmpNo, recordData);
     const fileName = `Yokohama_ILUO_Report_${strEmpNo}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -745,7 +874,7 @@ app.post('/api/generate-pdf', async (req, res) => {
       return res.send(pdfBuf);
     }
     console.error(`PDF generation error for ${strEmpNo}:`, err.message);
-    return res.status(500).json({ success: false, message: 'Failed to generate native PDF: ' + err.message });
+    return res.status(500).json({ success: false, message: 'Failed to generate PDF: ' + err.message });
   }
 });
 
