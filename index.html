@@ -48,8 +48,8 @@
     <button class="role-tab-btn" id="tabRoleEmp" onclick="switchRolePortal('employee')">
       <span class="tab-icon">👤</span> <span>Employee</span>
     </button>
-    <button class="role-tab-btn" id="tabRoleCompleteAll" onclick="applyAll234CompletedRecords()" style="background: #ECFDF5; border-color: #059669; color: #065F46; font-weight: 700;" title="Click to ensure all 234 employees are completed for Exam & OJT">
-      <span class="tab-icon">⚡</span> <span>All 234 Completed</span>
+    <button class="role-tab-btn" id="tabRoleZeroExam" onclick="makeZeroFinishExam()" style="background: #FEF2F2; border-color: #DC2626; color: #991B1B; font-weight: 700;" title="Click to reset all exams to 0 Finished (Fresh Assessment Mode)">
+      <span class="tab-icon">🔄</span> <span>Zero Finish Exam</span>
     </button>
   </nav>
 
@@ -982,10 +982,18 @@
 
           <!-- SUB-VIEW A: Dashboard (/control-center/dashboard) -->
           <div class="control-subview" id="ctrlSubDashboard" style="display: none;">
-            <div class="admin-header">
+            <div class="admin-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
               <div>
                 <div class="admin-title">Control Center Dashboard</div>
-                <div style="font-size: 0.85rem; color: var(--text-muted);">Real-time completion analytics for Yokohama Tire Building QA</div>
+                <div style="font-size: 0.85rem; color: var(--text-muted);">Real-time completion analytics for Yokohama QA Assessment</div>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button type="button" class="btn-primary" onclick="makeZeroFinishExam()" style="background: #DC2626; border-color: #DC2626; font-size: 0.82rem; font-weight: 700; padding: 7px 14px; border-radius: 6px;" title="Reset all 236 employee exams to 0 completed / Not Started">
+                  🔄 Zero Finish Exam (0 Done)
+                </button>
+                <button type="button" class="btn-secondary" onclick="restoreAllCompletedExams()" style="font-size: 0.82rem; padding: 7px 12px; border-radius: 6px;" title="Restore all 236 completed demo records">
+                  ⚡ Restore Demo Completed
+                </button>
               </div>
             </div>
 
@@ -2276,9 +2284,9 @@
   <script defer src="docx-preview.min.js?v=44.0"></script>
 
   <!-- OJT Official Templates & Data Script & Application Router -->
-  <script src="ojt_templates_data.js?v=44.0"></script>
-  <script src="data.js?v=44.0"></script>
-  <script src="seed_data.js?v=44.0"></script>
-  <script src="app.js?v=44.0"></script>
+  <script src="ojt_templates_data.js?v=45.0"></script>
+  <script src="data.js?v=45.0"></script>
+  <script src="seed_data.js?v=45.0"></script>
+  <script src="app.js?v=45.0"></script>
 </body>
 </html>

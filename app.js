@@ -1,7 +1,7 @@
 // Yokohama ILUO MCQ Assessment Application Logic & Router
 
 // LocalStorage Keys
-const STORAGE_KEY_RECORDS = 'iluo_assessment_records_v1';
+const STORAGE_KEY_RECORDS = 'iluo_assessment_records_v2';
 const STORAGE_KEY_SESSION = 'iluo_current_session_v1';
 const STORAGE_KEY_OJT = 'yokohama_ojt_evaluations_v1';
 const STORAGE_KEY_CUSTOM_EMPLOYEES = 'yokohama_custom_employees_v1';
@@ -52,6 +52,11 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 3500) {
 }
 
 function initStorage() {
+  // Purge legacy pre-populated records from previous versions to guarantee clean 0 finished exams
+  try {
+    localStorage.removeItem('iluo_assessment_records_v1');
+  } catch (e) {}
+
   if (!localStorage.getItem(STORAGE_KEY_RECORDS)) {
     localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify({}));
   }
@@ -94,18 +99,17 @@ function initStorage() {
 
 function getStoredRecords() {
   try {
-    let recs = JSON.parse(localStorage.getItem(STORAGE_KEY_RECORDS));
-    if (!recs || Object.keys(recs).length < 10) {
-      if (typeof YOKOHAMA_SEED_RECORDS !== 'undefined' && Object.keys(YOKOHAMA_SEED_RECORDS).length > 0) {
-        recs = { ...YOKOHAMA_SEED_RECORDS, ...(recs || {}) };
-        localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(recs));
-      } else {
-        recs = recs || {};
-      }
+    const raw = localStorage.getItem(STORAGE_KEY_RECORDS);
+    if (!raw) {
+      const initial = (typeof YOKOHAMA_SEED_RECORDS !== 'undefined' && YOKOHAMA_SEED_RECORDS && Object.keys(YOKOHAMA_SEED_RECORDS).length > 0)
+        ? { ...YOKOHAMA_SEED_RECORDS }
+        : {};
+      localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(initial));
+      return initial;
     }
-    return recs || {};
+    return JSON.parse(raw) || {};
   } catch (e) {
-    return (typeof YOKOHAMA_SEED_RECORDS !== 'undefined') ? { ...YOKOHAMA_SEED_RECORDS } : {};
+    return {};
   }
 }
 
@@ -128,14 +132,27 @@ async function syncCloudRecords() {
   try {
     const res = await fetchWithTimeout('/api/records', {}, 3500);
     const data = await res.json();
-    if (data.success && data.records) {
+    if (data.success && data.records !== undefined) {
+      const serverRecords = data.records || {};
+      const serverCount = Object.keys(serverRecords).length;
       const local = getStoredRecords();
-      const merged = { ...local, ...data.records };
+      const localCount = Object.keys(local).length;
+
+      let merged;
+      // If server explicitly holds 0 finished exams and local wasn't explicitly flagged to preserve
+      if (serverCount === 0 && localCount > 0 && !localStorage.getItem('iluo_preserve_local')) {
+        merged = {};
+      } else {
+        merged = { ...local, ...serverRecords };
+      }
       localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(merged));
-      // Re-render admin table if visible
+      // Re-render admin table and dashboard if active
       if (document.getElementById('adminTableBody')) {
         const searchInput = document.getElementById('adminSearchInput');
         renderAdminTable(searchInput ? searchInput.value : '');
+      }
+      if (typeof renderAdminDashboard === 'function') {
+        renderAdminDashboard();
       }
     }
   } catch (e) {}
@@ -4440,21 +4457,61 @@ function getStoredOjtRecords() {
   }
 }
 
+async function makeZeroFinishExam() {
+  if (confirm('Are you sure you want to RESET ALL EXAMS to 0 Finished (Fresh Assessment Mode)?\n\nAll 236 employees will be set to "Not Started" so they can take their assessments from scratch.')) {
+    // 1. Reset client LocalStorage
+    localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify({}));
+    localStorage.removeItem('iluo_preserve_local');
+
+    // 2. Call server reset API
+    try {
+      await fetch('/api/records/reset-all', { method: 'POST' });
+    } catch (e) {}
+
+    showToast('All 236 exams reset to 0 finished! Fresh assessment mode active.');
+
+    // 3. Re-render UI
+    if (document.getElementById('adminTableBody')) {
+      const searchInput = document.getElementById('adminSearchInput');
+      renderAdminTable(searchInput ? searchInput.value : '');
+    }
+    if (document.getElementById('secEmpTableBody')) filterSectionTable();
+    if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
+    if (currentUser) {
+      handleRoute();
+    }
+  }
+}
+window.makeZeroFinishExam = makeZeroFinishExam;
+
+async function restoreAllCompletedExams() {
+  if (confirm('Restore all 234+ completed demo exam records from backup?')) {
+    showToast('Restoring demo records from backup...');
+    try {
+      const res = await fetch('/api/records/restore-demo', { method: 'POST' });
+      const data = await res.json();
+      if (data.success && data.records) {
+        localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(data.records));
+        localStorage.setItem('iluo_preserve_local', 'true');
+        showToast('Restored 236 demo completed records!');
+      } else {
+        showToast('Could not restore demo records.');
+      }
+    } catch (e) {
+      showToast('Error restoring demo records: ' + e.message);
+    }
+    if (document.getElementById('adminTableBody')) {
+      const searchInput = document.getElementById('adminSearchInput');
+      renderAdminTable(searchInput ? searchInput.value : '');
+    }
+    if (document.getElementById('secEmpTableBody')) filterSectionTable();
+    if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
+  }
+}
+window.restoreAllCompletedExams = restoreAllCompletedExams;
+
 function applyAll234CompletedRecords() {
-  if (typeof YOKOHAMA_SEED_RECORDS !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(YOKOHAMA_SEED_RECORDS));
-  }
-  if (typeof YOKOHAMA_SEED_OJT_RECORDS !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY_OJT, JSON.stringify(YOKOHAMA_SEED_OJT_RECORDS));
-  }
-  showToast('All 234+ QA Employees have successfully completed Exams and OJT practical evaluations!');
-  if (document.getElementById('adminTableBody')) {
-    const searchInput = document.getElementById('adminSearchInput');
-    renderAdminTable(searchInput ? searchInput.value : '');
-  }
-  if (document.getElementById('secEmpTableBody')) filterSectionTable();
-  if (typeof renderOjtDashboardTable === 'function') renderOjtDashboardTable();
-  if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
+  restoreAllCompletedExams();
 }
 window.applyAll234CompletedRecords = applyAll234CompletedRecords;
 

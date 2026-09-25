@@ -510,6 +510,53 @@ app.delete('/api/records/:empNo', async (req, res) => {
   res.json({ success: true, message: `Record reset for employee ${empNo}` });
 });
 
+// API ROUTE: POST /api/records/reset-all (Reset all finished exams to 0 completed / Not Started)
+app.post('/api/records/reset-all', async (req, res) => {
+  globalAssessmentRecords.clear();
+  try {
+    fs.writeFileSync(RECORDS_JSON_FILE, JSON.stringify({}, null, 2), 'utf-8');
+  } catch (err) {}
+  if (kvUrl && kvToken) {
+    await syncWithCloudKv('SET', 'yokohama_records', {});
+  }
+  console.log('🔄 All assessment records reset to 0 finished exams.');
+  res.json({ success: true, message: 'All exam records successfully reset to zero (0 finished, 236 not started)' });
+});
+
+// API ROUTE: DELETE /api/records (Reset all exam records)
+app.delete('/api/records', async (req, res) => {
+  globalAssessmentRecords.clear();
+  try {
+    fs.writeFileSync(RECORDS_JSON_FILE, JSON.stringify({}, null, 2), 'utf-8');
+  } catch (err) {}
+  if (kvUrl && kvToken) {
+    await syncWithCloudKv('SET', 'yokohama_records', {});
+  }
+  res.json({ success: true, message: 'All exam records reset to zero' });
+});
+
+// API ROUTE: POST /api/records/restore-demo (Restore demo 236 completed records from backup)
+app.post('/api/records/restore-demo', async (req, res) => {
+  const BACKUP_FILE = path.join(__dirname, 'assessment_records_backup_236.json');
+  if (fs.existsSync(BACKUP_FILE)) {
+    try {
+      const raw = fs.readFileSync(BACKUP_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      globalAssessmentRecords.clear();
+      Object.entries(parsed).forEach(([k, v]) => globalAssessmentRecords.set(String(k), v));
+      fs.writeFileSync(RECORDS_JSON_FILE, raw, 'utf-8');
+      if (kvUrl && kvToken) {
+        await syncWithCloudKv('SET', 'yokohama_records', parsed);
+      }
+      console.log(`📦 Restored ${globalAssessmentRecords.size} assessment records from backup.`);
+      return res.json({ success: true, message: `Restored ${globalAssessmentRecords.size} demo records from backup`, records: parsed });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: 'Failed to restore backup: ' + err.message });
+    }
+  }
+  res.status(404).json({ success: false, message: 'Backup file assessment_records_backup_236.json not found' });
+});
+
 // ---------------------------------------------------------------------
 // ---------------------------------------------------------------------
 // INDIVIDUAL EMPLOYEE DOCX QUALIFICATION REPORT GENERATOR (Exact Template Mapper)
@@ -789,6 +836,11 @@ async function renderDynamicPdf(empNo, optionalRecordData) {
 }
 
 function getPregeneratedPdfPath(empNo) {
+  // Only serve pregenerated file if employee actually has a completed record
+  const rec = globalAssessmentRecords.get(String(empNo));
+  if (!rec || !rec.isCompleted) {
+    return null;
+  }
   const candidates = [
     path.join(__dirname, 'public', 'pdf_reports', `Yokohama_ILUO_Report_${empNo}.pdf`),
     path.join(__dirname, 'pdf_reports', `Yokohama_ILUO_Report_${empNo}.pdf`)
