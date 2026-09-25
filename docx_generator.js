@@ -188,10 +188,10 @@
     const section = emp.section || 'Tire building QA';
     const doj = emp.doj || '-';
     const targetLvl = (examRecord && examRecord.targetLevel) || emp.targetLevel || emp.currentLevel || 'O';
-    const attemptDate = (examRecord && examRecord.attemptDate) || new Date().toLocaleDateString('en-GB');
-
     const submittedQs = (examRecord && examRecord.submittedQuestions) || [];
     const isAttempted = Boolean((examRecord && examRecord.isCompleted) || (examRecord && examRecord.inProgress) || submittedQs.length > 0);
+    const attemptDate = (isAttempted && examRecord && examRecord.attemptDate) ? examRecord.attemptDate : '-';
+
     const totalMark = (examRecord && examRecord.totalMark !== undefined) ? examRecord.totalMark : (submittedQs.filter(q => q.isCorrect).length);
     const totalPossible = submittedQs.length || (targetLvl === 'L' ? 20 : (targetLvl === 'U' ? 30 : 40));
     const minPass = Math.ceil(totalPossible * 0.7);
@@ -248,8 +248,9 @@
         rows[2] = updateCellInRow(rows[2], 1, section, true, '005B9E');
         rows[2] = updateCellInRow(rows[2], 3, attemptDate, false, '0F172A');
 
-        rows[3] = updateCellInRow(rows[3], 1, marksDisplay, true, isPassed ? '166534' : 'B91C1C');
-        rows[3] = updateCellInRow(rows[3], 3, resultDisplay, true, isPassed ? '166534' : 'B91C1C');
+        const statusColor = isPassed ? '166534' : (isAttempted ? 'B91C1C' : 'D97706');
+        rows[3] = updateCellInRow(rows[3], 1, marksDisplay, true, statusColor);
+        rows[3] = updateCellInRow(rows[3], 3, resultDisplay, true, statusColor);
 
         const tblPrMatch = tblXml.match(/<w:tblPr>[\s\S]*?<\/w:tblPr>/);
         const tblPr = tblPrMatch ? tblPrMatch[0] : '';
@@ -333,6 +334,11 @@
 
       const hasOptions = /(?:^|[\s\r\n\t])([a-d])[\.\)]/i.test(text);
       const isQuestionLike = text.includes('?') || hasOptions;
+
+      if (!isAttempted) {
+        activeQ = null;
+        return pXml;
+      }
 
       if (isKnownHeader && !hasOptions) {
         activeQ = null;

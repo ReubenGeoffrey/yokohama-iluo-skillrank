@@ -2448,14 +2448,8 @@ async function downloadEmployeePDF(empNo) {
       if (!res.ok) {
         res = await fetch(`/api/generate-pdf/${encodeURIComponent(empNo)}`);
       }
-      if (!res.ok) {
-        res = await fetch(`/pdf_reports/Yokohama_ILUO_Report_${encodeURIComponent(empNo)}.pdf`);
-      }
     } catch (netErr) {
-      console.warn('Server native PDF generation unreachable, trying static path:', netErr.message);
-      try {
-        res = await fetch(`/pdf_reports/Yokohama_ILUO_Report_${encodeURIComponent(empNo)}.pdf`);
-      } catch(e) {}
+      console.warn('Server dynamic PDF generation error:', netErr.message);
     }
 
     if (res && res.ok) {

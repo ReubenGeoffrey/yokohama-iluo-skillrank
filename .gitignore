@@ -40,3 +40,8 @@ dump_u.txt
 
 .vercel
 .env*
+
+archive_pregen_pdfs/
+public/pdf_reports/
+temp_test_*.pdf
+pending_test_out.pdf

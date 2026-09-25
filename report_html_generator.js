@@ -25,14 +25,16 @@ function generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmp
   const dept = escapeHtml(emp.dept || 'QUALITY CONTROL');
   const section = escapeHtml(emp.section || 'Tire building QA');
   const doj = escapeHtml(emp.doj || '-');
-  const date = escapeHtml(examRecord.attemptDate || '15/02/2026');
+  const isAttempted = Boolean((examRecord && examRecord.isCompleted) || (examRecord && examRecord.inProgress) || (examRecord && examRecord.submittedQuestions && examRecord.submittedQuestions.length > 0));
+  const date = isAttempted ? escapeHtml(examRecord.attemptDate || '-') : '-';
 
   const curLevel = escapeHtml(emp.currentLevel || 'I');
   const tgtLevel = escapeHtml(examRecord.targetLevel || emp.targetLevel || (curLevel === 'I' ? 'L' : curLevel === 'L' ? 'U' : 'O'));
-  const totalMark = (examRecord.totalMark !== undefined) ? examRecord.totalMark : 28;
-  const markPct = Math.round((totalMark / 30) * 100);
-  const isPass = totalMark >= 21;
-  const examStatus = isPass ? 'PASS (≥21)' : 'RETEST (<21)';
+  const totalMark = isAttempted ? ((examRecord.totalMark !== undefined) ? examRecord.totalMark : 0) : null;
+  const markPct = isAttempted ? Math.round((totalMark / 30) * 100) : 0;
+  const isPass = isAttempted && totalMark >= 21;
+  const examStatus = isAttempted ? (isPass ? 'PASS (≥21)' : 'RETEST (<21)') : 'PENDING';
+  const marksDisplay = isAttempted ? `${totalMark} / 30 Marks` : 'Pending Exam';
 
   // Build Questions HTML
   const userAnswers = examRecord.userAnswers || {};
@@ -76,14 +78,16 @@ function generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmp
       let markBadge = '';
       let optClass = 'option-row';
 
-      if (isCorr && isUser) {
-        markBadge = '<span class="tick-correct">✔ (Correct &amp; Chosen)</span>';
-        optClass += ' option-chosen-correct';
-      } else if (isCorr && !isUser) {
-        markBadge = '<span class="tick-correct">✔ (Correct Answer)</span>';
-      } else if (isUser && !isCorr) {
-        markBadge = '<span class="tick-wrong">✘ (Chosen Answer)</span>';
-        optClass += ' option-chosen-wrong';
+      if (isAttempted) {
+        if (isCorr && isUser) {
+          markBadge = '<span class="tick-correct">✔ (Correct &amp; Chosen)</span>';
+          optClass += ' option-chosen-correct';
+        } else if (isCorr && !isUser) {
+          markBadge = '<span class="tick-correct">✔ (Correct Answer)</span>';
+        } else if (isUser && !isCorr) {
+          markBadge = '<span class="tick-wrong">✘ (Chosen Answer)</span>';
+          optClass += ' option-chosen-wrong';
+        }
       }
 
       optionsHtml += `
@@ -449,7 +453,7 @@ function generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmp
       <td class="meta-label">Qualification Level</td>
       <td class="meta-val"><strong>${curLevel} Level &rarr; Target ${tgtLevel} Level</strong></td>
       <td class="meta-label">Assessment Result</td>
-      <td class="meta-val"><strong style="color: ${isPass ? '#166534' : '#DC2626'};">${examStatus} (${totalMark} / 30 Marks - ${markPct}%)</strong></td>
+      <td class="meta-val"><strong style="color: ${isAttempted ? (isPass ? '#166534' : '#DC2626') : '#D97706'};">${isAttempted ? `${examStatus} (${totalMark} / 30 Marks - ${markPct}%)` : 'Pending Exam'}</strong></td>
     </tr>
   </table>
 
@@ -472,9 +476,9 @@ function generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmp
     <tr style="font-weight: 700; background: #F8FAFC;">
       <td>30</td>
       <td>21 / 30 (70%)</td>
-      <td style="color: ${isPass ? '#166534' : '#DC2626'}; font-size: 11pt;">${totalMark} / 30</td>
-      <td>${markPct}%</td>
-      <td style="color: ${isPass ? '#166534' : '#DC2626'}; font-size: 10pt; text-transform: uppercase;">${isPass ? 'QUALIFIED FOR LEVEL PROMOTION' : 'RETEST REQUIRED'}</td>
+      <td style="color: ${isAttempted ? (isPass ? '#166534' : '#DC2626') : '#64748B'}; font-size: 11pt;">${marksDisplay}</td>
+      <td>${isAttempted ? `${markPct}%` : '-'}</td>
+      <td style="color: ${isAttempted ? (isPass ? '#166534' : '#DC2626') : '#D97706'}; font-size: 10pt; text-transform: uppercase;">${isAttempted ? (isPass ? 'QUALIFIED FOR LEVEL PROMOTION' : 'RETEST REQUIRED') : 'PENDING ASSESSMENT'}</td>
     </tr>
   </table>
 

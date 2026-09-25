@@ -744,9 +744,6 @@ app.get('/api/employee-docx/:empNo', async (req, res) => {
 // ---------------------------------------------------------------------
 const os = require('os');
 
-// Explicit static serving of exact Word COM pre-generated PDFs
-app.use('/pdf_reports', express.static(path.join(__dirname, 'pdf_reports')));
-
 async function convertDocxBufferToPdf(docxBuf, identifier = 'doc') {
   const tempDir = path.join(os.tmpdir(), 'temp_docx');
   if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
@@ -909,41 +906,11 @@ async function renderDynamicPdf(empNo, optionalRecordData) {
   return await renderHtmlToPdf(html);
 }
 
-function getPregeneratedPdfPath(empNo) {
-  // Only serve pregenerated file if employee actually has a completed record
-  const rec = globalAssessmentRecords.get(String(empNo));
-  if (!rec || !rec.isCompleted) {
-    return null;
-  }
-  const candidates = [
-    path.join(__dirname, 'public', 'pdf_reports', `Yokohama_ILUO_Report_${empNo}.pdf`),
-    path.join(__dirname, 'pdf_reports', `Yokohama_ILUO_Report_${empNo}.pdf`)
-  ];
-  for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
-  }
-  return null;
-}
-
 // API ROUTE: GET /api/generate-pdf/:empNo (Exact Dynamic PDF)
 app.get('/api/generate-pdf/:empNo', async (req, res) => {
   const empNo = String(req.params.empNo).trim();
-  const force = req.query.force === '1';
 
   try {
-    // 1. If not forcing dynamic, serve instant pre-generated file if available
-    if (!force) {
-      const pregenPath = getPregeneratedPdfPath(empNo);
-      if (pregenPath) {
-        const pdfBuf = fs.readFileSync(pregenPath);
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="Yokohama_ILUO_Report_${empNo}.pdf"`);
-        res.setHeader('Content-Length', pdfBuf.length);
-        return res.send(pdfBuf);
-      }
-    }
-
-    // 2. Dynamic on-the-fly generation (Chromium/Puppeteer or Word COM)
     const pdfBuf = await renderDynamicPdf(empNo);
     const fileName = `Yokohama_ILUO_Report_${empNo}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
@@ -951,14 +918,6 @@ app.get('/api/generate-pdf/:empNo', async (req, res) => {
     res.setHeader('Content-Length', pdfBuf.length);
     return res.send(pdfBuf);
   } catch (err) {
-    const pregenPath = getPregeneratedPdfPath(empNo);
-    if (pregenPath) {
-      const pdfBuf = fs.readFileSync(pregenPath);
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="Yokohama_ILUO_Report_${empNo}.pdf"`);
-      res.setHeader('Content-Length', pdfBuf.length);
-      return res.send(pdfBuf);
-    }
     console.error(`PDF generation error for ${empNo}:`, err.message);
     return res.status(500).json({ success: false, message: 'Failed to generate PDF: ' + err.message });
   }
@@ -972,18 +931,6 @@ app.post('/api/generate-pdf', async (req, res) => {
   }
   const strEmpNo = String(empNo).trim();
   try {
-    if (!recordData) {
-      const pregenPath = getPregeneratedPdfPath(strEmpNo);
-      if (pregenPath) {
-        const pdfBuf = fs.readFileSync(pregenPath);
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="Yokohama_ILUO_Report_${strEmpNo}.pdf"`);
-        res.setHeader('Content-Length', pdfBuf.length);
-        return res.send(pdfBuf);
-      }
-    }
-
-    // Live updated test data: Render dynamically on the fly
     const pdfBuf = await renderDynamicPdf(strEmpNo, recordData);
     const fileName = `Yokohama_ILUO_Report_${strEmpNo}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
@@ -991,14 +938,6 @@ app.post('/api/generate-pdf', async (req, res) => {
     res.setHeader('Content-Length', pdfBuf.length);
     return res.send(pdfBuf);
   } catch (err) {
-    const pregenPath = getPregeneratedPdfPath(strEmpNo);
-    if (pregenPath) {
-      const pdfBuf = fs.readFileSync(pregenPath);
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="Yokohama_ILUO_Report_${strEmpNo}.pdf"`);
-      res.setHeader('Content-Length', pdfBuf.length);
-      return res.send(pdfBuf);
-    }
     console.error(`PDF generation error for ${strEmpNo}:`, err.message);
     return res.status(500).json({ success: false, message: 'Failed to generate PDF: ' + err.message });
   }
@@ -1310,5 +1249,7 @@ if (require.main === module) {
 
 app.buildDocxBufferForEmployee = buildDocxBufferForEmployee;
 app.convertDocxBufferToPdf = convertDocxBufferToPdf;
+app.buildHtmlReportForEmployee = buildHtmlReportForEmployee;
+app.renderDynamicPdf = renderDynamicPdf;
 
 module.exports = app;
