@@ -124,19 +124,10 @@
               </div>
               <div class="form-group">
                 <label for="empPasswordInput">Password</label>
-                <input type="password" id="empPasswordInput" class="form-control" placeholder="Enter password (default: 1234 or emp ID)" value="1234">
+                <input type="password" id="empPasswordInput" class="form-control" placeholder="Enter password" required>
               </div>
 
-              <!-- Quick Demo Selector -->
-              <div style="margin-bottom: 16px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px;">
-                <div style="font-size: 0.76rem; font-weight: 700; color: #64748B; margin-bottom: 6px;">QUICK DEMO ACCOUNTS:</div>
-                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                  <button type="button" class="btn-sm" style="background: #EFF6FF; border: 1px solid #BFDBFE; color: #1D4ED8; font-weight: 600; font-size: 0.78rem; padding: 4px 10px; border-radius: 4px; cursor: pointer;" onclick="document.getElementById('empIdInput').value='LN0770';">PRADEEPA T (LN0770)</button>
-                  <button type="button" class="btn-sm" style="background: #EFF6FF; border: 1px solid #BFDBFE; color: #1D4ED8; font-weight: 600; font-size: 0.78rem; padding: 4px 10px; border-radius: 4px; cursor: pointer;" onclick="document.getElementById('empIdInput').value='LN0771';">MAHADEVI (LN0771)</button>
-                </div>
-              </div>
-
-              <button type="submit" class="btn-primary" style="width: 100%; padding: 12px; font-weight: 700;">Sign In to Employee Portal</button>
+              <button type="submit" class="btn-primary" style="width: 100%; padding: 12px; font-weight: 700; margin-top: 8px;">Sign In to Employee Portal</button>
             </form>
             <div class="login-toggle-text">
               Switch role? <span class="login-toggle-link" onclick="switchRolePortal('section')">Section Portal</span> &bull; <span class="login-toggle-link" onclick="switchRolePortal('department')">Department</span> &bull; <span class="login-toggle-link" onclick="switchRolePortal('admin')">Admin</span> &bull; <span class="login-toggle-link" onclick="switchRolePortal('ojt')">OJT Login</span>
@@ -153,29 +144,20 @@
           <div class="login-header" style="background: linear-gradient(135deg, #0F172A 0%, #003D6B 100%);">
             <div style="font-size: 0.75rem; background: var(--accent-red); color: white; display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 700; margin-bottom: 8px;">ADMIN CONTROL CENTER</div>
             <h2>Admin Sign In</h2>
-            <p>Testing Mode &bull; Enter credentials to access Control Center</p>
+            <p>Enter authorized credentials to access Control Center</p>
           </div>
 
           <div class="login-body">
-            <!-- Testing Credentials Banner -->
-            <div class="rules-box" style="background: #EFF6FF; border-left-color: #0284C7; margin-bottom: 18px; padding: 12px 14px;">
-              <div style="font-size: 0.82rem; color: #1E40AF; line-height: 1.5;">
-                <strong>Testing Credentials:</strong><br>
-                Username: <code style="background: #DBEAFE; color: #1E40AF; padding: 2px 6px; border-radius: 4px; font-weight: 700;">admin</code> &bull; 
-                Password: <code style="background: #DBEAFE; color: #1E40AF; padding: 2px 6px; border-radius: 4px; font-weight: 700;">admin123</code>
-              </div>
-            </div>
-
             <!-- Admin Username & Password Form -->
             <form id="adminLoginForm" onsubmit="handleAdminLogin(event)">
               <div class="form-group">
                 <label for="adminUsernameInput">Admin Username</label>
-                <input type="text" id="adminUsernameInput" class="form-control" placeholder="Enter username (admin)" value="admin" required autofocus style="font-weight: 600;">
+                <input type="text" id="adminUsernameInput" class="form-control" placeholder="Enter admin username" required autofocus style="font-weight: 600;">
               </div>
 
               <div class="form-group">
                 <label for="adminPasswordInput">Password</label>
-                <input type="password" id="adminPasswordInput" class="form-control" placeholder="Enter password (admin123)" value="admin123" required style="font-weight: 600;">
+                <input type="password" id="adminPasswordInput" class="form-control" placeholder="Enter admin password" required style="font-weight: 600;">
               </div>
 
               <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #0F172A 0%, #003D6B 100%); font-weight: 700; width: 100%; padding: 12px; margin-top: 8px;">

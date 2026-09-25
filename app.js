@@ -97,6 +97,23 @@ function initStorage() {
   }, 3000);
 }
 
+function getAuthHeaders(extraHeaders = {}) {
+  const headers = { 'Content-Type': 'application/json', ...extraHeaders };
+  try {
+    const sessStr = localStorage.getItem(STORAGE_KEY_SESSION);
+    if (sessStr) {
+      const sess = JSON.parse(sessStr);
+      if (sess.token) {
+        headers['x-emp-token'] = sess.token;
+        headers['x-admin-token'] = sess.token;
+      }
+    }
+    const empTok = localStorage.getItem('yokohama_emp_token');
+    if (empTok) headers['x-emp-token'] = empTok;
+  } catch (e) {}
+  return headers;
+}
+
 function getStoredRecords() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_RECORDS);
@@ -122,7 +139,7 @@ function saveRecord(empNo, recordData) {
   try {
     fetchWithTimeout('/api/records', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ empNo, recordData })
     }, 5000).catch(err => console.log('Server sync pending:', err.message));
   } catch (e) {}
@@ -130,7 +147,7 @@ function saveRecord(empNo, recordData) {
 
 async function syncCloudRecords() {
   try {
-    const res = await fetchWithTimeout('/api/records', {}, 3500);
+    const res = await fetchWithTimeout('/api/records', { headers: getAuthHeaders() }, 3500);
     const data = await res.json();
     if (data.success && data.records !== undefined) {
       const serverRecords = data.records || {};
@@ -143,6 +160,7 @@ async function syncCloudRecords() {
       if (serverCount === 0 && localCount > 0 && !localStorage.getItem('iluo_preserve_local')) {
         merged = {};
       } else {
+        // Authoritative server records overwrite local stale records
         merged = { ...local, ...serverRecords };
       }
       localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(merged));
@@ -474,48 +492,8 @@ function terminateExamOnViolation(reason) {
 
   activeExam.isCompleted = true;
   closeSecurityWarningModal();
-
-  const questions = activeExam.questions;
-  const responses = activeExam.responses;
-  let correctCount = 0;
-
-  questions.forEach(q => {
-    if (responses[q.id] && responses[q.id] === q.correctAnswer) {
-      correctCount++;
-    }
-  });
-
-  const totalQs = questions.length;
-  const markPct = Math.round((correctCount / totalQs) * 100);
-
-  let uMark = 0, lMark = 0, oMark = 0;
-  if (activeExam.targetLevel === 'U') uMark = correctCount;
-  else if (activeExam.targetLevel === 'L') lMark = correctCount;
-  else if (activeExam.targetLevel === 'O') oMark = correctCount;
-
-  const recordData = {
-    empNo: currentUser.empNo,
-    name: currentUser.name,
-    dept: currentUser.dept,
-    section: currentUser.section,
-    doj: currentUser.doj,
-    targetLevel: activeExam.targetLevel,
-    inProgress: false,
-    isCompleted: true,
-    tabSwitchCount: activeExam.tabSwitchCount,
-    responses: responses,
-    attemptedCount: Object.keys(responses).length,
-    uMark: uMark,
-    lMark: lMark,
-    oMark: oMark,
-    totalMark: correctCount,
-    markPct: markPct,
-    status: `Terminated (${reason})`,
-    attemptDate: new Date().toLocaleDateString('en-GB')
-  };
-
-  saveRecord(currentUser.empNo, recordData);
-  showResultView(recordData);
+  showToast(`Exam auto-submitted due to: ${reason}`);
+  submitAssessment();
 }
 
 // ---------------------------------------------------------------------
@@ -623,26 +601,60 @@ function togglePortalMode() {
 }
 
 // Employee Login
-function handleEmpLogin(e) {
-  e.preventDefault();
-  const empIdVal = document.getElementById('empIdInput').value.trim();
-  
+async function handleEmpLogin(e) {
+  if (e) e.preventDefault();
+  const empIdInput = document.getElementById('empIdInput');
+  const passwordInput = document.getElementById('empPasswordInput');
+
+  const empIdVal = empIdInput ? empIdInput.value.trim() : '';
+  const passwordVal = passwordInput ? passwordInput.value.trim() : '';
+
   if (!empIdVal) {
- showToast('Please enter a valid Employee ID');
+    showToast('Please enter a valid Employee ID');
     return;
   }
 
-  const emp = EMPLOYEES.find(e => e.empNo === empIdVal || e.empNo === '0' + empIdVal);
-  if (!emp) {
- showToast('Employee ID not found in database!');
-    return;
+  try {
+    const res = await fetch('/api/auth/employee/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ empNo: empIdVal, password: passwordVal })
+    });
+    const data = await res.json();
+    if (data.success && data.employee) {
+      currentUser = data.employee;
+      localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify({
+        role: 'emp',
+        empNo: data.employee.empNo,
+        name: data.employee.name,
+        section: data.employee.section,
+        dept: data.employee.dept,
+        currentLevel: data.employee.currentLevel,
+        targetLevel: data.employee.targetLevel,
+        token: data.token
+      }));
+      if (data.token) {
+        localStorage.setItem('yokohama_emp_token', data.token);
+      }
+      updateUserBadge(data.employee.name);
+      showToast(`Welcome, ${data.employee.name}!`);
+      navigateTo('/employee/dashboard');
+      return;
+    } else {
+      showToast(data.message || 'Invalid Employee ID or password');
+      return;
+    }
+  } catch (err) {
+    const emp = (typeof EMPLOYEES !== 'undefined' ? EMPLOYEES : []).find(e => e.empNo === empIdVal || e.empNo === '0' + empIdVal);
+    if (emp) {
+      currentUser = emp;
+      localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify({ role: 'emp', empNo: emp.empNo }));
+      updateUserBadge(emp.name);
+      navigateTo('/employee/dashboard');
+      return;
+    }
+    showToast('Employee ID not found or server offline!');
   }
-
-  currentUser = emp;
-  localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify({ role: 'emp', empNo: emp.empNo }));
-  updateUserBadge(emp.name);
-
-  navigateTo('/employee/dashboard');
 }
 
 // ---------------------------------------------------------------------
@@ -691,7 +703,7 @@ function startOtpCountdownTimer() {
   }, 1000);
 }
 // ---------------------------------------------------------------------
-// ADMIN AUTHENTICATION (Testing Mode: username: admin / password: admin123)
+// ADMIN AUTHENTICATION
 // ---------------------------------------------------------------------
 async function handleAdminLogin(e) {
   if (e) e.preventDefault();
@@ -702,34 +714,11 @@ async function handleAdminLogin(e) {
   const password = passwordInput ? passwordInput.value.trim() : '';
 
   if (!username || !password) {
- showToast('Please enter both admin username and password.');
+    showToast('Please enter both admin username and password.');
     return;
   }
 
-  // Direct credential verification for testing mode (supports both offline & online)
-  if (username === 'admin' && password === 'admin123') {
-    const adminName = 'Administrator';
-    localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify({
-      role: 'admin',
-      username: 'admin',
-      email: 'admin@yokohama.com',
-      name: adminName
-    }));
-    updateUserBadge(adminName);
- showToast('Authenticated successfully as Administrator');
-    navigateTo('/secure-control/dashboard');
-    handleRoute();
-
-    // Also sync session with backend if reachable
-    fetch('/api/auth/admin/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    }).catch(() => {});
-    return;
-  }
-
-  // Backend verification check
+  // Authoritative server verification check
   try {
     const res = await fetch('/api/auth/admin/login', {
       method: 'POST',
@@ -746,13 +735,13 @@ async function handleAdminLogin(e) {
         name: adminName
       }));
       updateUserBadge(adminName);
- showToast(`Authenticated successfully as ${adminName}`);
+      showToast(`Authenticated successfully as ${adminName}`);
       navigateTo('/secure-control/dashboard');
     } else {
- showToast(data.message || 'Invalid username or password (Testing mode: admin / admin123)');
+      showToast(data.message || 'Invalid username or password');
     }
   } catch (err) {
- showToast('Invalid username or password (Testing mode: admin / admin123)');
+    showToast('Unable to connect to authentication server. Please check your network.');
   }
 }
 
@@ -851,11 +840,16 @@ function resetAdminOtpForm() {
 async function logout() {
   if (timerInterval) clearInterval(timerInterval);
   try {
-    await fetch('/api/auth/admin/logout', { method: 'POST' });
+    const headers = getAuthHeaders();
+    await Promise.allSettled([
+      fetch('/api/auth/admin/logout', { method: 'POST', headers }),
+      fetch('/api/auth/employee/logout', { method: 'POST', headers })
+    ]);
   } catch (e) {
     console.error(e);
   }
   localStorage.removeItem(STORAGE_KEY_SESSION);
+  localStorage.removeItem('yokohama_emp_token');
   currentUser = null;
   activeExam = null;
   navigateTo('/');
@@ -1225,32 +1219,77 @@ function getQuestionsForSection(targetLevel, section) {
 }
 
 // Start or Resume Exam
-function startOrResumeExam() {
+async function startOrResumeExam() {
   if (!currentUser) return;
 
   const targetLevel = currentUser.targetLevel || 'L';
-  const sectionQuestions = getQuestionsForSection(targetLevel, currentUser.section);
-
   const records = getStoredRecords();
   let empRecord = records[currentUser.empNo];
+
+  // Try starting / resuming via secure server exam session
+  try {
+    const res = await fetch('/api/exam/start', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ empNo: currentUser.empNo, targetLevel })
+    });
+    const data = await res.json();
+    if (res.status === 409 && data.record) {
+      showToast('Assessment already completed for this candidate.');
+      showResultView(data.record, false);
+      return;
+    }
+    if (data.success && data.activeExam) {
+      const serverExam = data.activeExam;
+      const remSecs = serverExam.expiresAt
+        ? Math.max(10, Math.floor((serverExam.expiresAt - Date.now()) / 1000))
+        : (45 * 60);
+
+      activeExam = {
+        empNo: currentUser.empNo,
+        targetLevel: targetLevel,
+        questions: serverExam.questions,
+        currentIndex: 0,
+        responses: {},
+        remainingSeconds: remSecs,
+        tabSwitchCount: 0,
+        isCompleted: false
+      };
+
+      navigateTo(`/employee/exam/${targetLevel}`);
+      updateTabWarningBadge();
+      renderCurrentQuestion();
+      startTimer();
+      return;
+    }
+  } catch (err) {
+    console.warn('Server exam start unreachable, using local fallback:', err.message);
+  }
+
+  // Fallback offline / local handling with sanitized questions
+  const sectionQuestions = getQuestionsForSection(targetLevel, currentUser.section);
+  const sanitizedLocalQs = sectionQuestions.map(q => {
+    const { correctAnswer, ...rest } = q;
+    return rest;
+  });
 
   if (empRecord && empRecord.inProgress && !empRecord.isCompleted) {
     activeExam = {
       empNo: currentUser.empNo,
       targetLevel: targetLevel,
-      questions: empRecord.questions || sectionQuestions,
+      questions: empRecord.questions || sanitizedLocalQs,
       currentIndex: empRecord.currentIndex || 0,
       responses: empRecord.responses || {},
       remainingSeconds: empRecord.remainingSeconds || (45 * 60),
       tabSwitchCount: empRecord.tabSwitchCount || 0,
       isCompleted: false
     };
- showToast('Resuming active assessment...');
+    showToast('Resuming active assessment...');
   } else {
     activeExam = {
       empNo: currentUser.empNo,
       targetLevel: targetLevel,
-      questions: sectionQuestions,
+      questions: sanitizedLocalQs,
       currentIndex: 0,
       responses: {},
       remainingSeconds: 45 * 60,
@@ -1398,79 +1437,40 @@ function nextQuestion() {
   }
 }
 
-// Submit & Scoring Engine
-function submitAssessment() {
+// Submit & Scoring Engine (Authoritative Server-Side Scoring)
+async function submitAssessment() {
   if (timerInterval) clearInterval(timerInterval);
   if (!activeExam) return;
 
   activeExam.isCompleted = true;
+  showToast('Submitting assessment for official server evaluation...');
 
-  const questions = activeExam.questions;
-  const responses = activeExam.responses;
-  let correctCount = 0;
-
-  questions.forEach(q => {
-    if (responses[q.id] && responses[q.id] === q.correctAnswer) {
-      correctCount++;
+  try {
+    const res = await fetch('/api/exam/submit', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        empNo: currentUser.empNo,
+        targetLevel: activeExam.targetLevel,
+        responses: activeExam.responses
+      })
+    });
+    const data = await res.json();
+    if (data.success && data.record) {
+      const recordData = data.record;
+      window.lastCompletedEmpNo = currentUser.empNo;
+      const records = getStoredRecords();
+      records[currentUser.empNo] = recordData;
+      localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(records));
+      showResultView(recordData, true);
+      return;
+    } else {
+      showToast(data.message || 'Error submitting assessment to server');
     }
-  });
-
-  const totalQs = questions.length;
-  const markPct = Math.round((correctCount / totalQs) * 100);
-
-  const currentLevel = currentUser ? currentUser.currentLevel : 'I';
-  const rules = LEVEL_RULES[currentLevel] || LEVEL_RULES['I'];
-  const pass = markPct >= rules.passingPct;
-
-  let uMark = 0, lMark = 0, oMark = 0;
-  if (activeExam.targetLevel === 'U') uMark = correctCount;
-  else if (activeExam.targetLevel === 'L') lMark = correctCount;
-  else if (activeExam.targetLevel === 'O') oMark = correctCount;
-
-  const submittedQuestions = questions.map((q, idx) => {
-    const selKey = responses[q.id] || 'Not Answered';
-    const selOpt = q.options ? q.options.find(o => o.key === selKey) : null;
-    const corrOpt = q.options ? q.options.find(o => o.key === q.correctAnswer) : null;
-    return {
-      index: idx + 1,
-      id: q.id,
-      category: q.category || 'General QA',
-      question: q.question,
-      selectedKey: selKey,
-      selectedText: selOpt ? selOpt.text : 'Not Answered',
-      correctKey: q.correctAnswer,
-      correctText: corrOpt ? corrOpt.text : '',
-      isCorrect: selKey === q.correctAnswer,
-      options: q.options || []
-    };
-  });
-
-  const recordData = {
-    empNo: currentUser.empNo,
-    name: currentUser.name,
-    dept: currentUser.dept,
-    section: currentUser.section,
-    doj: currentUser.doj,
-    targetLevel: activeExam.targetLevel,
-    inProgress: false,
-    isCompleted: true,
-    tabSwitchCount: activeExam.tabSwitchCount || 0,
-    responses: responses,
-    submittedQuestions: submittedQuestions,
-    attemptedCount: Object.keys(responses).length,
-    uMark: uMark,
-    lMark: lMark,
-    oMark: oMark,
-    totalMark: correctCount,
-    markPct: markPct,
-    status: pass ? 'Passed' : 'Failed',
-    attemptDate: new Date().toLocaleDateString('en-GB')
-  };
-
-  recordData.empNo = currentUser.empNo;
-  window.lastCompletedEmpNo = currentUser.empNo;
-  saveRecord(currentUser.empNo, recordData);
-  showResultView(recordData, true);
+  } catch (err) {
+    console.error('Server submission failed:', err);
+    showToast('Failed to submit to server. Checking network connection...');
+  }
 }
 
 function showResultView(record, isImmediateCompletion = false) {
@@ -5507,8 +5507,8 @@ function handleOjtSectionLogin(e) {
   };
 
   const allowed = validPasswords[section] || ['ojt123'];
-  if (pwd && !allowed.includes(pwd) && pwd !== 'admin' && pwd !== 'admin123') {
-    showToast(`Invalid password for ${section} Evaluator. (Hint: ${allowed[0]})`);
+  if (pwd && !allowed.includes(pwd)) {
+    showToast(`Invalid password for ${section} Evaluator.`);
     return;
   }
 

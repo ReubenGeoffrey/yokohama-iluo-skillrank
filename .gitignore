@@ -45,3 +45,9 @@ archive_pregen_pdfs/
 public/pdf_reports/
 temp_test_*.pdf
 pending_test_out.pdf
+
+# Sensitive Customer/Production JSON Data
+assessment_records*.json
+custom_employees*.json
+ojt_evaluations*.json
+custom_settings*.json
