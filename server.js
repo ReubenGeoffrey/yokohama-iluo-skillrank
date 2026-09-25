@@ -535,6 +535,80 @@ app.delete('/api/records', async (req, res) => {
   res.json({ success: true, message: 'All exam records reset to zero' });
 });
 
+// API ROUTE: POST /api/records/reset-section (Reset exams for a specific section)
+app.post('/api/records/reset-section', async (req, res) => {
+  const { section, sectionId } = req.body || {};
+  if (!section && !sectionId) {
+    return res.status(400).json({ success: false, message: 'section or sectionId is required' });
+  }
+
+  let emps = customEmployeesMemory || [];
+  if ((!emps || emps.length === 0) && fs.existsSync(EMPLOYEES_JSON_FILE)) {
+    try { emps = JSON.parse(fs.readFileSync(EMPLOYEES_JSON_FILE, 'utf-8')); } catch (e) {}
+  }
+
+  const secQuery = String(section || sectionId).toLowerCase().replace(/qa/g, '').replace(/[^a-z0-9]/g, '');
+
+  let resetCount = 0;
+  emps.forEach(emp => {
+    const empSec = String(emp.section || '').toLowerCase().replace(/qa/g, '').replace(/[^a-z0-9]/g, '');
+    if (empSec.includes(secQuery) || secQuery.includes(empSec)) {
+      if (globalAssessmentRecords.has(String(emp.empNo))) {
+        globalAssessmentRecords.delete(String(emp.empNo));
+        resetCount++;
+      }
+    }
+  });
+
+  const recordsObj = Object.fromEntries(globalAssessmentRecords);
+  try {
+    fs.writeFileSync(RECORDS_JSON_FILE, JSON.stringify(recordsObj, null, 2), 'utf-8');
+  } catch (err) {}
+  if (kvUrl && kvToken) {
+    await syncWithCloudKv('SET', 'yokohama_records', recordsObj);
+  }
+
+  console.log(`🔄 Section reset: ${resetCount} exam records cleared for section ${section || sectionId}`);
+  res.json({ success: true, message: `Successfully reset exams for section ${section || sectionId}`, count: resetCount, records: recordsObj });
+});
+
+// API ROUTE: POST /api/records/reset-department (Reset exams for a specific department)
+app.post('/api/records/reset-department', async (req, res) => {
+  const { department } = req.body || {};
+  if (!department) {
+    return res.status(400).json({ success: false, message: 'department is required' });
+  }
+
+  let emps = customEmployeesMemory || [];
+  if ((!emps || emps.length === 0) && fs.existsSync(EMPLOYEES_JSON_FILE)) {
+    try { emps = JSON.parse(fs.readFileSync(EMPLOYEES_JSON_FILE, 'utf-8')); } catch (e) {}
+  }
+
+  const deptQuery = String(department).toLowerCase().trim();
+
+  let resetCount = 0;
+  emps.forEach(emp => {
+    const empDept = String(emp.dept || 'QUALITY CONTROL').toLowerCase().trim();
+    if (deptQuery === 'all' || empDept === deptQuery || empDept.includes(deptQuery) || deptQuery.includes(empDept)) {
+      if (globalAssessmentRecords.has(String(emp.empNo))) {
+        globalAssessmentRecords.delete(String(emp.empNo));
+        resetCount++;
+      }
+    }
+  });
+
+  const recordsObj = Object.fromEntries(globalAssessmentRecords);
+  try {
+    fs.writeFileSync(RECORDS_JSON_FILE, JSON.stringify(recordsObj, null, 2), 'utf-8');
+  } catch (err) {}
+  if (kvUrl && kvToken) {
+    await syncWithCloudKv('SET', 'yokohama_records', recordsObj);
+  }
+
+  console.log(`🔄 Department reset: ${resetCount} exam records cleared for department ${department}`);
+  res.json({ success: true, message: `Successfully reset exams for department ${department}`, count: resetCount, records: recordsObj });
+});
+
 // API ROUTE: POST /api/records/restore-demo (Restore demo 236 completed records from backup)
 app.post('/api/records/restore-demo', async (req, res) => {
   const BACKUP_FILE = path.join(__dirname, 'assessment_records_backup_236.json');

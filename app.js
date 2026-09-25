@@ -1569,6 +1569,10 @@ function showControlCenterSubView(subName) {
   if (subName === 'dashboard') renderAdminDashboard();
   else if (subName === 'questions') renderQuestionsManager();
   else if (subName === 'sections') renderSectionsExplorer();
+  else if (subName === 'exams') {
+    if (typeof updateAdminResetSecInfo === 'function') updateAdminResetSecInfo();
+    if (typeof updateAdminResetDeptInfo === 'function') updateAdminResetDeptInfo();
+  }
   else if (subName === 'employees') renderEmployeeDirectory();
   else if (subName === 'results') renderAdminTable('');
   else if (subName === 'reports') renderReportsCenter();
@@ -1672,12 +1676,15 @@ function renderDashboardSectionMatrix(records, allOjt) {
         </div>
       </td>
       <td style="text-align: center;">
-        <div style="display: flex; gap: 6px; justify-content: center;">
+        <div style="display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;">
           <button type="button" class="btn-primary" style="padding: 4px 10px; font-size: 0.76rem; background: #005B9E; border-color: #005B9E;" onclick="showSectionCompletedModal('${sec.id}')">
             View List
           </button>
           <button type="button" class="btn-secondary" style="padding: 4px 8px; font-size: 0.76rem;" onclick="navigateTo('/control-center/sections'); renderSectionsExplorer('${sec.id}');">
             Explorer
+          </button>
+          <button type="button" class="btn-reset" style="padding: 4px 8px; font-size: 0.74rem;" onclick="resetSectionExams('${sec.id}', '${sec.title.replace(/'/g, "\\'")}')" title="Reset all candidate exams for ${sec.title}">
+            Reset
           </button>
         </div>
       </td>
@@ -4514,6 +4521,178 @@ function applyAll234CompletedRecords() {
   restoreAllCompletedExams();
 }
 window.applyAll234CompletedRecords = applyAll234CompletedRecords;
+
+// ---------------------------------------------------------------------
+// DEDICATED ADMIN SECTION & DEPARTMENT EXAM RESET MANAGEMENT
+// ---------------------------------------------------------------------
+async function resetSectionExams(secIdOrName, customTitle) {
+  const sec = QA_SECTIONS_LIST.find(s => s.id === secIdOrName || s.normName === String(secIdOrName).toLowerCase() || s.title.toLowerCase() === String(secIdOrName).toLowerCase());
+  const title = customTitle || (sec ? sec.title : secIdOrName);
+  const secId = sec ? sec.id : secIdOrName;
+  const normName = sec ? sec.normName : String(secIdOrName).toLowerCase().replace(/qa/g, '').trim();
+
+  // Find employees in this section
+  const sectionEmps = EMPLOYEES.filter(e => {
+    const s = normalizeSectionName(e.section || '');
+    return s.includes(normName) || normName.includes(s);
+  });
+
+  const count = sectionEmps.length;
+  if (!confirm(`Are you sure you want to RESET all exams for Section: "${title}"?\n\nThis will reset ${count} employee records in this section back to "Not Started" so they can take their assessments freshly.`)) {
+    return;
+  }
+
+  // 1. Delete from local records
+  const records = getStoredRecords();
+  let clearedCount = 0;
+  sectionEmps.forEach(e => {
+    if (records[e.empNo]) {
+      delete records[e.empNo];
+      clearedCount++;
+    }
+  });
+  localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(records));
+
+  // 2. Call server section reset API
+  try {
+    const res = await fetch('/api/records/reset-section', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ section: title, sectionId: secId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`Section "${title}" exams reset successfully! (${count} employees reset to Not Started)`);
+    } else {
+      showToast(`Section reset completed locally (${count} employees).`);
+    }
+  } catch (err) {
+    showToast(`Section "${title}" reset completed.`);
+  }
+
+  // 3. Re-render views
+  if (document.getElementById('adminTableBody')) {
+    const searchInput = document.getElementById('adminSearchInput');
+    renderAdminTable(searchInput ? searchInput.value : '');
+  }
+  if (document.getElementById('secEmpTableBody')) filterSectionTable();
+  if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
+  if (typeof updateAdminResetSecInfo === 'function') updateAdminResetSecInfo();
+  if (typeof renderSectionsExplorer === 'function' && typeof currentActiveSectionKey !== 'undefined') {
+    renderSectionsExplorer(currentActiveSectionKey);
+  }
+}
+window.resetSectionExams = resetSectionExams;
+
+async function resetDepartmentExams(deptName) {
+  const normDept = String(deptName || 'QUALITY CONTROL').toUpperCase().trim();
+  const deptEmps = EMPLOYEES.filter(e => {
+    const d = String(e.dept || 'QUALITY CONTROL').toUpperCase().trim();
+    return normDept === 'ALL' || d === normDept || d.includes(normDept) || normDept.includes(d);
+  });
+
+  const count = deptEmps.length;
+  if (!confirm(`Are you sure you want to RESET all exams for Department: "${normDept}"?\n\nThis will reset ${count} employee records in this department back to "Not Started" so they can take their assessments freshly.`)) {
+    return;
+  }
+
+  // 1. Delete from local records
+  const records = getStoredRecords();
+  deptEmps.forEach(e => {
+    if (records[e.empNo]) delete records[e.empNo];
+  });
+  localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(records));
+
+  // 2. Call server department reset API
+  try {
+    const res = await fetch('/api/records/reset-department', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ department: normDept })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`Department "${normDept}" exams reset successfully! (${count} employees reset to Not Started)`);
+    } else {
+      showToast(`Department reset completed locally (${count} employees).`);
+    }
+  } catch (err) {
+    showToast(`Department "${normDept}" reset completed.`);
+  }
+
+  // 3. Re-render views
+  if (document.getElementById('adminTableBody')) {
+    const searchInput = document.getElementById('adminSearchInput');
+    renderAdminTable(searchInput ? searchInput.value : '');
+  }
+  if (document.getElementById('secEmpTableBody')) filterSectionTable();
+  if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
+  if (typeof updateAdminResetDeptInfo === 'function') updateAdminResetDeptInfo();
+}
+window.resetDepartmentExams = resetDepartmentExams;
+
+function updateAdminResetSecInfo() {
+  const select = document.getElementById('adminResetSecSelect');
+  const infoEl = document.getElementById('adminResetSecInfo');
+  if (!select || !infoEl) return;
+
+  const secId = select.value;
+  const sec = QA_SECTIONS_LIST.find(s => s.id === secId) || QA_SECTIONS_LIST[0];
+  const sectionEmps = EMPLOYEES.filter(e => normalizeSectionName(e.section || '') === sec.normName);
+  const records = getStoredRecords();
+
+  let completed = 0;
+  sectionEmps.forEach(e => {
+    if (records[e.empNo] && records[e.empNo].isCompleted) completed++;
+  });
+
+  infoEl.innerHTML = `<strong>Section:</strong> ${sec.title} &bull; <strong>Total Staff:</strong> ${sectionEmps.length} &bull; <strong>Completed:</strong> <span style="color: ${completed > 0 ? '#059669' : '#64748B'}; font-weight: 700;">${completed}</span> &bull; <strong>Not Started:</strong> ${sectionEmps.length - completed}`;
+}
+window.updateAdminResetSecInfo = updateAdminResetSecInfo;
+
+function updateAdminResetDeptInfo() {
+  const select = document.getElementById('adminResetDeptSelect');
+  const infoEl = document.getElementById('adminResetDeptInfo');
+  if (!select || !infoEl) return;
+
+  const dept = select.value;
+  const deptEmps = EMPLOYEES.filter(e => {
+    const d = String(e.dept || 'QUALITY CONTROL').toUpperCase().trim();
+    return d === dept.toUpperCase() || d.includes(dept.toUpperCase());
+  });
+  const records = getStoredRecords();
+
+  let completed = 0;
+  deptEmps.forEach(e => {
+    if (records[e.empNo] && records[e.empNo].isCompleted) completed++;
+  });
+
+  infoEl.innerHTML = `<strong>Department:</strong> ${dept} &bull; <strong>Total Staff:</strong> ${deptEmps.length} &bull; <strong>Completed:</strong> <span style="color: ${completed > 0 ? '#059669' : '#64748B'}; font-weight: 700;">${completed}</span> &bull; <strong>Not Started:</strong> ${deptEmps.length - completed}`;
+}
+window.updateAdminResetDeptInfo = updateAdminResetDeptInfo;
+
+function triggerAdminSecReset() {
+  const select = document.getElementById('adminResetSecSelect');
+  if (!select) return;
+  const secId = select.value;
+  const sec = QA_SECTIONS_LIST.find(s => s.id === secId);
+  resetSectionExams(secId, sec ? sec.title : secId);
+}
+window.triggerAdminSecReset = triggerAdminSecReset;
+
+function triggerAdminDeptReset() {
+  const select = document.getElementById('adminResetDeptSelect');
+  if (!select) return;
+  resetDepartmentExams(select.value);
+}
+window.triggerAdminDeptReset = triggerAdminDeptReset;
+
+function resetCurrentActiveSectionExams() {
+  const secKey = typeof currentActiveSectionKey !== 'undefined' ? currentActiveSectionKey : 'warehouse';
+  const sec = QA_SECTIONS_LIST.find(s => s.id === secKey);
+  resetSectionExams(secKey, sec ? sec.title : currentActiveSection);
+}
+window.resetCurrentActiveSectionExams = resetCurrentActiveSectionExams;
 
 function saveOjtRecord(empNo, data) {
   const all = getStoredOjtRecords();

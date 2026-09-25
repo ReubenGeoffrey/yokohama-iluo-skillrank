@@ -48,9 +48,6 @@
     <button class="role-tab-btn" id="tabRoleEmp" onclick="switchRolePortal('employee')">
       <span class="tab-icon">👤</span> <span>Employee</span>
     </button>
-    <button class="role-tab-btn" id="tabRoleZeroExam" onclick="makeZeroFinishExam()" style="background: #FEF2F2; border-color: #DC2626; color: #991B1B; font-weight: 700;" title="Click to reset all exams to 0 Finished (Fresh Assessment Mode)">
-      <span class="tab-icon">🔄</span> <span>Zero Finish Exam</span>
-    </button>
   </nav>
 
   <!-- App Container -->
@@ -1202,6 +1199,93 @@
                 </table>
               </div>
             </div>
+
+            <!-- DEDICATED ADMIN EXAM RESET MANAGEMENT CENTER (Section & Department) -->
+            <div class="table-card" style="margin-top: 24px; border: 1px solid #FECDD3; background: #FFFDFD; padding: 22px; border-radius: 8px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; border-bottom: 1px solid #FFE4E6; padding-bottom: 14px;">
+                <div>
+                  <h3 style="color: #991B1B; margin: 0; font-size: 1.15rem; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 1.25rem;">🔄</span> Dedicated Exam Reset Management Center
+                  </h3>
+                  <div style="font-size: 0.84rem; color: #64748B; margin-top: 4px;">
+                    Reset assessment records by specific Section, Department, or Global for fresh candidate assessments
+                  </div>
+                </div>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                  <button type="button" class="btn-primary" onclick="makeZeroFinishExam()" style="background: #DC2626; border-color: #DC2626; font-size: 0.82rem; font-weight: 700; padding: 7px 14px; border-radius: 6px;" title="Reset all 236 employee exams to 0 completed / Not Started">
+                    ⚠️ Reset All Exams (0 Finished)
+                  </button>
+                  <button type="button" class="btn-secondary" onclick="restoreAllCompletedExams()" style="font-size: 0.82rem; padding: 7px 12px; border-radius: 6px;" title="Restore all 236 completed demo records">
+                    📦 Restore Demo Completed
+                  </button>
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+                
+                <!-- CARD 1: Reset By Section -->
+                <div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                  <div style="font-weight: 700; color: #0F172A; font-size: 0.95rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                    <span>🏢</span> Reset Exams By Section
+                  </div>
+                  <div style="font-size: 0.8rem; color: #64748B; margin-bottom: 14px;">
+                    Select any QA section to reset only its candidates back to "Not Started".
+                  </div>
+
+                  <div class="form-group" style="margin-bottom: 12px;">
+                    <label style="font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px; display: block;">Select QA Section:</label>
+                    <select id="adminResetSecSelect" class="form-control" style="font-size: 0.88rem;" onchange="updateAdminResetSecInfo()">
+                      <option value="warehouse">Ware House QA (WH)</option>
+                      <option value="final_finish">Final Finish QA (FF)</option>
+                      <option value="tire_building">Tire building QA (TB)</option>
+                      <option value="tire_curing">Tire curing QA (TC)</option>
+                      <option value="solid_tire">Solid Tire QA (ST)</option>
+                      <option value="rro_alt">Final Finish RRO &amp; ALT QA (RA)</option>
+                      <option value="preparatory">Preparatory QA (PR)</option>
+                      <option value="fid_inspector">FID Inspector QA (FD)</option>
+                    </select>
+                  </div>
+
+                  <div id="adminResetSecInfo" style="font-size: 0.82rem; color: #475569; margin-bottom: 14px; background: #F8FAFC; padding: 10px 12px; border-radius: 6px; border: 1px solid #E2E8F0;">
+                    Loading section stats...
+                  </div>
+
+                  <button type="button" class="btn-primary" onclick="triggerAdminSecReset()" style="width: 100%; background: #E11D48; border-color: #E11D48; font-weight: 700; font-size: 0.86rem; padding: 9px; border-radius: 6px;">
+                    🔄 Reset Selected Section Exams
+                  </button>
+                </div>
+
+                <!-- CARD 2: Reset By Department -->
+                <div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                  <div style="font-weight: 700; color: #0F172A; font-size: 0.95rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                    <span>🏛️</span> Reset Exams By Department
+                  </div>
+                  <div style="font-size: 0.8rem; color: #64748B; margin-bottom: 14px;">
+                    Select any plant department to reset only its candidates back to "Not Started".
+                  </div>
+
+                  <div class="form-group" style="margin-bottom: 12px;">
+                    <label style="font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px; display: block;">Select Department:</label>
+                    <select id="adminResetDeptSelect" class="form-control" style="font-size: 0.88rem;" onchange="updateAdminResetDeptInfo()">
+                      <option value="QUALITY CONTROL">QUALITY CONTROL (QA)</option>
+                      <option value="SAFETY">SAFETY</option>
+                      <option value="CI & TPM">CI &amp; TPM</option>
+                      <option value="TECHNICAL">TECHNICAL</option>
+                      <option value="HR">HR</option>
+                    </select>
+                  </div>
+
+                  <div id="adminResetDeptInfo" style="font-size: 0.82rem; color: #475569; margin-bottom: 14px; background: #F8FAFC; padding: 10px 12px; border-radius: 6px; border: 1px solid #E2E8F0;">
+                    Loading department stats...
+                  </div>
+
+                  <button type="button" class="btn-primary" onclick="triggerAdminDeptReset()" style="width: 100%; background: #9333EA; border-color: #9333EA; font-weight: 700; font-size: 0.86rem; padding: 9px; border-radius: 6px;">
+                    🔄 Reset Selected Department Exams
+                  </button>
+                </div>
+
+              </div>
+            </div>
           </div>
 
           <!-- SUB-VIEW D: Employees Directory (/control-center/employees) -->
@@ -1258,6 +1342,9 @@
               <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <button class="btn-primary" style="padding: 8px 16px; font-size: 0.88rem; background: #059669; border-color: #059669; display: flex; align-items: center; gap: 8px;" onclick="exportCurrentSectionExcel()">
                   <span>Export Section Excel (.xlsx)</span>
+                </button>
+                <button class="btn-secondary" style="padding: 8px 16px; font-size: 0.88rem; color: #DC2626; border-color: #FECDD3; display: flex; align-items: center; gap: 8px;" onclick="resetCurrentActiveSectionExams()" title="Reset all candidate exams for this section">
+                  <span>🔄 Reset Section Exams</span>
                 </button>
               </div>
             </div>
@@ -2284,9 +2371,9 @@
   <script defer src="docx-preview.min.js?v=44.0"></script>
 
   <!-- OJT Official Templates & Data Script & Application Router -->
-  <script src="ojt_templates_data.js?v=45.0"></script>
-  <script src="data.js?v=45.0"></script>
-  <script src="seed_data.js?v=45.0"></script>
-  <script src="app.js?v=45.0"></script>
+  <script src="ojt_templates_data.js?v=46.0"></script>
+  <script src="data.js?v=46.0"></script>
+  <script src="seed_data.js?v=46.0"></script>
+  <script src="app.js?v=46.0"></script>
 </body>
 </html>
