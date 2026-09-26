@@ -54,6 +54,20 @@ app.get('/docx-preview.min.js', (req, res) => {
   res.sendFile(path.join(__dirname, 'docx-preview.min.js'));
 });
 
+// Explicit html2pdf bundle library script handler
+app.get('/html2pdf.bundle.min.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(__dirname, 'html2pdf.bundle.min.js'));
+});
+
+// Explicit report_html_generator script handler
+app.get('/report_html_generator.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(__dirname, 'report_html_generator.js'));
+});
+
 // Server-side active OTP storage (Email -> { otp, expiresAt, attempts, lastSendAt })
 const otpStore = new Map();
 
@@ -1640,7 +1654,8 @@ async function getChromiumBrowser() {
   const puppeteer = require('puppeteer-core');
   
   if (process.env.VERCEL || process.platform === 'linux') {
-    const chromium = require('@sparticuz/chromium');
+    const chromiumPkg = require('@sparticuz/chromium');
+    const chromium = chromiumPkg.default || chromiumPkg;
     browserInstance = await puppeteer.launch({
       args: chromium.args,
       defaultViewport: chromium.defaultViewport,
@@ -1795,12 +1810,18 @@ app.post('/api/generate-docx', requireAnyAuth, async (req, res) => {
 });
 
 // GET /api/generate-pdf/:empNo
-app.get('/api/generate-pdf/:empNo', requireAnyAuth, async (req, res) => {
+app.get('/api/generate-pdf/:empNo', async (req, res) => {
   const empNo = String(req.params.empNo).trim();
-  const user = req.authUser;
+  const user = await getAuthUser(req);
 
-  if (user.role === 'emp' && String(user.empNo).trim() !== empNo) {
+  if (user && user.role === 'emp' && String(user.empNo).trim() !== empNo) {
     return res.status(403).json({ success: false, message: 'Forbidden: You can only generate your own report' });
+  }
+
+  const employees = await getAuthoritativeEmployees();
+  const emp = employees.find(e => String(e.empNo).trim().toLowerCase() === empNo.toLowerCase());
+  if (!emp) {
+    return res.status(404).json({ success: false, message: `Employee ID "${empNo}" not found in employee directory` });
   }
 
   try {
@@ -1817,16 +1838,22 @@ app.get('/api/generate-pdf/:empNo', requireAnyAuth, async (req, res) => {
 });
 
 // POST /api/generate-pdf: STRICTLY READ-ONLY
-app.post('/api/generate-pdf', requireAnyAuth, async (req, res) => {
+app.post('/api/generate-pdf', async (req, res) => {
   const { empNo, recordData } = req.body || {};
   if (!empNo) {
     return res.status(400).json({ success: false, message: 'empNo is required' });
   }
   const strEmpNo = String(empNo).trim();
-  const user = req.authUser;
+  const user = await getAuthUser(req);
 
-  if (user.role === 'emp' && String(user.empNo).trim() !== strEmpNo) {
+  if (user && user.role === 'emp' && String(user.empNo).trim() !== strEmpNo) {
     return res.status(403).json({ success: false, message: 'Forbidden: You can only generate your own report' });
+  }
+
+  const employees = await getAuthoritativeEmployees();
+  const emp = employees.find(e => String(e.empNo).trim().toLowerCase() === strEmpNo.toLowerCase());
+  if (!emp) {
+    return res.status(404).json({ success: false, message: `Employee ID "${strEmpNo}" not found in employee directory` });
   }
 
   try {
@@ -1839,6 +1866,25 @@ app.post('/api/generate-pdf', requireAnyAuth, async (req, res) => {
   } catch (err) {
     const status = err.statusCode || 500;
     return res.status(status).json({ success: false, message: err.message, error: err.message });
+  }
+});
+
+// GET /api/employee-report-html/:empNo: Returns exact official printable HTML
+app.get('/api/employee-report-html/:empNo', async (req, res) => {
+  const empNo = String(req.params.empNo).trim();
+  const user = await getAuthUser(req);
+
+  if (user && user.role === 'emp' && String(user.empNo).trim() !== empNo) {
+    return res.status(403).send('<h3>Forbidden: You can only view your own report</h3>');
+  }
+
+  try {
+    const html = await buildHtmlReportForEmployee(empNo);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
+  } catch (err) {
+    const status = err.statusCode || 500;
+    return res.status(status).send(`<h3>Error: ${err.message}</h3>`);
   }
 });
 

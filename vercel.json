@@ -18,6 +18,7 @@
             "custom_employees.json",
             "docx_generator.js",
             "report_html_generator.js",
+            "html2pdf.bundle.min.js",
             "jszip.min.js",
             "yokohama_logo.png",
             "mammoth.browser.min.js",

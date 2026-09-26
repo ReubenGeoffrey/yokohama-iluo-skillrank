@@ -2428,28 +2428,144 @@ function renderAdminTable(query) {
   });
 }
 
-// Download Official PDF Evaluation Report for Employee Assessment (Word Vector PDF)
+// Helper: Cache and retrieve Yokohama logo as base64 in browser
+let _browserLogoBase64Cache = null;
+async function getBrowserLogoBase64() {
+  if (_browserLogoBase64Cache !== null) return _browserLogoBase64Cache;
+  try {
+    const resp = await fetch('yokohama_logo.png');
+    if (resp.ok) {
+      const blob = await resp.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          _browserLogoBase64Cache = reader.result || '';
+          resolve(_browserLogoBase64Cache);
+        };
+        reader.onerror = () => {
+          _browserLogoBase64Cache = '';
+          resolve('');
+        };
+        reader.readAsDataURL(blob);
+      });
+    }
+  } catch (e) {
+    console.warn('Could not load yokohama_logo.png for PDF:', e);
+  }
+  _browserLogoBase64Cache = '';
+  return '';
+}
+
+// Generate and immediately download a 100% real, dynamic .pdf file directly in the browser
+async function generateAndDownloadClientSidePdf(empNo, recordData = null) {
+  if (!empNo) throw new Error('Employee ID is required');
+
+  // Ensure html2pdf is available
+  if (typeof window.html2pdf === 'undefined') {
+    await new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'html2pdf.bundle.min.js';
+      script.onload = resolve;
+      script.onerror = () => reject(new Error('Failed to load html2pdf library'));
+      document.head.appendChild(script);
+    });
+  }
+
+  // Ensure report_html_generator is available
+  if (typeof window.generateOfficialReportHtml !== 'function') {
+    await new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'report_html_generator.js?v=46.0';
+      script.onload = resolve;
+      script.onerror = () => reject(new Error('Failed to load report_html_generator library'));
+      document.head.appendChild(script);
+    });
+  }
+
+  // 1. Resolve employee metadata
+  const allEmps = (typeof EMPLOYEES !== 'undefined') ? EMPLOYEES : [];
+  let emp = allEmps.find(e => String(e.empNo).trim().toLowerCase() === String(empNo).trim().toLowerCase());
+  if (!emp) {
+    emp = {
+      empNo: String(empNo).trim(),
+      name: `Employee ${empNo}`,
+      dept: 'QUALITY CONTROL',
+      section: 'Tire building QA',
+      doj: '-',
+      targetLevel: 'O'
+    };
+  }
+
+  // 2. Resolve exam records
+  const records = (typeof getStoredRecords === 'function') ? getStoredRecords() : {};
+  const examRecord = recordData || records[emp.empNo] || records[empNo] || null;
+
+  // 3. Resolve questions
+  const targetLevel = (examRecord && examRecord.targetLevel) || emp.targetLevel || emp.currentLevel || 'O';
+  const qBank = (typeof QUESTION_BANK !== 'undefined') ? QUESTION_BANK : {};
+  const qbQuestions = qBank[targetLevel] || [];
+
+  // 4. Resolve OJT records and section template
+  const allOjt = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
+  const ojtRec = allOjt[emp.empNo] || allOjt[empNo] || {};
+  const ojtTmpl = (typeof getOjtTemplateForSection === 'function') ? getOjtTemplateForSection(emp.section) : null;
+
+  // 5. Fetch logo
+  const logoBase64 = await getBrowserLogoBase64();
+
+  // 6. Build the pixel-perfect official HTML
+  const reportHtml = window.generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmpl, logoBase64);
+
+  const safeEmpName = (emp.name || empNo).replace(/[\s\\/]+/g, '_');
+  const filename = `Yokohama_ILUO_Report_${empNo}_${safeEmpName}.pdf`;
+
+  const opt = {
+    margin: [6, 8, 6, 8],
+    filename: filename,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 1.5, useCORS: true, logging: false },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['css', 'legacy'] }
+  };
+
+  await window.html2pdf().set(opt).from(reportHtml).save();
+}
+window.generateAndDownloadClientSidePdf = generateAndDownloadClientSidePdf;
+
+// Download Official PDF Evaluation Report for Employee Assessment
 async function downloadEmployeePDF(empNo) {
   if (!empNo) return alert('Employee ID is required.');
   showToast(`Generating official PDF report for Employee ${empNo}...`);
 
+  // Priority 1: Instant high-fidelity client-side PDF generation via html2pdf
+  try {
+    await generateAndDownloadClientSidePdf(empNo);
+    showToast(`Official PDF report for Employee ${empNo} downloaded successfully!`);
+    return;
+  } catch (clientErr) {
+    console.warn('Client-side PDF generation error, trying server dynamic PDF renderer:', clientErr);
+  }
+
+  // Priority 2: Server-side dynamic PDF endpoint
   try {
     const records = getStoredRecords();
     const recordData = records[empNo] || null;
 
-    let res = null;
-    try {
-      res = await fetch('/api/generate-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empNo: String(empNo), recordData })
-      });
+    let res = await fetch('/api/generate-pdf', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(typeof getAuthHeaders === 'function' ? getAuthHeaders() : {})
+      },
+      credentials: 'include',
+      body: JSON.stringify({ empNo: String(empNo), recordData })
+    });
 
-      if (!res.ok) {
-        res = await fetch(`/api/generate-pdf/${encodeURIComponent(empNo)}`);
-      }
-    } catch (netErr) {
-      console.warn('Server dynamic PDF generation error:', netErr.message);
+    if (!res.ok) {
+      res = await fetch(`/api/generate-pdf/${encodeURIComponent(empNo)}`, {
+        headers: (typeof getAuthHeaders === 'function' ? getAuthHeaders() : {}),
+        credentials: 'include'
+      });
     }
 
     if (res && res.ok) {
@@ -2475,15 +2591,12 @@ async function downloadEmployeePDF(empNo) {
         return;
       }
     }
-
-    // Direct fallback: Download the official DOCX report so the user has the 100% accurate file
-    showToast(`Downloading official Word Document (.docx) report for Employee ${empNo}...`);
-    await downloadEmployeeDocx(empNo);
-
-  } catch (err) {
-    console.error('PDF Download error:', err);
-    await downloadEmployeeDocx(empNo);
+  } catch (servErr) {
+    console.error('Server PDF generation error:', servErr);
   }
+
+  // STRICT REQUIREMENT: NEVER download DOCX when user clicked PDF!
+  alert(`Could not generate PDF for Employee ${empNo}. Please ensure your browser allows file downloads and try again.`);
 }
 window.downloadEmployeePDFReport = downloadEmployeePDF;
 
@@ -2637,117 +2750,13 @@ async function generateClientSideDocx(empNo, recordData) {
 }
 
 async function generateClientSidePdf(empNo, recordData) {
-  const { blob, emp, filename } = await buildClientSideDocxBlob(empNo, recordData);
-
-  // 1. Attempt server-side DOCX-to-PDF conversion endpoint
   try {
-    const convertRes = await fetch('/api/convert-docx-to-pdf', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
-      body: blob
-    });
-    if (convertRes.ok) {
-      const pdfBlob = await convertRes.blob();
-      const pdfUrl = window.URL.createObjectURL(pdfBlob);
-      const a = document.createElement('a');
-      a.href = pdfUrl;
-      const safeName = (emp.name || empNo).replace(/[\s\\/]+/g, '_');
-      a.download = `Yokohama_ILUO_Report_${empNo}_${safeName}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(pdfUrl);
-      document.body.removeChild(a);
-      showToast(`Official PDF report for Employee ${empNo} downloaded successfully!`);
-      return;
-    }
-  } catch (convErr) {
-    console.warn('Server docx-to-pdf converter unreachable, rendering via docx-preview print:', convErr.message);
+    await generateAndDownloadClientSidePdf(empNo, recordData);
+    showToast(`Official PDF report for Employee ${empNo} downloaded successfully!`);
+  } catch (err) {
+    console.error('generateClientSidePdf error:', err);
+    alert(`Could not generate PDF for Employee ${empNo}: ${err.message}`);
   }
-
-  // 2. High-fidelity in-browser Print to PDF using docx-preview
-  if (typeof window.docx !== 'undefined' && typeof window.docx.renderAsync === 'function') {
-    showToast('Rendering exact Word layout for Print to PDF...');
-    let iframe = document.getElementById('docxPrintFrame');
-    if (iframe) {
-      try { iframe.remove(); } catch(e) {}
-    }
-    iframe = document.createElement('iframe');
-    iframe.id = 'docxPrintFrame';
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
-    iframe.style.opacity = '0.01';
-    iframe.style.pointerEvents = 'none';
-    document.body.appendChild(iframe);
-
-    const doc = iframe.contentWindow.document;
-    doc.open();
-    doc.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Yokohama ILUO Assessment Report - ${empNo}</title>
-        <meta charset="utf-8">
-        <style>
-          @page { size: A4 portrait; margin: 10mm; }
-          html, body { margin: 0; padding: 0; background: #ffffff !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
-          .docx-wrapper { background: #ffffff !important; padding: 0 !important; }
-          .docx { box-shadow: none !important; margin: 0 auto !important; padding: 0 !important; width: 100% !important; }
-          table { border-collapse: collapse !important; width: 100% !important; }
-          td, th { padding: 4px 6px !important; }
-          @media print {
-            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          }
-        </style>
-      </head>
-      <body>
-        <div id="docxPrintContent"></div>
-      </body>
-      </html>
-    `);
-    doc.close();
-
-    const targetDiv = doc.getElementById('docxPrintContent');
-    const arrayBuffer = await blob.arrayBuffer();
-    await window.docx.renderAsync(arrayBuffer, targetDiv, null, {
-      className: "docx",
-      inWrapper: true,
-      breakPages: true,
-      renderHeaders: true,
-      renderFooters: true,
-      ignoreHeight: false,
-      ignoreWidth: false
-    });
-
-    setTimeout(() => {
-      try {
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-        showToast(`Print dialog opened. Select "Save as PDF" to save exact report.`);
-      } catch(printErr) {
-        console.error('Print window error:', printErr);
-      }
-      setTimeout(() => {
-        try { iframe.remove(); } catch(e) {}
-      }, 30000);
-    }, 700);
-
-    return;
-  }
-
-  // 3. Fallback: Download DOCX so employee or supervisor can save as PDF in Word
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  window.URL.revokeObjectURL(url);
-  document.body.removeChild(a);
-  showToast(`Downloaded DOCX report for Employee ${empNo}. (Open in MS Word to Save As PDF)`);
 }
 
 function confirmAndResetExam(empNo, empName) {

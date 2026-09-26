@@ -589,4 +589,9 @@ function generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmp
   `;
 }
 
-module.exports = { generateOfficialReportHtml };
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { generateOfficialReportHtml };
+}
+if (typeof window !== 'undefined') {
+  window.generateOfficialReportHtml = generateOfficialReportHtml;
+}
