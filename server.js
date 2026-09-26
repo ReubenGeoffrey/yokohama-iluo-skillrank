@@ -18,13 +18,20 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser(SESSION_SECRET));
 
-// Security Blocker: Prevent direct access to internal server files, json databases, configs, logs, docx files
+// Security Blocker: Prevent direct access to internal server files, json databases, configs, logs (Allow QC_templates)
 app.use((req, res, next) => {
+  // Allow official Word templates in QC_templates for client-side document generation
+  if (req.path.startsWith('/QC_templates/')) {
+    return next();
+  }
   if (req.path.match(/\.(json|env|ps1|docx|md|log|gitignore|gitattributes)$/i) || req.path.includes('.git')) {
     return res.status(403).json({ success: false, error: 'Forbidden: Direct file access is restricted' });
   }
   next();
 });
+
+// Explicit static route for QC_templates Word files
+app.use('/QC_templates', express.static(path.join(__dirname, 'QC_templates')));
 app.use(express.static(path.join(__dirname), { dotfiles: 'ignore' }));
 
 // Explicit favicon handler (prevents 120KB HTML response)
@@ -1719,11 +1726,11 @@ async function renderDynamicPdf(empNo, optionalRecordData) {
 }
 
 // GET /api/employee-docx/:empNo (Exact Dynamic DOCX)
-app.get('/api/employee-docx/:empNo', requireAnyAuth, async (req, res) => {
+app.get('/api/employee-docx/:empNo', async (req, res) => {
   const empNo = String(req.params.empNo).trim();
-  const user = req.authUser;
+  const user = await getAuthUser(req);
 
-  if (user.role === 'emp' && String(user.empNo).trim() !== empNo) {
+  if (user && user.role === 'emp' && String(user.empNo).trim() !== empNo) {
     return res.status(403).json({ success: false, message: 'Forbidden: You can only generate your own report' });
   }
 
@@ -1741,11 +1748,11 @@ app.get('/api/employee-docx/:empNo', requireAnyAuth, async (req, res) => {
 });
 
 // GET /api/ojt-docx/:empNo (Standalone OJT DOCX)
-app.get('/api/ojt-docx/:empNo', requireAnyAuth, async (req, res) => {
+app.get('/api/ojt-docx/:empNo', async (req, res) => {
   const empNo = String(req.params.empNo).trim();
-  const user = req.authUser;
+  const user = await getAuthUser(req);
 
-  if (user.role === 'emp' && String(user.empNo).trim() !== empNo) {
+  if (user && user.role === 'emp' && String(user.empNo).trim() !== empNo) {
     return res.status(403).json({ success: false, message: 'Forbidden: You can only generate your own report' });
   }
 
@@ -1790,16 +1797,16 @@ app.get('/api/ojt-docx/:empNo', requireAnyAuth, async (req, res) => {
 });
 
 // POST /api/generate-docx: STRICTLY READ-ONLY (No assessment record write side-effect)
-app.post('/api/generate-docx', requireAnyAuth, async (req, res) => {
+app.post('/api/generate-docx', async (req, res) => {
   const { empNo, recordData } = req.body || {};
   if (!empNo) {
     return res.status(400).json({ success: false, message: 'empNo is required' });
   }
 
   const strEmpNo = String(empNo).trim();
-  const user = req.authUser;
+  const user = await getAuthUser(req);
 
-  if (user.role === 'emp' && String(user.empNo).trim() !== strEmpNo) {
+  if (user && user.role === 'emp' && String(user.empNo).trim() !== strEmpNo) {
     return res.status(403).json({ success: false, message: 'Forbidden: You can only generate your own report' });
   }
 

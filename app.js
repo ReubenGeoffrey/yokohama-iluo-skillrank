@@ -2621,13 +2621,20 @@ async function downloadEmployeeDocx(empNo) {
     try {
       res = await fetch('/api/generate-docx', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(typeof getAuthHeaders === 'function' ? getAuthHeaders() : {})
+        },
+        credentials: 'include',
         body: JSON.stringify({ empNo: String(empNo), recordData })
       });
 
       if (!res.ok) {
         // Fallback to GET endpoint
-        res = await fetch(`/api/employee-docx/${encodeURIComponent(empNo)}`);
+        res = await fetch(`/api/employee-docx/${encodeURIComponent(empNo)}`, {
+          headers: (typeof getAuthHeaders === 'function' ? getAuthHeaders() : {}),
+          credentials: 'include'
+        });
       }
     } catch (netErr) {
       console.warn('Server DOCX generation unreachable, using client-side fallback:', netErr.message);
