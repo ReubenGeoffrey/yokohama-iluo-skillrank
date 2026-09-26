@@ -220,7 +220,8 @@ function saveCustomQuestionsToServer() {
   try {
     fetch('/api/questions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({ questionBank: QUESTION_BANK })
     }).then(res => res.json()).then(data => {
       console.log('Question Bank Cloud Save Status:', data.message);
@@ -527,11 +528,17 @@ function checkExistingSession() {
   }
 
   // 3. Background asynchronous verification (non-blocking, 3s timeout)
-  fetchWithTimeout('/api/auth/admin/session', {}, 3000)
+  fetchWithTimeout('/api/auth/admin/session', { headers: getAuthHeaders(), credentials: 'include' }, 3000)
     .then(res => res.json())
     .then(data => {
       if (data.authenticated && data.admin) {
-        localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify({ role: 'admin', email: data.admin.email, name: data.admin.name }));
+        const curSess = JSON.parse(localStorage.getItem(STORAGE_KEY_SESSION) || '{}');
+        localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify({
+          ...curSess,
+          role: 'admin',
+          email: data.admin.email,
+          name: data.admin.name
+        }));
         updateUserBadge(data.admin.name);
       }
     })
@@ -705,6 +712,25 @@ function startOtpCountdownTimer() {
 // ---------------------------------------------------------------------
 // ADMIN AUTHENTICATION
 // ---------------------------------------------------------------------
+function switchAdminLoginTab(mode) {
+  const passTab = document.getElementById('tabAdminPass');
+  const otpTab = document.getElementById('tabAdminOtp');
+  const passContent = document.getElementById('adminPassTabContent');
+  const otpContent = document.getElementById('adminOtpTabContent');
+  if (mode === 'otp') {
+    if (passTab) { passTab.style.background = 'transparent'; passTab.style.color = '#475569'; }
+    if (otpTab) { otpTab.style.background = '#005B9E'; otpTab.style.color = 'white'; }
+    if (passContent) passContent.style.display = 'none';
+    if (otpContent) otpContent.style.display = 'block';
+  } else {
+    if (passTab) { passTab.style.background = '#005B9E'; passTab.style.color = 'white'; }
+    if (otpTab) { otpTab.style.background = 'transparent'; otpTab.style.color = '#475569'; }
+    if (passContent) passContent.style.display = 'block';
+    if (otpContent) otpContent.style.display = 'none';
+  }
+}
+window.switchAdminLoginTab = switchAdminLoginTab;
+
 async function handleAdminLogin(e) {
   if (e) e.preventDefault();
   const usernameInput = document.getElementById('adminUsernameInput');
@@ -723,6 +749,7 @@ async function handleAdminLogin(e) {
     const res = await fetch('/api/auth/admin/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ username, password })
     });
     const data = await res.json();
@@ -731,8 +758,9 @@ async function handleAdminLogin(e) {
       localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify({
         role: 'admin',
         username: username,
-        email: data.admin && data.admin.email ? data.admin.email : 'admin@yokohama.com',
-        name: adminName
+        email: data.admin && data.admin.email ? data.admin.email : 'reubengeoffrey16@gmail.com',
+        name: adminName,
+        token: data.token || ''
       }));
       updateUserBadge(adminName);
       showToast(`Authenticated successfully as ${adminName}`);
@@ -806,6 +834,7 @@ async function handleVerifyAdminOTP(e) {
     const res = await fetch('/api/auth/admin/verify-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ email: email, otp: otpEntered })
     });
 
@@ -816,7 +845,12 @@ async function handleVerifyAdminOTP(e) {
 
       const adminName = data.admin && data.admin.name ? data.admin.name : 'Reuben Geoffrey (Superadmin)';
 
-      localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify({ role: 'admin', email: email, name: adminName }));
+      localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify({
+        role: 'admin',
+        email: email,
+        name: adminName,
+        token: data.token || ''
+      }));
       updateUserBadge(adminName);
  showToast(`Authenticated successfully as ${adminName}`);
       navigateTo('/secure-control/dashboard');
@@ -2155,7 +2189,8 @@ function saveCustomEmployeesToServer() {
   try {
     fetchWithTimeout('/api/employees', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({ employees: EMPLOYEES })
     }, 5000).catch(err => console.log('Employees sync pending:', err.message));
   } catch (e) {}
@@ -2163,7 +2198,7 @@ function saveCustomEmployeesToServer() {
 
 async function syncCloudSettings() {
   try {
-    const res = await fetchWithTimeout('/api/settings', {}, 3000);
+    const res = await fetchWithTimeout('/api/settings', { headers: getAuthHeaders(), credentials: 'include' }, 3000);
     const data = await res.json();
     if (data.success && data.settings) {
       const s = data.settings;
@@ -2204,13 +2239,14 @@ function saveSecuritySettings(e) {
   try {
     fetch('/api/settings', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({ settings: settings })
     }).then(res => res.json()).then(data => {
- showToast('Security Settings saved & updated in Cloud DB!');
- }).catch(err => showToast('Failed to save settings: ' + err.message));
+      showToast('Security Settings saved & updated in Cloud DB!');
+    }).catch(err => showToast('Failed to save settings: ' + err.message));
   } catch (err) {
- showToast('Failed to save settings: ' + err.message);
+    showToast('Failed to save settings: ' + err.message);
   }
 }
 
@@ -2781,7 +2817,11 @@ function confirmAndResetExam(empNo, empName) {
       delete records[empNo];
       localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(records));
       try {
-        fetch('/api/records/' + encodeURIComponent(empNo), { method: 'DELETE' }).catch(e => {});
+        fetch('/api/records/' + encodeURIComponent(empNo), {
+          method: 'DELETE',
+          headers: getAuthHeaders(),
+          credentials: 'include'
+        }).catch(e => {});
       } catch (e) {}
  showToast(`Exam reset successfully for Employee ${empNo}`);
       renderAdminTable('');
@@ -4490,7 +4530,11 @@ async function makeZeroFinishExam() {
 
     // 2. Call server reset API
     try {
-      await fetch('/api/records/reset-all', { method: 'POST' });
+      await fetch('/api/records/reset-all', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'include'
+      });
     } catch (e) {}
 
     showToast('All 236 exams reset to 0 finished! Fresh assessment mode active.');
@@ -4513,7 +4557,11 @@ async function restoreAllCompletedExams() {
   if (confirm('Restore all 234+ completed demo exam records from backup?')) {
     showToast('Restoring demo records from backup...');
     try {
-      const res = await fetch('/api/records/restore-demo', { method: 'POST' });
+      const res = await fetch('/api/records/restore-demo', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'include'
+      });
       const data = await res.json();
       if (data.success && data.records) {
         localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(data.records));
@@ -4575,7 +4623,8 @@ async function resetSectionExams(secIdOrName, customTitle) {
   try {
     const res = await fetch('/api/records/reset-section', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({ section: title, sectionId: secId })
     });
     const data = await res.json();
@@ -4625,7 +4674,8 @@ async function resetDepartmentExams(deptName) {
   try {
     const res = await fetch('/api/records/reset-department', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({ department: normDept })
     });
     const data = await res.json();
@@ -4720,7 +4770,8 @@ function saveOjtRecord(empNo, data) {
   try {
     fetch('/api/ojt-evaluations', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({ empNo, ojtData: all[empNo] })
     }).catch(() => {});
   } catch (e) {}

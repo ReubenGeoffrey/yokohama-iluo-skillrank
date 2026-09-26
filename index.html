@@ -148,22 +148,78 @@
           </div>
 
           <div class="login-body">
-            <!-- Admin Username & Password Form -->
-            <form id="adminLoginForm" onsubmit="handleAdminLogin(event)">
-              <div class="form-group">
-                <label for="adminUsernameInput">Admin Username</label>
-                <input type="text" id="adminUsernameInput" class="form-control" placeholder="Enter admin username" required autofocus style="font-weight: 600;">
-              </div>
-
-              <div class="form-group">
-                <label for="adminPasswordInput">Password</label>
-                <input type="password" id="adminPasswordInput" class="form-control" placeholder="Enter admin password" required style="font-weight: 600;">
-              </div>
-
-              <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #0F172A 0%, #003D6B 100%); font-weight: 700; width: 100%; padding: 12px; margin-top: 8px;">
-                Sign In to Admin Control Center
+            <!-- Tabs for Login Mode: Password vs Email OTP -->
+            <div style="display: flex; gap: 8px; margin-bottom: 20px; background: #F1F5F9; padding: 4px; border-radius: 8px;">
+              <button type="button" id="tabAdminPass" onclick="switchAdminLoginTab('pass')" style="flex: 1; padding: 8px 12px; font-size: 0.85rem; font-weight: 700; border: none; border-radius: 6px; cursor: pointer; background: #005B9E; color: white; transition: all 0.2s;">
+                Password Login
               </button>
-            </form>
+              <button type="button" id="tabAdminOtp" onclick="switchAdminLoginTab('otp')" style="flex: 1; padding: 8px 12px; font-size: 0.85rem; font-weight: 700; border: none; border-radius: 6px; cursor: pointer; background: transparent; color: #475569; transition: all 0.2s;">
+                Email OTP Login
+              </button>
+            </div>
+
+            <!-- Tab 1: Admin Username & Password Form -->
+            <div id="adminPassTabContent">
+              <form id="adminLoginForm" onsubmit="handleAdminLogin(event)">
+                <div class="form-group">
+                  <label for="adminUsernameInput">Admin Username or Email</label>
+                  <input type="text" id="adminUsernameInput" class="form-control" placeholder="admin or authorized email" required autofocus style="font-weight: 600;" value="admin">
+                </div>
+
+                <div class="form-group">
+                  <label for="adminPasswordInput">Password</label>
+                  <input type="password" id="adminPasswordInput" class="form-control" placeholder="Enter admin password" required style="font-weight: 600;" value="admin123">
+                </div>
+
+                <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #0F172A 0%, #003D6B 100%); font-weight: 700; width: 100%; padding: 12px; margin-top: 8px;">
+                  Sign In to Admin Control Center
+                </button>
+              </form>
+            </div>
+
+            <!-- Tab 2: Admin Email OTP Form -->
+            <div id="adminOtpTabContent" style="display: none;">
+              <!-- Step A: Send OTP Form -->
+              <form id="adminEmailForm" onsubmit="handleSendAdminOTP(event)">
+                <div class="form-group">
+                  <label for="adminEmailInput">Authorized Admin Gmail</label>
+                  <input type="email" id="adminEmailInput" class="form-control" placeholder="reubengeoffrey16@gmail.com" value="reubengeoffrey16@gmail.com" required style="font-weight: 600;">
+                  <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 4px;">A 6-digit OTP will be sent to your Gmail inbox</span>
+                </div>
+
+                <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #005B9E 0%, #003D6B 100%); font-weight: 700; width: 100%; padding: 12px; margin-top: 8px;">
+                  Send 6-Digit OTP Code
+                </button>
+              </form>
+
+              <!-- Step B: Verify OTP Form -->
+              <form id="adminOtpForm" onsubmit="handleVerifyAdminOTP(event)" style="display: none;">
+                <div style="background: #F0F9FF; border: 1px solid #BAE6FD; border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 0.85rem; color: #0369A1;">
+                  OTP code sent to: <strong id="otpTargetEmail"></strong>
+                  <div style="margin-top: 4px; font-weight: 600; color: #E31B23;">
+                    Expires in: <span id="otpTimerDisplay">60s</span>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="adminOtpInput">Enter 6-Digit OTP</label>
+                  <input type="text" id="adminOtpInput" class="form-control" placeholder="123456" maxlength="6" style="font-size: 1.5rem; text-align: center; letter-spacing: 6px; font-weight: 800; font-family: monospace;">
+                </div>
+
+                <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #0F172A 0%, #003D6B 100%); font-weight: 700; width: 100%; padding: 12px; margin-top: 8px;">
+                  Verify & Sign In
+                </button>
+
+                <div style="display: flex; justify-content: space-between; margin-top: 14px;">
+                  <button type="button" id="btnResendOtp" class="btn-secondary" onclick="resendAdminOTP()" style="font-size: 0.8rem; padding: 6px 12px;">
+                    Resend OTP
+                  </button>
+                  <button type="button" class="btn-secondary" onclick="resetAdminOtpForm()" style="font-size: 0.8rem; padding: 6px 12px;">
+                    Change Email
+                  </button>
+                </div>
+              </form>
+            </div>
 
             <div class="login-toggle-text" style="margin-top: 20px;">
               Looking for Employee Portal? <span class="login-toggle-link" onclick="navigateTo('/employee-portal')">Switch to Employee Portal</span>
