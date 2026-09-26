@@ -41,11 +41,13 @@ function generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmp
   let questionsHtml = '';
   let currentCategory = '';
 
-  const questionsToRender = (qbQuestions && qbQuestions.length > 0) ? qbQuestions : [
+  const rawQuestions = (qbQuestions && qbQuestions.length > 0) ? qbQuestions : [
     { id: 1, category: 'Safety', text: 'What is safety? / பாதுகாப்பு என்றால் என்ன?', options: { A: 'To prevent injury and ill health', B: 'Getting injury', C: 'Performing unsafe act', D: 'Exposure to unsafe condition' }, answer: 'A' },
     { id: 2, category: 'Safety', text: 'What is PPE? / PPE என்றால் என்ன?', options: { A: 'Personal Performance Equipment', B: 'People Performance Equipment', C: 'Personal Process Equipment', D: 'Personal Protective Equipment' }, answer: 'D' },
     { id: 3, category: 'CI & TPM', text: 'Which step of the 5S methodology involves identifying and labeling items?', options: { A: 'Sort', B: 'Set in Order', C: 'Shine', D: 'Standardize' }, answer: 'B' }
   ];
+  // Strictly enforce 30 questions matching official examination format
+  const questionsToRender = rawQuestions.slice(0, 30);
 
   questionsToRender.forEach((q, idx) => {
     const qNum = idx + 1;
@@ -112,18 +114,29 @@ function generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmp
     `;
   });
 
-  // OJT Criteria Table Rows
-  const criteriaList = (ojtTmpl && ojtTmpl.criteria && ojtTmpl.criteria.length > 0)
-    ? ojtTmpl.criteria
-    : [
-        { code: '01', parameter: 'Machine & Area Safety Inspection', method: 'Observation & Practical Check', standard: 'Zero unsafe conditions', max: 5 },
-        { code: '02', parameter: 'Raw Material Verification against Spec', method: 'Visual & Vernier Measurement', standard: '100% adherence to standard', max: 5 },
-        { code: '03', parameter: 'Equipment Start-up & Initial Parameter Check', method: 'Checksheet audit', standard: 'Within specified limits', max: 5 },
-        { code: '04', parameter: 'Building / Curing Operational Skill', method: 'Machine Run & Observation', standard: 'Cycle time & quality spec met', max: 10 },
-        { code: '05', parameter: 'Defect Detection & Quarantine Procedure', method: 'Defect sample challenge', standard: '100% detection rate', max: 10 },
-        { code: '06', parameter: 'Housekeeping (5S) and Cleanliness', method: 'Workplace audit', standard: 'All items in designated zones', max: 5 },
-        { code: '07', parameter: 'Final Finishing & Visual Inspection Verification', method: 'Finished product audit', standard: 'Zero defects passed', max: 10 }
-      ];
+  // OJT Criteria Table Rows (Support both checkpoints and criteria)
+  let criteriaList = [];
+  if (ojtTmpl && Array.isArray(ojtTmpl.checkpoints) && ojtTmpl.checkpoints.length > 0) {
+    criteriaList = ojtTmpl.checkpoints.slice(0, 15).map(cp => ({
+      code: String(cp.sno).padStart(2, '0'),
+      parameter: cp.text || `Checkpoint ${cp.sno}`,
+      method: 'Observation & Audit',
+      standard: '100% adherence to SOP/WI',
+      max: 5
+    }));
+  } else if (ojtTmpl && Array.isArray(ojtTmpl.criteria) && ojtTmpl.criteria.length > 0) {
+    criteriaList = ojtTmpl.criteria.slice(0, 15);
+  } else {
+    criteriaList = [
+      { code: '01', parameter: 'Machine & Area Safety Inspection', method: 'Observation & Practical Check', standard: 'Zero unsafe conditions', max: 5 },
+      { code: '02', parameter: 'Raw Material Verification against Spec', method: 'Visual & Vernier Measurement', standard: '100% adherence to standard', max: 5 },
+      { code: '03', parameter: 'Equipment Start-up & Initial Parameter Check', method: 'Checksheet audit', standard: 'Within specified limits', max: 5 },
+      { code: '04', parameter: 'Building / Curing Operational Skill', method: 'Machine Run & Observation', standard: 'Cycle time & quality spec met', max: 10 },
+      { code: '05', parameter: 'Defect Detection & Quarantine Procedure', method: 'Defect sample challenge', standard: '100% detection rate', max: 10 },
+      { code: '06', parameter: 'Housekeeping (5S) and Cleanliness', method: 'Workplace audit', standard: 'All items in designated zones', max: 5 },
+      { code: '07', parameter: 'Final Finishing & Visual Inspection Verification', method: 'Finished product audit', standard: 'Zero defects passed', max: 10 }
+    ];
+  }
 
   const ojtScores = ojtRec.scores || {};
   let ojtRowsHtml = '';

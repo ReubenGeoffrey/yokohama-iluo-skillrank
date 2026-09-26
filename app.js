@@ -2500,10 +2500,18 @@ async function generateAndDownloadClientSidePdf(empNo, recordData = null) {
   const records = (typeof getStoredRecords === 'function') ? getStoredRecords() : {};
   const examRecord = recordData || records[emp.empNo] || records[empNo] || null;
 
-  // 3. Resolve questions
+  // 3. Resolve questions (strictly 30 section assessment questions)
   const targetLevel = (examRecord && examRecord.targetLevel) || emp.targetLevel || emp.currentLevel || 'O';
   const qBank = (typeof QUESTION_BANK !== 'undefined') ? QUESTION_BANK : {};
-  const qbQuestions = qBank[targetLevel] || [];
+  let qbQuestions = [];
+  if (examRecord && Array.isArray(examRecord.submittedQuestions) && examRecord.submittedQuestions.length > 0) {
+    qbQuestions = examRecord.submittedQuestions.slice(0, 30);
+  } else if (typeof getQuestionsForSection === 'function') {
+    qbQuestions = getQuestionsForSection(targetLevel, emp.section).slice(0, 30);
+  } else {
+    const allQs = qBank[targetLevel] || qBank['L'] || [];
+    qbQuestions = allQs.slice(0, 30);
+  }
 
   // 4. Resolve OJT records and section template
   const allOjt = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
@@ -2513,7 +2521,7 @@ async function generateAndDownloadClientSidePdf(empNo, recordData = null) {
   // 5. Fetch logo
   const logoBase64 = await getBrowserLogoBase64();
 
-  // 6. Build the pixel-perfect official HTML
+  // 6. Build the pixel-perfect official HTML (compact ~4-6 pages)
   const reportHtml = window.generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmpl, logoBase64);
 
   const safeEmpName = (emp.name || empNo).replace(/[\s\\/]+/g, '_');

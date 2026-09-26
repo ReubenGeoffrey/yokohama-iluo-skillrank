@@ -1624,7 +1624,15 @@ async function buildHtmlReportForEmployee(empNo, optionalRecordData) {
   const targetLevel = (examRecord && examRecord.targetLevel) || emp.targetLevel || emp.currentLevel || 'O';
 
   const qBank = await getAuthoritativeQuestions();
-  const qbQuestions = qBank[targetLevel] || [];
+  const allQs = qBank[targetLevel] || qBank['L'] || [];
+  let qbQuestions = [];
+  if (examRecord && Array.isArray(examRecord.submittedQuestions) && examRecord.submittedQuestions.length > 0) {
+    qbQuestions = examRecord.submittedQuestions.slice(0, 30);
+  } else if (typeof getQuestionsForSectionServer === 'function') {
+    qbQuestions = getQuestionsForSectionServer(allQs, targetLevel, emp.section).slice(0, 30);
+  } else {
+    qbQuestions = allQs.slice(0, 30);
+  }
 
   const ojtEvaluations = await getAuthoritativeOjtEvaluations();
   const ojtRec = ojtEvaluations[strEmpNo] || {};
