@@ -1143,7 +1143,7 @@ app.delete('/api/records/:empNo', requireAdminAuth, async (req, res) => {
 app.post('/api/records/reset-all', requireAdminAuth, async (req, res) => {
   await resetAuthoritativeRecords(null);
   console.log('🔄 All assessment records reset to 0 finished exams by Administrator.');
-  res.json({ success: true, message: 'All exam records successfully reset to zero (0 finished, 236 not started)' });
+  res.json({ success: true, message: 'All exam records successfully reset to zero' });
 });
 
 // DELETE /api/records (Superadmin only)

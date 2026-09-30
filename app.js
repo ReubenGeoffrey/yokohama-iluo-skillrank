@@ -4523,7 +4523,8 @@ function getStoredOjtRecords() {
 }
 
 async function makeZeroFinishExam() {
-  if (confirm('Are you sure you want to RESET ALL EXAMS to 0 Finished (Fresh Assessment Mode)?\n\nAll 236 employees will be set to "Not Started" so they can take their assessments from scratch.')) {
+  const total = typeof EMPLOYEES !== 'undefined' ? EMPLOYEES.length : 283;
+  if (confirm(`Are you sure you want to RESET ALL EXAMS to 0 Finished (Fresh Assessment Mode)?\n\nAll ${total} employees will be set to "Not Started" so they can take their assessments from scratch.`)) {
     // 1. Reset client LocalStorage
     localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify({}));
     localStorage.removeItem('iluo_preserve_local');
@@ -4537,7 +4538,7 @@ async function makeZeroFinishExam() {
       });
     } catch (e) {}
 
-    showToast('All 236 exams reset to 0 finished! Fresh assessment mode active.');
+    showToast(`All ${total} exams reset to 0 finished! Fresh assessment mode active.`);
 
     // 3. Re-render UI
     if (document.getElementById('adminTableBody')) {
