@@ -756,29 +756,32 @@ function loadBaseDatasetFromDataJs() {
 
 // Authoritative Employee Store
 async function getAuthoritativeEmployees() {
-  if (kvUrl && kvToken) {
-    const cloudEmployees = await syncWithCloudKv('GET', 'yokohama_employees');
-    if (cloudEmployees && Array.isArray(cloudEmployees) && cloudEmployees.length > 0) {
-      customEmployeesMemory = cloudEmployees;
-      return cloudEmployees;
-    }
-  }
-  if (customEmployeesMemory && Array.isArray(customEmployeesMemory) && customEmployeesMemory.length > 0) {
+  if (customEmployeesMemory && Array.isArray(customEmployeesMemory) && customEmployeesMemory.length >= 283) {
     return customEmployeesMemory;
   }
   if (fs.existsSync(EMPLOYEES_JSON_FILE)) {
     try {
       const raw = fs.readFileSync(EMPLOYEES_JSON_FILE, 'utf-8');
-      customEmployeesMemory = JSON.parse(raw);
-      if (customEmployeesMemory && customEmployeesMemory.length > 0) return customEmployeesMemory;
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed) && parsed.length >= 283) {
+        customEmployeesMemory = parsed;
+        return customEmployeesMemory;
+      }
     } catch (e) {}
+  }
+  if (kvUrl && kvToken) {
+    const cloudEmployees = await syncWithCloudKv('GET', 'yokohama_employees');
+    if (cloudEmployees && Array.isArray(cloudEmployees) && cloudEmployees.length >= 283) {
+      customEmployeesMemory = cloudEmployees;
+      return cloudEmployees;
+    }
   }
   const base = loadBaseDatasetFromDataJs();
   if (base && base.employees && base.employees.length > 0) {
     customEmployeesMemory = base.employees;
     return customEmployeesMemory;
   }
-  return [];
+  return customEmployeesMemory || [];
 }
 
 async function saveAuthoritativeEmployees(employees) {
@@ -1412,10 +1415,22 @@ app.post('/api/questions', requireAdminAuth, async (req, res) => {
 // EMPLOYEE DIRECTORY API
 // ---------------------------------------------------------------------
 
-// GET /api/employees: Authenticated users only
-app.get('/api/employees', requireAnyAuth, async (req, res) => {
+// GET /api/employees: Public directory listing (safe fields without passwordHash)
+app.get('/api/employees', async (req, res) => {
   const employees = await getAuthoritativeEmployees();
-  res.json({ success: true, employees });
+  const safeEmployees = employees.map(e => ({
+    empNo: e.empNo,
+    name: e.name,
+    dept: e.dept,
+    section: e.section,
+    qualification: e.qualification,
+    doj: e.doj,
+    expCount: e.expCount,
+    yearExp: e.yearExp,
+    currentLevel: e.currentLevel,
+    targetLevel: e.targetLevel
+  }));
+  res.json({ success: true, employees: safeEmployees });
 });
 
 // POST /api/employees: Superadmin only

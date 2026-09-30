@@ -4,7 +4,7 @@
 const STORAGE_KEY_RECORDS = 'iluo_assessment_records_v2';
 const STORAGE_KEY_SESSION = 'iluo_current_session_v1';
 const STORAGE_KEY_OJT = 'yokohama_ojt_evaluations_v1';
-const STORAGE_KEY_CUSTOM_EMPLOYEES = 'yokohama_custom_employees_v1';
+const STORAGE_KEY_CUSTOM_EMPLOYEES = 'yokohama_custom_employees_v2';
 const STORAGE_KEY_CUSTOM_QUESTIONS = 'yokohama_custom_questions_v1';
 
 // Global App State
@@ -74,12 +74,16 @@ function initStorage() {
   } catch (e) {}
 
   try {
+    // Purge deprecated v1 cache which held outdated 236 employees
+    localStorage.removeItem('yokohama_custom_employees_v1');
     const cachedEmp = localStorage.getItem(STORAGE_KEY_CUSTOM_EMPLOYEES);
     if (cachedEmp) {
       const parsedEmp = JSON.parse(cachedEmp);
-      if (Array.isArray(parsedEmp) && parsedEmp.length > 0) {
+      if (Array.isArray(parsedEmp) && parsedEmp.length >= 283) {
         EMPLOYEES.length = 0;
         EMPLOYEES.push(...parsedEmp);
+      } else {
+        localStorage.removeItem(STORAGE_KEY_CUSTOM_EMPLOYEES);
       }
     }
   } catch (e) {}
@@ -2168,7 +2172,7 @@ async function syncCloudEmployees() {
   try {
     const res = await fetchWithTimeout('/api/employees', {}, 3500);
     const data = await res.json();
-    if (data.success && data.employees && Array.isArray(data.employees) && data.employees.length > 0) {
+    if (data.success && data.employees && Array.isArray(data.employees) && data.employees.length >= 283) {
       EMPLOYEES.length = 0;
       EMPLOYEES.push(...data.employees);
       try {
@@ -4567,7 +4571,7 @@ async function restoreAllCompletedExams() {
       if (data.success && data.records) {
         localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(data.records));
         localStorage.setItem('iluo_preserve_local', 'true');
-        showToast('Restored 236 demo completed records!');
+        showToast('Restored completed records!');
       } else {
         showToast('Could not restore demo records.');
       }
