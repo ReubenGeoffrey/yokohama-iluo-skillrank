@@ -1487,6 +1487,18 @@ app.post('/api/ojt-evaluations', requireAdminAuth, async (req, res) => {
   res.json({ success: true, message: `OJT evaluation saved and synced for employee ${strEmpNo}` });
 });
 
+// POST /api/ojt-evaluations/reset-all: Superadmin only (Reset all OJT evaluations to 0 completed / Fresh OJT State)
+app.post('/api/ojt-evaluations/reset-all', requireAdminAuth, async (req, res) => {
+  globalOjtEvaluations.clear();
+  if (kvUrl && kvToken) {
+    await syncWithCloudKv('SET', 'yokohama_ojt_evaluations', {});
+  }
+  try {
+    fs.writeFileSync(OJT_JSON_FILE, JSON.stringify({}, null, 2), 'utf-8');
+  } catch (err) {}
+  res.json({ success: true, message: 'All OJT evaluations have been reset to 0 finished successfully!' });
+});
+
 // ---------------------------------------------------------------------
 // SECURITY SETTINGS API (Admin only)
 // ---------------------------------------------------------------------

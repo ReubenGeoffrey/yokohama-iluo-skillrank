@@ -56,3 +56,5 @@ custom_settings*.json
 www/
 android/
 capacitor.config.json
+
+*.keystore

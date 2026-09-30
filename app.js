@@ -152,6 +152,9 @@ function initStorage() {
   if (!localStorage.getItem(STORAGE_KEY_RECORDS)) {
     localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify({}));
   }
+  if (!localStorage.getItem(STORAGE_KEY_OJT)) {
+    localStorage.setItem(STORAGE_KEY_OJT, JSON.stringify({}));
+  }
   // Immediate localStorage bootstrap for questions & employees
   try {
     const cachedQ = localStorage.getItem(STORAGE_KEY_CUSTOM_QUESTIONS);
@@ -4604,17 +4607,9 @@ function getOjtTemplateForSection(secName) {
 function getStoredOjtRecords() {
   try {
     let ojt = JSON.parse(localStorage.getItem(STORAGE_KEY_OJT));
-    if (!ojt || Object.keys(ojt).length < 10) {
-      if (typeof YOKOHAMA_SEED_OJT_RECORDS !== 'undefined' && Object.keys(YOKOHAMA_SEED_OJT_RECORDS).length > 0) {
-        ojt = { ...YOKOHAMA_SEED_OJT_RECORDS, ...(ojt || {}) };
-        localStorage.setItem(STORAGE_KEY_OJT, JSON.stringify(ojt));
-      } else {
-        ojt = ojt || {};
-      }
-    }
-    return ojt || {};
+    return (ojt && typeof ojt === 'object') ? ojt : {};
   } catch (e) {
-    return (typeof YOKOHAMA_SEED_OJT_RECORDS !== 'undefined') ? { ...YOKOHAMA_SEED_OJT_RECORDS } : {};
+    return {};
   }
 }
 
@@ -4645,6 +4640,30 @@ async function makeZeroFinishExam() {
     if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
     if (currentUser) {
       handleRoute();
+    }
+  }
+}
+
+async function resetAllOjtEvaluations() {
+  const total = typeof EMPLOYEES !== 'undefined' ? EMPLOYEES.length : 283;
+  if (confirm(`Are you sure you want to RESET ALL OJT EVALUATIONS to 0 Finished (Fresh OJT Practical Mode)?\n\nAll ${total} employees will be set to "Pending" practical evaluation.`)) {
+    // 1. Reset client LocalStorage
+    localStorage.setItem(STORAGE_KEY_OJT, JSON.stringify({}));
+
+    // 2. Call server reset API
+    try {
+      await fetch('/api/ojt-evaluations/reset-all', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'include'
+      });
+    } catch (e) {}
+
+    showToast(`All ${total} OJT evaluations reset to 0 finished! Fresh OJT mode active.`);
+
+    // 3. Re-render OJT Dashboard
+    if (typeof renderOjtDashboard === 'function') {
+      renderOjtDashboard();
     }
   }
 }
