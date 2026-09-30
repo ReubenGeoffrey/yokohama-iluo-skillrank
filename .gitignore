@@ -51,3 +51,8 @@ assessment_records*.json
 custom_employees*.json
 ojt_evaluations*.json
 custom_settings*.json
+
+*.apk
+www/
+android/
+capacitor.config.json

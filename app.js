@@ -33,9 +33,101 @@ const QA_SECTIONS_LIST = [
 document.addEventListener('DOMContentLoaded', () => {
   initStorage();
   initSecurityMonitors();
+  initCapacitorMobileCapabilities();
   window.addEventListener('hashchange', handleRoute);
   checkExistingSession();
 });
+
+// Professional Native Mobile & Offline Capabilities (Capacitor Android + Mobile Web)
+function initCapacitorMobileCapabilities() {
+  if (typeof window === 'undefined') return;
+
+  // 1. Android Hardware Back Button & Native Plugins
+  if (window.Capacitor && window.Capacitor.Plugins) {
+    const { StatusBar, SplashScreen, App, Network } = window.Capacitor.Plugins;
+
+    if (StatusBar) {
+      StatusBar.setBackgroundColor({ color: '#0B1120' }).catch(() => {});
+      StatusBar.setStyle({ style: 'DARK' }).catch(() => {});
+    }
+
+    if (SplashScreen) {
+      setTimeout(() => {
+        SplashScreen.hide().catch(() => {});
+      }, 1000);
+    }
+
+    if (App) {
+      let lastBackPress = 0;
+      App.addListener('backButton', () => {
+        if (activeExam && activeExam.inProgress && !activeExam.isCompleted) {
+          showToast('⚠️ Assessment in progress. Please complete or submit your assessment before exiting.');
+          return;
+        }
+
+        const openModal = document.querySelector('.modal-overlay[style*="display: flex"], .modal-overlay[style*="display: block"], .modal[style*="display: flex"], .modal[style*="display: block"]');
+        if (openModal) {
+          openModal.style.display = 'none';
+          return;
+        }
+
+        const hash = window.location.hash || '';
+        if (hash && hash !== '#login' && hash !== '#' && hash !== '#/') {
+          window.history.back();
+          return;
+        }
+
+        const now = Date.now();
+        if (now - lastBackPress < 2000) {
+          App.exitApp();
+        } else {
+          lastBackPress = now;
+          showToast('Tap BACK again to exit Yokohama ILUO');
+        }
+      });
+    }
+
+    if (Network) {
+      Network.addListener('networkStatusChange', status => {
+        let offlineBanner = document.getElementById('mobileOfflineBanner');
+        if (!status.connected) {
+          if (!offlineBanner) {
+            offlineBanner = document.createElement('div');
+            offlineBanner.id = 'mobileOfflineBanner';
+            offlineBanner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#DC2626;color:#FFF;padding:10px 16px;font-size:13px;font-weight:700;text-align:center;z-index:999999;box-shadow:0 -2px 10px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;gap:8px;';
+            offlineBanner.innerHTML = '<span>⚠️ Internet connection required. Please check your network connection and try again.</span>';
+            document.body.appendChild(offlineBanner);
+          }
+          offlineBanner.style.display = 'flex';
+        } else {
+          if (offlineBanner) {
+            offlineBanner.style.display = 'none';
+          }
+        }
+      });
+    }
+  }
+
+  // 2. Fallback HTML5 Online / Offline Awareness for All Devices
+  window.addEventListener('offline', () => {
+    let offlineBanner = document.getElementById('mobileOfflineBanner');
+    if (!offlineBanner) {
+      offlineBanner = document.createElement('div');
+      offlineBanner.id = 'mobileOfflineBanner';
+      offlineBanner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#DC2626;color:#FFF;padding:10px 16px;font-size:13px;font-weight:700;text-align:center;z-index:999999;box-shadow:0 -2px 10px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;gap:8px;';
+      offlineBanner.innerHTML = '<span>⚠️ Internet connection required. Please check your network connection and try again.</span>';
+      document.body.appendChild(offlineBanner);
+    }
+    offlineBanner.style.display = 'flex';
+  });
+
+  window.addEventListener('online', () => {
+    const offlineBanner = document.getElementById('mobileOfflineBanner');
+    if (offlineBanner) {
+      offlineBanner.style.display = 'none';
+    }
+  });
+}
 
 // Reliable network request helper with strict timeout to prevent browser tab loading hangs
 async function fetchWithTimeout(url, options = {}, timeoutMs = 3500) {
