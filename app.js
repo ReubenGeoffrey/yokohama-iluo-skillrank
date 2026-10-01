@@ -400,7 +400,7 @@ function handleRoute() {
   // Quick Direct OJT Modal Route (/ojt-modal, /ojt-evaluation, /ojt-form)
   if (hash === '/ojt-modal' || hash === '/ojt-evaluation' || hash === '/ojt-form') {
     if (typeof hasOjtEvaluationAccess === 'function' && !hasOjtEvaluationAccess()) {
-      showToast('Access Restricted: OJT practical evaluations are only accessible to Section Supervisors and Admins.');
+      showToast('Access Restricted: Skill assessment practical evaluations are only accessible to Section Supervisors and Admins.');
       navigateTo('/section');
       return;
     }
@@ -1911,7 +1911,7 @@ function showSectionCompletedModal(secId, filterType = 'ALL') {
   if (titleEl) titleEl.innerText = `${sec.title} - Completion Details`;
 
   const subEl = document.getElementById('modalSecSubtitle');
-  if (subEl) subEl.innerText = `Detailed employee scores for MCQ assessment and OJT practical evaluations in ${sec.title}`;
+  if (subEl) subEl.innerText = `Detailed employee scores for MCQ assessment and Skill Assessment practical evaluations in ${sec.title}`;
 
   filterModalEmployees(currentModalFilterType);
 
@@ -4559,8 +4559,8 @@ function filterTrainingRequirements() {
           <button class="btn-secondary" style="padding: 4px 6px; font-size: 0.72rem; background: #FEF2F2; color: #DC2626; border-color: #FCA5A5;" onclick="unlockEmployeeExam('${item.empNo}', '${item.name}')" title="Unlock candidate's exam so they can re-take assessment">
             Unlock Exam
           </button>
-          <button class="btn-primary" style="padding: 4px 6px; font-size: 0.72rem; background: #475569; border-color: #475569;" onclick="openOjtModalForEmployee('${item.empNo}')" title="Score OJT Practical Evaluation Form">
-            OJT
+          <button class="btn-primary" style="padding: 4px 6px; font-size: 0.72rem; background: #475569; border-color: #475569;" onclick="openOjtModalForEmployee('${item.empNo}')" title="Score Skill Assessment Evaluation Form">
+            Skill Assessment
           </button>
           <button class="btn-secondary" style="padding: 4px 6px; font-size: 0.72rem;" onclick="resetTrainingStatus('${item.empNo}')" title="Cancel scheduled training">
             Cancel
@@ -5153,7 +5153,7 @@ function openOjtModalQuick() {
 
 function openOjtModalForCurrentEmployee() {
   if (!hasOjtEvaluationAccess()) {
-    showToast('Access Restricted: Employees cannot access the OJT practical evaluation form.');
+    showToast('Access Restricted: Employees cannot access the Skill Assessment practical evaluation form.');
     return;
   }
   openOjtModalQuick();
@@ -5161,7 +5161,7 @@ function openOjtModalForCurrentEmployee() {
 
 function openOjtModalForEmployee(empNo, optTemplateId) {
   if (!hasOjtEvaluationAccess()) {
-    showToast('Access Restricted: OJT practical evaluations can only be accessed and scored by Section Supervisors and Admins.');
+    showToast('Access Restricted: Skill assessment practical evaluations can only be accessed and scored by Section Supervisors and Admins.');
     return;
   }
 
@@ -5808,7 +5808,7 @@ function selectOjtLoginSection(secName) {
     label.style.color = m.color;
   }
   if (btnSubmit) {
-    btnSubmit.innerText = `Sign In to ${secName} OJT Center`;
+    btnSubmit.innerText = `Sign In to ${secName} Skill Assessment Center`;
     btnSubmit.style.background = `linear-gradient(135deg, ${m.color} 0%, #003D6B 100%)`;
   }
 
@@ -5868,7 +5868,7 @@ function quickEnterOjtSection(secName) {
   if (loginWrapper) loginWrapper.style.display = 'none';
   if (dashWrapper) dashWrapper.style.display = 'block';
   renderOjtDashboard(secName);
-  showToast(`Signed in to ${secName} OJT Center`);
+  showToast(`Signed in to ${secName} Skill Assessment Center`);
 }
 
 function ojtLogout() {
@@ -5877,17 +5877,17 @@ function ojtLogout() {
   const dashWrapper = document.getElementById('ojtDashboardWrapper');
   if (loginWrapper) loginWrapper.style.display = 'block';
   if (dashWrapper) dashWrapper.style.display = 'none';
-  showToast('Signed out of OJT Evaluation Center');
+  showToast('Signed out of Skill Assessment Center');
 }
 
 function renderOjtDashboard(secName) {
   const activeSec = secName || sessionStorage.getItem('iluo_ojt_session') || 'Safety';
   const meta = {
-    'Safety': { icon: '🦺', color: '#059669', title: 'Safety Section OJT Center', badge: 'Safety Evaluator Active' },
-    'CI & TPM': { icon: '⚙️', color: '#2563EB', title: 'CI & TPM Section OJT Center', badge: 'CI & TPM Evaluator Active' },
-    'Quality': { icon: '🎯', color: '#DC2626', title: 'Quality Section OJT Center', badge: 'Quality Evaluator Active' },
-    'Technical': { icon: '🔧', color: '#7C3AED', title: 'Technical Section OJT Center', badge: 'Technical Evaluator Active' },
-    'HR': { icon: '👥', color: '#D97706', title: 'HR Section OJT Center', badge: 'HR Evaluator Active' }
+    'Safety': { icon: '🦺', color: '#059669', title: 'Safety Section Skill Assessment Center', badge: 'Safety Evaluator Active' },
+    'CI & TPM': { icon: '⚙️', color: '#2563EB', title: 'CI & TPM Section Skill Assessment Center', badge: 'CI & TPM Evaluator Active' },
+    'Quality': { icon: '🎯', color: '#DC2626', title: 'Quality Section Skill Assessment Center', badge: 'Quality Evaluator Active' },
+    'Technical': { icon: '🔧', color: '#7C3AED', title: 'Technical Section Skill Assessment Center', badge: 'Technical Evaluator Active' },
+    'HR': { icon: '👥', color: '#D97706', title: 'HR Section Skill Assessment Center', badge: 'HR Evaluator Active' }
   };
   const m = meta[activeSec] || meta['Safety'];
 
@@ -6169,7 +6169,7 @@ function renderSectionEmployeesTable(emps) {
         <td style="padding: 14px 18px;">${ojtText}</td>
         <td style="padding: 14px 18px;">${overallStatus}</td>
         <td style="padding: 14px 18px; text-align: center;">
-          <button class="btn-sm" style="background: #059669; color: white; border: none; padding: 6px 14px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; box-shadow: 0 1px 3px rgba(5,150,105,0.2);" onclick="openOjtModalForEmployee('${e.empNo}')" title="Score OJT Practical Evaluation Form">📋 Score OJT</button>
+          <button class="btn-sm" style="background: #059669; color: white; border: none; padding: 6px 14px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; box-shadow: 0 1px 3px rgba(5,150,105,0.2);" onclick="openOjtModalForEmployee('${e.empNo}')" title="Score Skill Assessment Evaluation Form">📋 Skill Assessment</button>
         </td>
       </tr>
     `;

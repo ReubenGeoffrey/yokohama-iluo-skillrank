@@ -43,7 +43,7 @@
       <span class="tab-icon">🏛️</span> <span>Department</span>
     </button>
     <button class="role-tab-btn" id="tabRoleOjt" onclick="switchRolePortal('ojt')">
-      <span class="tab-icon">📋</span> <span>OJT Center</span>
+      <span class="tab-icon">📋</span> <span>Skill Assessment</span>
     </button>
     <button class="role-tab-btn" id="tabRoleEmp" onclick="switchRolePortal('employee')">
       <span class="tab-icon">👤</span> <span>Employee</span>
@@ -97,11 +97,11 @@
           <span class="portal-arrow">&rarr;</span>
         </button>
 
-        <!-- OJT Login -->
+        <!-- Skill Assessment Login -->
         <button class="vertical-portal-card ojt-card" onclick="switchRolePortal('ojt')" type="button">
           <div class="portal-card-main">
             <span class="portal-icon">📋</span>
-            <span class="portal-title">OJT Login</span>
+            <span class="portal-title">Skill Assessment Login</span>
           </div>
           <span class="portal-arrow">&rarr;</span>
         </button>
@@ -129,6 +129,11 @@
 
               <button type="submit" class="btn-primary" style="width: 100%; padding: 12px; font-weight: 700; margin-top: 8px;">Sign In to Employee Portal</button>
             </form>
+            <div style="text-align: center; margin-top: 16px;">
+              <a href="javascript:void(0)" onclick="navigateTo('/')" style="color: #005B9E; font-weight: 600; font-size: 0.88rem; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                &larr; Back to Portal Hub / Login Center
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -220,6 +225,11 @@
 
             <div class="login-toggle-text" style="margin-top: 20px;">
               Looking for Employee Portal? <span class="login-toggle-link" onclick="navigateTo('/employee-portal')">Switch to Employee Portal</span>
+            </div>
+            <div style="text-align: center; margin-top: 14px;">
+              <a href="javascript:void(0)" onclick="navigateTo('/')" style="color: #005B9E; font-weight: 600; font-size: 0.88rem; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                &larr; Back to Portal Hub / Login Center
+              </a>
             </div>
           </div>
         </div>
@@ -462,8 +472,8 @@
         <!-- Next Step: On The Job Training Evaluation (Assessed by Section & Admin) -->
         <div style="background: #F0FDF4; border: 2px solid #86EFAC; border-radius: 10px; padding: 18px 22px; margin: 20px auto; max-width: 620px; text-align: left; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
           <div>
-            <div style="font-weight: 800; font-size: 1rem; color: #166534; margin-bottom: 3px;">Next Step: On-The-Job Training (OJT) Evaluation</div>
-            <div style="font-size: 0.82rem; color: #15803D; line-height: 1.4;">Your exam marks are submitted. Your practical OJT evaluation will be conducted and scored by your Section Supervisor / Admin.</div>
+            <div style="font-weight: 800; font-size: 1rem; color: #166534; margin-bottom: 3px;">Next Step: Skill Assessment Evaluation</div>
+            <div style="font-size: 0.82rem; color: #15803D; line-height: 1.4;">Your exam marks are submitted. Your practical Skill Assessment evaluation will be conducted and scored by your Section Supervisor / Admin.</div>
           </div>
           <div style="background: #DCFCE7; color: #166534; font-weight: 800; font-size: 0.82rem; padding: 8px 16px; border-radius: 6px; border: 1px solid #86EFAC; white-space: nowrap;">
             🔒 Section &amp; Admin Scored
@@ -524,6 +534,11 @@
                 Access Section Dashboard
               </button>
             </form>
+            <div style="text-align: center; margin-top: 16px;">
+              <a href="javascript:void(0)" onclick="navigateTo('/')" style="color: #0284C7; font-weight: 600; font-size: 0.88rem; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                &larr; Back to Portal Hub / Login Center
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -603,7 +618,7 @@
                   <th style="padding: 14px 14px; text-align: center; min-width: 100px; font-size: 0.78rem; text-transform: uppercase;">Current Skill</th>
                   <th style="padding: 14px 14px; text-align: center; min-width: 100px; font-size: 0.78rem; text-transform: uppercase;">Target Skill</th>
                   <th style="padding: 14px 18px; min-width: 160px; font-size: 0.78rem; text-transform: uppercase;">Knowledge Test</th>
-                  <th style="padding: 14px 18px; min-width: 170px; font-size: 0.78rem; text-transform: uppercase;">Skill Assessment (OJT)</th>
+                  <th style="padding: 14px 18px; min-width: 170px; font-size: 0.78rem; text-transform: uppercase;">Skill Assessment</th>
                   <th style="padding: 14px 18px; min-width: 140px; font-size: 0.78rem; text-transform: uppercase;">Overall Status</th>
                   <th style="padding: 14px 18px; text-align: center; min-width: 120px; font-size: 0.78rem; text-transform: uppercase;">Evaluation</th>
                 </tr>
@@ -653,6 +668,11 @@
                 Access Department HOD Dashboard
               </button>
             </form>
+            <div style="text-align: center; margin-top: 16px;">
+              <a href="javascript:void(0)" onclick="navigateTo('/')" style="color: #6D28D9; font-weight: 600; font-size: 0.88rem; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                &larr; Back to Portal Hub / Login Center
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -758,8 +778,8 @@
       <div class="login-wrapper" id="ojtLoginWrapper" style="max-width: 920px; margin: 30px auto;">
         <div class="login-card" style="border-top: 4px solid #059669; max-width: 100%;">
           <div class="login-header" style="background: linear-gradient(135deg, #059669 0%, #003D6B 100%);">
-            <h2>OJT Portal Sign In</h2>
-            <p>Select your Evaluation Section below to access Practical OJT evaluations &amp; checkpoints</p>
+            <h2>Skill Assessment Portal Sign In</h2>
+            <p>Select your Evaluation Section below to access Practical Skill evaluations &amp; checkpoints</p>
           </div>
           <div class="login-body" style="padding: 28px 24px;">
             <!-- 5 Interactive Section Cards -->
@@ -810,9 +830,14 @@
                 <input type="password" id="ojtSectionPassword" class="form-control" placeholder="Enter password (default: ojt123)" value="ojt123" required>
               </div>
               <button type="submit" class="btn-primary" id="btnSubmitOjtLogin" style="background: linear-gradient(135deg, #059669 0%, #003D6B 100%); width: 100%; padding: 12px; font-weight: 700;">
-                Sign In to Safety OJT Center
+                Sign In to Safety Skill Assessment Center
               </button>
             </form>
+            <div style="text-align: center; margin-top: 16px;">
+              <a href="javascript:void(0)" onclick="navigateTo('/')" style="color: #059669; font-weight: 600; font-size: 0.88rem; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                &larr; Back to Portal Hub / Login Center
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -1035,7 +1060,7 @@
                 </div>
                 <div class="stat-info">
                   <div class="num" id="statOjtCompleted">0</div>
-                  <div class="lbl">OJT Completed</div>
+                  <div class="lbl">Skill Assessment Completed</div>
                 </div>
               </div>
             </div>
@@ -1063,7 +1088,7 @@
                     QA Section-Wise Completion Tracker
                   </h3>
                   <div style="font-size: 0.82rem; color: var(--text-muted);">
-                    Real-time employee breakdown of MCQ Assessment and OJT Practical completion across all 8 QA sections
+                    Real-time employee breakdown of MCQ Assessment and Skill Assessment completion across all 8 QA sections
                   </div>
                 </div>
                 <div style="font-size: 0.8rem; font-weight: 700; color: #0284C7; background: #EFF6FF; padding: 6px 14px; border-radius: 20px; border: 1px solid #BFDBFE;">
@@ -1079,7 +1104,7 @@
                       <th>Section Name</th>
                       <th style="text-align: center; width: 100px;">Total Emps</th>
                       <th style="text-align: center; width: 120px;">Exam Done</th>
-                      <th style="text-align: center; width: 120px;">OJT Done</th>
+                      <th style="text-align: center; width: 120px;">Skill Assessment Done</th>
                       <th style="text-align: center; width: 120px;">Both Done</th>
                       <th style="width: 170px;">Completion Progress</th>
                       <th style="text-align: center; width: 150px;">Action</th>
@@ -1491,7 +1516,7 @@
                       <th>Total</th>
                       <th>Benchmark</th>
                       <th>Status</th>
-                      <th>OJT Status</th>
+                      <th>Skill Assessment Status</th>
                       <th>Date</th>
                       <th>Action</th>
                     </tr>
@@ -1715,7 +1740,7 @@
                       <th style="width: 75px;">Current</th>
                       <th style="width: 85px;">Target</th>
                       <th style="width: 100px;">Exam Mark</th>
-                      <th style="width: 120px;">OJT Form Mark</th>
+                      <th style="width: 120px;">Skill Assessment Mark</th>
                       <th>Assessment Finding</th>
                       <th>Recommended Training Module</th>
                       <th style="width: 95px;">Priority</th>
@@ -2093,7 +2118,7 @@
         <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 260px;">
           <label for="ojtTemplateSwitcher" style="font-size: 0.82rem; font-weight: 800; color: #0369A1; white-space: nowrap; text-transform: uppercase;">Official Template:</label>
           <select id="ojtTemplateSwitcher" class="form-control" style="font-weight: 700; color: #0F172A; border-color: #7DD3FC; font-size: 0.88rem; background: #FFFFFF;" onchange="switchOjtTemplate(this.value)">
-            <option value="">-- Choose Official OJT Template --</option>
+            <option value="">-- Choose Official Skill Assessment Template --</option>
           </select>
         </div>
         <button onclick="closeOjtModal()" style="background: none; border: none; font-size: 1.8rem; cursor: pointer; color: #64748B; line-height: 1; margin-left: 8px;" title="Close Modal">&times;</button>
@@ -2319,7 +2344,7 @@
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
           <button type="button" class="btn-primary" id="filterModalAllBtn" onclick="filterModalEmployees('ALL')" style="padding: 5px 12px; font-size: 0.8rem;">All Employees</button>
           <button type="button" class="btn-secondary" id="filterModalExamBtn" onclick="filterModalEmployees('EXAM')" style="padding: 5px 12px; font-size: 0.8rem;">Exam Completed</button>
-          <button type="button" class="btn-secondary" id="filterModalOjtBtn" onclick="filterModalEmployees('OJT')" style="padding: 5px 12px; font-size: 0.8rem;">OJT Completed</button>
+          <button type="button" class="btn-secondary" id="filterModalOjtBtn" onclick="filterModalEmployees('OJT')" style="padding: 5px 12px; font-size: 0.8rem;">Skill Assessment Completed</button>
           <button type="button" class="btn-secondary" id="filterModalBothBtn" onclick="filterModalEmployees('BOTH')" style="padding: 5px 12px; font-size: 0.8rem;">Both Completed</button>
         </div>
         <div id="modalEmpCount" style="font-size: 0.84rem; color: var(--primary-dark); font-weight: 700;">0 Employees</div>
@@ -2335,7 +2360,7 @@
               <th>Employee Name</th>
               <th>Skill Level</th>
               <th>Exam Mark</th>
-              <th>OJT Form Mark</th>
+              <th>Skill Assessment Mark</th>
               <th>Overall Status</th>
               <th style="text-align: center;">Action</th>
             </tr>
@@ -2370,6 +2395,6 @@
   <script src="data.js?v=48.0"></script>
   <script src="report_html_generator.js?v=48.0"></script>
   <script src="seed_data.js?v=48.0"></script>
-  <script src="app.js?v=51.0"></script>
+  <script src="app.js?v=52.0"></script>
 </body>
 </html>
