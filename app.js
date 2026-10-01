@@ -6024,15 +6024,9 @@ function renderOjtDashboardTable() {
         <td style="padding: 14px 18px;">${ojtMarkText}</td>
         <td style="padding: 14px 18px;">${statusBadge}</td>
         <td style="text-align: center; padding: 14px 18px;">
-          <div style="display: flex; gap: 6px; justify-content: center; align-items: center;">
-            <button type="button" class="btn-primary" style="padding: 6px 12px; font-size: 0.78rem; background: #059669; border-color: #059669; font-weight: 700; white-space: nowrap; border-radius: 6px; box-shadow: 0 2px 4px rgba(5,150,105,0.2); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" onclick="openOjtModalForEmployee('${emp.empNo}')">
+          <div style="display: flex; justify-content: center; align-items: center;">
+            <button type="button" class="btn-primary" style="padding: 6px 14px; font-size: 0.8rem; background: #059669; border-color: #059669; font-weight: 700; white-space: nowrap; border-radius: 6px; box-shadow: 0 2px 4px rgba(5,150,105,0.2); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" onclick="openOjtModalForEmployee('${emp.empNo}')" title="Score OJT Practical Evaluation">
               📋 OJT
-            </button>
-            <button type="button" class="btn-primary" style="padding: 6px 12px; font-size: 0.78rem; background: #1E3A8A; border-color: #1E3A8A; font-weight: 700; white-space: nowrap; border-radius: 6px; box-shadow: 0 2px 4px rgba(30,58,138,0.2); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">
-              📄 DOCX
-            </button>
-            <button type="button" class="btn-primary" style="padding: 6px 12px; font-size: 0.78rem; background: #DC2626; border-color: #DC2626; font-weight: 700; white-space: nowrap; border-radius: 6px; box-shadow: 0 2px 4px rgba(220,38,38,0.2); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" onclick="downloadEmployeePDF('${emp.empNo}')" title="Download Official PDF Report">
-              📑 PDF
             </button>
           </div>
         </td>
@@ -6113,10 +6107,9 @@ function renderSectionEmployeesTable(emps) {
   if (!tbody) return;
 
   const records = getStoredRecords();
-  const ojtRecords = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
 
   if (!emps || emps.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">No employees found in this section.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">No employees found in this section.</td></tr>`;
     return;
   }
 
@@ -6127,7 +6120,6 @@ function renderSectionEmployeesTable(emps) {
     const tgtLvl = (curRules && curRules.nextLevel) ? curRules.nextLevel : (curLvl === 'L' ? 'U' : 'O');
 
     const rec = records[e.empNo];
-    const ojt = ojtRecords[e.empNo];
 
     // Knowledge marks & status
     let knowText = '<span style="color: #64748B; font-size: 0.82rem; font-weight: 500;">Pending</span>';
@@ -6139,24 +6131,12 @@ function renderSectionEmployeesTable(emps) {
       knowText = `<span style="font-weight: 700; color: ${isKnowPass ? '#059669' : '#DC2626'}; font-size: 0.88rem; white-space: nowrap;">${marks} / ${qCount} Marks</span>`;
     }
 
-    // OJT marks & status
-    let ojtText = `<span style="color: #64748B; font-size: 0.82rem; font-weight: 500; cursor: pointer;" onclick="openOjtModalForEmployee('${e.empNo}')" title="Click to score OJT evaluation">Pending</span>`;
-    let isOjtPass = false;
-    if (ojt && ojt.totalScore !== undefined) {
-      const maxScore = ojt.maxScore || 50;
-      isOjtPass = ojt.totalScore >= Math.round(maxScore * 0.7);
-      ojtText = `<span style="font-weight: 700; color: ${isOjtPass ? '#059669' : '#DC2626'}; font-size: 0.88rem; white-space: nowrap; cursor: pointer;" onclick="openOjtModalForEmployee('${e.empNo}')" title="Click to view/edit OJT evaluation">${ojt.totalScore} / ${maxScore} Marks</span>`;
-    } else if (ojt && ojt.isCompleted) {
-      isOjtPass = true;
-      ojtText = `<span style="font-weight: 700; color: #059669; font-size: 0.88rem; white-space: nowrap; cursor: pointer;" onclick="openOjtModalForEmployee('${e.empNo}')" title="Click to view/edit OJT evaluation">${ojt.totalScore || 0} / ${ojt.totalPossibleMarks || 20} Marks</span>`;
-    }
-
-    // Overall Status
-    let overallStatus = '<span style="background: #F1F5F9; color: #64748B; padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 0.8rem; display: inline-block; white-space: nowrap;">Pending</span>';
-    if (isKnowPass && isOjtPass) {
-      overallStatus = `<span style="background: #ECFDF5; color: #166534; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; display: inline-block; white-space: nowrap;">Qualified (${tgtLvl})</span>`;
+    // Status
+    let statusText = '<span style="background: #F1F5F9; color: #64748B; padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 0.8rem; display: inline-block; white-space: nowrap;">Pending</span>';
+    if (isKnowPass) {
+      statusText = `<span style="background: #ECFDF5; color: #166534; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; display: inline-block; white-space: nowrap;">Passed (${tgtLvl})</span>`;
     } else if (rec && rec.isCompleted && !isKnowPass) {
-      overallStatus = `<span style="background: #FEF2F2; color: #DC2626; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; display: inline-block; white-space: nowrap;">Retest Req.</span>`;
+      statusText = `<span style="background: #FEF2F2; color: #DC2626; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; display: inline-block; white-space: nowrap;">Retest Req.</span>`;
     }
 
     html += `
@@ -6166,11 +6146,7 @@ function renderSectionEmployeesTable(emps) {
         <td style="text-align: center; padding: 14px 12px;"><span class="iluo-badge iluo-badge-${curLvl.toLowerCase()}" style="width: 26px; height: 26px; font-size: 0.8rem;">${curLvl}</span></td>
         <td style="text-align: center; padding: 14px 12px;"><strong style="color: var(--accent-red); font-size: 0.95rem;">${tgtLvl}</strong></td>
         <td style="padding: 14px 18px;">${knowText}</td>
-        <td style="padding: 14px 18px;">${ojtText}</td>
-        <td style="padding: 14px 18px;">${overallStatus}</td>
-        <td style="padding: 14px 18px; text-align: center;">
-          <button class="btn-sm" style="background: #059669; color: white; border: none; padding: 6px 14px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; box-shadow: 0 1px 3px rgba(5,150,105,0.2);" onclick="openOjtModalForEmployee('${e.empNo}')" title="Score Skill Assessment Evaluation Form">📋 Skill Assessment</button>
-        </td>
+        <td style="padding: 14px 18px;">${statusText}</td>
       </tr>
     `;
   });
