@@ -881,6 +881,7 @@ async function resetAuthoritativeRecords(filterFn = null) {
   if (!filterFn) {
     // Reset all
     globalAssessmentRecords.clear();
+    activeExamSessions.clear();
     if (kvUrl && kvToken) {
       await syncWithCloudKv('SET', 'yokohama_records', {});
     }
@@ -894,6 +895,10 @@ async function resetAuthoritativeRecords(filterFn = null) {
   for (const [k, v] of Object.entries(currentRecords)) {
     if (filterFn(k, v)) {
       resetCount++;
+      activeExamSessions.delete(String(k).trim());
+      if (kvUrl && kvToken) {
+        syncWithCloudKv('DEL', `exam:${String(k).trim()}`).catch(() => {});
+      }
     } else {
       newRecords[k] = v;
     }
@@ -1254,11 +1259,15 @@ app.post('/api/exam/start', requireEmpAuth, async (req, res) => {
     const records = await getAuthoritativeRecords();
     const existingRecord = records[strEmpNo];
     if (existingRecord && existingRecord.isCompleted) {
-      return res.status(409).json({
-        success: false,
-        message: 'Assessment already completed. Contact administrator to reset your exam.',
-        record: existingRecord
-      });
+      if (user.role === 'SUPERADMIN' || req.body.forceRetake) {
+        await resetAuthoritativeRecords((k) => k === strEmpNo);
+      } else {
+        return res.status(409).json({
+          success: false,
+          message: 'Assessment already completed. Contact administrator to reset your exam.',
+          record: existingRecord
+        });
+      }
     }
 
     const targetLevel = req.body.targetLevel || emp.targetLevel || 'L';

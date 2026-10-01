@@ -209,6 +209,8 @@ function getAuthHeaders(extraHeaders = {}) {
     }
     const empTok = localStorage.getItem('yokohama_emp_token');
     if (empTok) headers['x-emp-token'] = empTok;
+    const adminTok = localStorage.getItem('yokohama_admin_token');
+    if (adminTok) headers['x-admin-token'] = adminTok;
   } catch (e) {}
   return headers;
 }
@@ -1210,10 +1212,13 @@ function showEmpExamsView() {
 
   const records = getStoredRecords();
   const rec = records[currentUser.empNo];
+  const trainingRecords = getStoredTrainingRecords();
+  const tr = trainingRecords[currentUser.empNo];
+  const isScheduled = tr && tr.status === 'SCHEDULED';
 
   const container = document.getElementById('empExamListContainer');
   
-  if (rec && rec.isCompleted) {
+  if (rec && rec.isCompleted && !isScheduled) {
     container.innerHTML = `
       <div class="info-item" style="border-left: 4px solid var(--success-color);">
         <div style="font-weight: 700; font-size: 1.1rem;">Level ${targetLevel} MCQ Assessment</div>
@@ -1224,10 +1229,10 @@ function showEmpExamsView() {
   } else {
     container.innerHTML = `
       <div class="info-item" style="border-left: 4px solid var(--primary-color);">
-        <div style="font-weight: 700; font-size: 1.1rem;">Level ${targetLevel} MCQ Assessment</div>
+        <div style="font-weight: 700; font-size: 1.1rem;">Level ${targetLevel} MCQ Assessment ${isScheduled ? '<span style="background:#DBEAFE;color:#1E40AF;font-size:0.75rem;padding:2px 8px;border-radius:4px;margin-left:8px;font-weight:700;">Scheduled Re-Assessment</span>' : ''}</div>
         <div style="font-size: 0.88rem; color: var(--text-muted); margin: 6px 0;">Questions: ${targetRules.numQuestions} | Time Allowed: 45 Mins | Passing: >${targetRules.passingPct}%</div>
-        <button class="btn-primary" style="max-width: 220px; margin-top: 12px;" onclick="startOrResumeExam()">
-          ${rec && rec.inProgress ? 'Resume Assessment ➔' : 'Start Assessment ➔'}
+        <button class="btn-primary" style="max-width: 260px; margin-top: 12px;" onclick="startOrResumeExam()">
+          ${rec && rec.inProgress ? 'Resume Assessment ➔' : (isScheduled ? 'Start Scheduled Assessment ➔' : 'Start Assessment ➔')}
         </button>
       </div>
     `;
@@ -1595,6 +1600,19 @@ async function submitAssessment() {
       const records = getStoredRecords();
       records[currentUser.empNo] = recordData;
       localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(records));
+
+      // If candidate was in SCHEDULED training status, mark training re-assessment completed
+      try {
+        const trainingRecords = getStoredTrainingRecords();
+        if (trainingRecords && trainingRecords[currentUser.empNo] && trainingRecords[currentUser.empNo].status === 'SCHEDULED') {
+          saveTrainingRecord(currentUser.empNo, {
+            status: 'COMPLETED',
+            completedAt: new Date().toISOString().split('T')[0],
+            reassessmentMark: recordData.totalMark !== undefined ? recordData.totalMark : (recordData.lMark || recordData.uMark || recordData.oMark || 0)
+          });
+        }
+      } catch (te) {}
+
       showResultView(recordData, true);
       return;
     } else {
@@ -4471,26 +4489,42 @@ function filterTrainingRequirements() {
     let actionHtml = '';
     if (item.status === 'PENDING') {
       actionHtml = `
-        <button class="btn-primary" style="padding: 4px 10px; font-size: 0.76rem; background: #0284C7; border-color: #0284C7;" onclick="toggleTrainingSchedule('${item.empNo}')">
-          Schedule
-        </button>
+        <div style="display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
+          <button class="btn-primary" style="padding: 4px 8px; font-size: 0.74rem; background: #0284C7; border-color: #0284C7;" onclick="toggleTrainingSchedule('${item.empNo}')" title="Schedule Training & Automatically Unlock Exam">
+            Schedule
+          </button>
+          <button class="btn-secondary" style="padding: 4px 6px; font-size: 0.72rem; background: #FEF2F2; color: #DC2626; border-color: #FCA5A5;" onclick="unlockEmployeeExam('${item.empNo}', '${item.name}')" title="Unlock candidate's exam so they can re-take assessment">
+            Unlock Exam
+          </button>
+        </div>
       `;
     } else if (item.status === 'SCHEDULED') {
       actionHtml = `
-        <div style="display: flex; gap: 4px; justify-content: center;">
-          <button class="btn-primary" style="padding: 4px 8px; font-size: 0.74rem; background: #059669; border-color: #059669;" onclick="toggleTrainingComplete('${item.empNo}')">
+        <div style="display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
+          <button class="btn-primary" style="padding: 4px 8px; font-size: 0.74rem; background: #059669; border-color: #059669;" onclick="toggleTrainingComplete('${item.empNo}')" title="Mark training completed">
             Done
           </button>
-          <button class="btn-secondary" style="padding: 4px 6px; font-size: 0.74rem;" onclick="resetTrainingStatus('${item.empNo}')">
+          <button class="btn-secondary" style="padding: 4px 6px; font-size: 0.72rem; background: #FEF2F2; color: #DC2626; border-color: #FCA5A5;" onclick="unlockEmployeeExam('${item.empNo}', '${item.name}')" title="Unlock candidate's exam so they can re-take assessment">
+            Unlock Exam
+          </button>
+          <button class="btn-primary" style="padding: 4px 6px; font-size: 0.72rem; background: #475569; border-color: #475569;" onclick="openOjtModalForEmployee('${item.empNo}')" title="Score OJT Practical Evaluation Form">
+            OJT
+          </button>
+          <button class="btn-secondary" style="padding: 4px 6px; font-size: 0.72rem;" onclick="resetTrainingStatus('${item.empNo}')" title="Cancel scheduled training">
             Cancel
           </button>
         </div>
       `;
     } else {
       actionHtml = `
-        <button class="btn-secondary" style="padding: 4px 8px; font-size: 0.74rem;" onclick="resetTrainingStatus('${item.empNo}')">
-          Re-open
-        </button>
+        <div style="display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
+          <button class="btn-secondary" style="padding: 4px 8px; font-size: 0.74rem;" onclick="resetTrainingStatus('${item.empNo}')" title="Re-open training status">
+            Re-open
+          </button>
+          <button class="btn-secondary" style="padding: 4px 6px; font-size: 0.72rem; background: #FEF2F2; color: #DC2626; border-color: #FCA5A5;" onclick="unlockEmployeeExam('${item.empNo}', '${item.name}')" title="Unlock candidate's exam so they can re-take assessment">
+            Unlock Exam
+          </button>
+        </div>
       `;
     }
 
@@ -4528,22 +4562,60 @@ function filterTrainingRequirements() {
   }).join('');
 }
 
-function toggleTrainingSchedule(empNo) {
+async function toggleTrainingSchedule(empNo) {
   const scheduledDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   saveTrainingRecord(empNo, { status: 'SCHEDULED', date: scheduledDate });
- showToast(`Training scheduled for Employee ${empNo} (Target Date: ${scheduledDate})`);
+
+  // Automatically unlock / reset employee's previous exam record on server and locally
+  const records = getStoredRecords();
+  if (records[empNo]) {
+    delete records[empNo];
+    localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(records));
+  }
+  try {
+    await fetch('/api/records/' + encodeURIComponent(empNo), {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+  } catch (e) {}
+
+  showToast(`Training scheduled & exam unlocked for Employee ${empNo} (Target Date: ${scheduledDate})`);
   renderTrainingRequirements();
+  if (typeof renderAdminTable === 'function') renderAdminTable('');
+}
+
+async function unlockEmployeeExam(empNo, empName) {
+  const nameStr = empName ? ` (${empName})` : '';
+  if (confirm(`Unlock assessment for Employee ${empNo}${nameStr}?\n\nThis will clear any previous completed status on the server and locally so the employee can start, re-test, and finish the examination.`)) {
+    const records = getStoredRecords();
+    if (records[empNo]) {
+      delete records[empNo];
+      localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(records));
+    }
+    try {
+      await fetch('/api/records/' + encodeURIComponent(empNo), {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        credentials: 'include'
+      });
+    } catch (e) {}
+
+    showToast(`Exam unlocked for Employee ${empNo}. The candidate can now start and finish their assessment.`);
+    renderTrainingRequirements();
+    if (typeof renderAdminTable === 'function') renderAdminTable('');
+  }
 }
 
 function toggleTrainingComplete(empNo) {
   saveTrainingRecord(empNo, { status: 'COMPLETED', completedAt: new Date().toISOString().split('T')[0] });
- showToast(`Training marked COMPLETED for Employee ${empNo}`);
+  showToast(`Training marked COMPLETED for Employee ${empNo}`);
   renderTrainingRequirements();
 }
 
 function resetTrainingStatus(empNo) {
   saveTrainingRecord(empNo, { status: 'PENDING', date: '' });
- showToast(`Training status reset to PENDING for Employee ${empNo}`);
+  showToast(`Training status reset to PENDING for Employee ${empNo}`);
   renderTrainingRequirements();
 }
 
@@ -4945,24 +5017,33 @@ function populateOjtEmployeeSwitcher() {
 }
 
 function hasOjtEvaluationAccess() {
-  // 1. Admin login check
+  // 1. Admin / Superadmin login check
   try {
     const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
     if (sessionStr) {
       const session = JSON.parse(sessionStr);
-      if (session && (session.role === 'admin' || session.username === 'admin')) {
+      if (session && session.role !== 'emp' && (
+        String(session.role || '').toLowerCase().includes('admin') ||
+        String(session.username || '').toLowerCase() === 'admin' ||
+        (session.email && !session.empNo)
+      )) {
         return true;
       }
     }
   } catch (e) {}
 
-  // 2. Section portal login check
-  if (sessionStorage.getItem('iluo_section_session')) {
+  // 2. Direct admin token check
+  if (localStorage.getItem('yokohama_admin_token')) {
     return true;
   }
 
-  // 3. OJT 5-Section login check (Safety, CI & TPM, Quality, Technical, HR)
-  if (sessionStorage.getItem('iluo_ojt_session')) {
+  // 3. Section portal login check
+  if (sessionStorage.getItem('iluo_section_session') || localStorage.getItem('iluo_section_session')) {
+    return true;
+  }
+
+  // 4. OJT 5-Section login check (Safety, CI & TPM, Quality, Technical, HR)
+  if (sessionStorage.getItem('iluo_ojt_session') || localStorage.getItem('iluo_ojt_session')) {
     return true;
   }
 
