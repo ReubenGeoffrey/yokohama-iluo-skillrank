@@ -607,7 +607,7 @@ function checkExistingSession() {
   if (sessionStr) {
     try {
       const session = JSON.parse(sessionStr);
-      if (session.role === 'admin') {
+      if (session.role === 'admin' || session.role === 'SUPERADMIN' || String(session.role || '').toLowerCase().includes('admin')) {
         updateUserBadge(session.name || 'Administrator');
       } else if (session.empNo) {
         const emp = EMPLOYEES.find(e => e.empNo === session.empNo);
@@ -660,9 +660,61 @@ function showView(viewId) {
   const target = document.getElementById(viewId);
   if (target) target.classList.add('active');
 
+  updateRoleNavBarVisibility(viewId);
+}
+
+function updateRoleNavBarVisibility(viewId) {
   const roleNav = document.getElementById('roleNavBar');
-  if (roleNav) {
+  if (!roleNav) return;
+
+  const tabHome = document.getElementById('tabRoleHome');
+  const tabSection = document.getElementById('tabRoleSection');
+  const tabAdmin = document.getElementById('tabRoleAdmin');
+  const tabDept = document.getElementById('tabRoleDept');
+  const tabOjt = document.getElementById('tabRoleOjt');
+  const tabEmp = document.getElementById('tabRoleEmp');
+
+  // Check if current user is an employee
+  let isEmpSession = false;
+  try {
+    const s = localStorage.getItem(STORAGE_KEY_SESSION);
+    if (s) {
+      const p = JSON.parse(s);
+      if (p && p.role === 'emp') isEmpSession = true;
+    }
+  } catch (e) {}
+
+  const isEmpView = (
+    viewId === 'viewEmpDashboard' ||
+    viewId === 'viewEmpAssessment' ||
+    viewId === 'viewEmpExams' ||
+    viewId === 'viewEmpProfile' ||
+    viewId === 'viewResult'
+  );
+
+  const hash = window.location.hash || '';
+  const isEmpRoute = hash.startsWith('#/employee') || hash.startsWith('#/exam');
+  const isInsideEmployee = (isEmpSession || (currentUser && currentUser.empNo)) && (isEmpView || isEmpRoute);
+
+  if (isInsideEmployee) {
+    // Inside employee does NOT show Home, Section Portal, Admin, Department, OJT Center
+    if (tabHome) tabHome.style.display = 'none';
+    if (tabSection) tabSection.style.display = 'none';
+    if (tabAdmin) tabAdmin.style.display = 'none';
+    if (tabDept) tabDept.style.display = 'none';
+    if (tabOjt) tabOjt.style.display = 'none';
+    if (tabEmp) tabEmp.style.display = 'none';
+    roleNav.style.display = 'none';
+  } else {
+    // Show role nav and all tabs when outside employee portal or logged out
     roleNav.style.display = 'flex';
+    if (tabHome) tabHome.style.display = 'inline-flex';
+    if (tabSection) tabSection.style.display = 'inline-flex';
+    if (tabAdmin) tabAdmin.style.display = 'inline-flex';
+    if (tabDept) tabDept.style.display = 'inline-flex';
+    if (tabOjt) tabOjt.style.display = 'inline-flex';
+    if (tabEmp) tabEmp.style.display = 'inline-flex';
+
     const tabMap = {
       'viewPublicLanding': 'tabRoleHome',
       'viewSectionPortal': 'tabRoleSection',
@@ -5677,6 +5729,19 @@ async function downloadCurrentOjtDocx() {
 function switchRolePortal(role) {
   if (role === 'home' || role === 'landing') {
     navigateTo('/');
+    return;
+  }
+
+  // Prevent active employee session from jumping to other portals without signing out
+  const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
+  let isEmp = false;
+  try {
+    const s = sessionStr ? JSON.parse(sessionStr) : null;
+    if (s && s.role === 'emp') isEmp = true;
+  } catch (e) {}
+
+  if (isEmp && (currentUser && currentUser.empNo) && role !== 'employee') {
+    showToast('Please sign out from Employee session before accessing other portals.');
     return;
   }
 
