@@ -6075,15 +6075,15 @@ function renderSectionEmployeesTable(emps) {
     }
 
     // OJT marks & status
-    let ojtText = '<span style="color: #64748B; font-size: 0.82rem; font-weight: 500;">Pending</span>';
+    let ojtText = `<span style="color: #64748B; font-size: 0.82rem; font-weight: 500; cursor: pointer;" onclick="openOjtModalForEmployee('${e.empNo}')" title="Click to score OJT evaluation">Pending</span>`;
     let isOjtPass = false;
     if (ojt && ojt.totalScore !== undefined) {
       const maxScore = ojt.maxScore || 50;
       isOjtPass = ojt.totalScore >= Math.round(maxScore * 0.7);
-      ojtText = `<span style="font-weight: 700; color: ${isOjtPass ? '#059669' : '#DC2626'}; font-size: 0.88rem; white-space: nowrap;">${ojt.totalScore} / ${maxScore} Marks</span>`;
+      ojtText = `<span style="font-weight: 700; color: ${isOjtPass ? '#059669' : '#DC2626'}; font-size: 0.88rem; white-space: nowrap; cursor: pointer;" onclick="openOjtModalForEmployee('${e.empNo}')" title="Click to view/edit OJT evaluation">${ojt.totalScore} / ${maxScore} Marks</span>`;
     } else if (ojt && ojt.isCompleted) {
       isOjtPass = true;
-      ojtText = `<span style="font-weight: 700; color: #059669; font-size: 0.88rem; white-space: nowrap;">${ojt.totalScore || 0} / ${ojt.totalPossibleMarks || 20} Marks</span>`;
+      ojtText = `<span style="font-weight: 700; color: #059669; font-size: 0.88rem; white-space: nowrap; cursor: pointer;" onclick="openOjtModalForEmployee('${e.empNo}')" title="Click to view/edit OJT evaluation">${ojt.totalScore || 0} / ${ojt.totalPossibleMarks || 20} Marks</span>`;
     }
 
     // Overall Status
@@ -6104,11 +6104,7 @@ function renderSectionEmployeesTable(emps) {
         <td style="padding: 14px 18px;">${ojtText}</td>
         <td style="padding: 14px 18px;">${overallStatus}</td>
         <td style="padding: 14px 18px; text-align: center;">
-          <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
-            <button class="btn-sm" style="background: #059669; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 0.78rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(5,150,105,0.2);" onclick="openOjtModalForEmployee('${e.empNo}')" title="Score OJT Evaluation Form">📋 OJT</button>
-            <button class="btn-sm" style="background: #005B9E; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 0.78rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(0,91,158,0.2);" onclick="downloadEmployeeDocx('${e.empNo}')" title="Download Official DOCX Report">📄 DOCX</button>
-            <button class="btn-sm" style="background: #DC2626; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 0.78rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(220,38,38,0.2);" onclick="downloadEmployeePDF('${e.empNo}')" title="Download Official PDF Report">📑 PDF</button>
-          </div>
+          <button class="btn-sm" style="background: #059669; color: white; border: none; padding: 6px 14px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; box-shadow: 0 1px 3px rgba(5,150,105,0.2);" onclick="openOjtModalForEmployee('${e.empNo}')" title="Score OJT Practical Evaluation Form">📋 Score OJT</button>
         </td>
       </tr>
     `;
