@@ -782,35 +782,35 @@
           <div class="login-body" style="padding: 28px 24px;">
             <!-- 5 Interactive Section Cards -->
             <div class="ojt-sections-grid">
-              <button type="button" class="ojt-section-btn active" id="ojtSecBtnSafety" onclick="selectOjtLoginSection('Safety')" ondblclick="quickEnterOjtSection('Safety')">
+              <button type="button" class="ojt-section-btn active" id="ojtSecBtnSafety" onclick="selectOjtLoginSection('Safety')">
                 <div class="ojt-sec-icon">🦺</div>
                 <div class="ojt-sec-title">Safety</div>
                 <div class="ojt-sec-desc">Hazard identification, PPE &amp; emergency protocols</div>
-                <div class="ojt-sec-action" onclick="quickEnterOjtSection('Safety')">Enter Section &rarr;</div>
+                <div class="ojt-sec-action">Select Section &rarr;</div>
               </button>
-              <button type="button" class="ojt-section-btn" id="ojtSecBtnCi" onclick="selectOjtLoginSection('CI & TPM')" ondblclick="quickEnterOjtSection('CI & TPM')">
+              <button type="button" class="ojt-section-btn" id="ojtSecBtnCi" onclick="selectOjtLoginSection('CI & TPM')">
                 <div class="ojt-sec-icon">⚙️</div>
-                <div class="ojt-sec-title">CI &amp; CPM</div>
+                <div class="ojt-sec-title">CI &amp; TPM</div>
                 <div class="ojt-sec-desc">Continuous improvement, 5S &amp; autonomous maintenance</div>
-                <div class="ojt-sec-action" onclick="quickEnterOjtSection('CI & TPM')">Enter Section &rarr;</div>
+                <div class="ojt-sec-action">Select Section &rarr;</div>
               </button>
-              <button type="button" class="ojt-section-btn" id="ojtSecBtnQuality" onclick="selectOjtLoginSection('Quality')" ondblclick="quickEnterOjtSection('Quality')">
+              <button type="button" class="ojt-section-btn" id="ojtSecBtnQuality" onclick="selectOjtLoginSection('Quality')">
                 <div class="ojt-sec-icon">🎯</div>
                 <div class="ojt-sec-title">Quality</div>
                 <div class="ojt-sec-desc">Visual defect detection, standards &amp; compliance</div>
-                <div class="ojt-sec-action" onclick="quickEnterOjtSection('Quality')">Enter Section &rarr;</div>
+                <div class="ojt-sec-action">Select Section &rarr;</div>
               </button>
-              <button type="button" class="ojt-section-btn" id="ojtSecBtnTechnical" onclick="selectOjtLoginSection('Technical')" ondblclick="quickEnterOjtSection('Technical')">
+              <button type="button" class="ojt-section-btn" id="ojtSecBtnTechnical" onclick="selectOjtLoginSection('Technical')">
                 <div class="ojt-sec-icon">🔧</div>
                 <div class="ojt-sec-title">Technical</div>
                 <div class="ojt-sec-desc">Machine operation, parameters &amp; tooling mastery</div>
-                <div class="ojt-sec-action" onclick="quickEnterOjtSection('Technical')">Enter Section &rarr;</div>
+                <div class="ojt-sec-action">Select Section &rarr;</div>
               </button>
-              <button type="button" class="ojt-section-btn" id="ojtSecBtnHr" onclick="selectOjtLoginSection('HR')" ondblclick="quickEnterOjtSection('HR')">
+              <button type="button" class="ojt-section-btn" id="ojtSecBtnHr" onclick="selectOjtLoginSection('HR')">
                 <div class="ojt-sec-icon">👥</div>
                 <div class="ojt-sec-title">HR</div>
                 <div class="ojt-sec-desc">Competency tracking &amp; official skill authorization</div>
-                <div class="ojt-sec-action" onclick="quickEnterOjtSection('HR')">Enter Section &rarr;</div>
+                <div class="ojt-sec-action">Select Section &rarr;</div>
               </button>
             </div>
 
@@ -825,11 +825,14 @@
               </div>
               <div class="form-group" style="margin-bottom: 18px;">
                 <label for="ojtSectionPassword">Section Evaluator Password</label>
-                <input type="password" id="ojtSectionPassword" class="form-control" placeholder="Enter password (default: ojt123)" value="ojt123" required>
+                <input type="password" id="ojtSectionPassword" class="form-control" placeholder="Enter evaluator password" value="" autocomplete="current-password" required>
               </div>
               <button type="submit" class="btn-primary" id="btnSubmitOjtLogin" style="background: linear-gradient(135deg, #059669 0%, #003D6B 100%); width: 100%; padding: 12px; font-weight: 700;">
                 Sign In to Safety Skill Assessment Center
               </button>
+              <div style="font-size: 0.78rem; color: #64748B; margin-top: 10px; text-align: center;">
+                Evaluator Passwords: <code>safety123</code> &bull; <code>ci123</code> &bull; <code>quality123</code> &bull; <code>tech123</code> &bull; <code>hr123</code>
+              </div>
             </form>
             <div style="text-align: center; margin-top: 16px;">
               <a href="javascript:void(0)" onclick="navigateTo('/')" style="color: #059669; font-weight: 600; font-size: 0.88rem; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
@@ -848,7 +851,7 @@
             <div style="display: flex; align-items: center; gap: 10px;">
               <span style="font-size: 1.8rem;" id="ojtActiveSectionIcon">🦺</span>
               <div>
-                <h2 style="margin: 0; color: var(--primary-dark); font-size: 1.4rem;" id="ojtActiveSectionTitle">Safety Section OJT Center</h2>
+                <h2 style="margin: 0; color: var(--primary-dark); font-size: 1.4rem;" id="ojtActiveSectionTitle">Safety Section Skill Assessment Center</h2>
                 <div style="font-size: 0.85rem; color: var(--text-muted);">Practical On-the-Job Training &bull; Quality Control Department</div>
               </div>
             </div>
@@ -2393,6 +2396,6 @@
   <script src="data.js?v=48.0"></script>
   <script src="report_html_generator.js?v=48.0"></script>
   <script src="seed_data.js?v=48.0"></script>
-  <script src="app.js?v=53.0"></script>
+  <script src="app.js?v=54.0"></script>
 </body>
 </html>

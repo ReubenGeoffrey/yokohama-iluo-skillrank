@@ -386,13 +386,17 @@ function handleRoute() {
     const ojtSession = sessionStorage.getItem('iluo_ojt_session');
     const loginWrapper = document.getElementById('ojtLoginWrapper');
     const dashWrapper = document.getElementById('ojtDashboardWrapper');
-    if (ojtSession) {
+    // If arriving at /ojt-login or no active session, always require actual password login
+    if (hash === '/ojt-login' || !ojtSession) {
+      if (loginWrapper) loginWrapper.style.display = 'block';
+      if (dashWrapper) dashWrapper.style.display = 'none';
+      const pwdInput = document.getElementById('ojtSectionPassword');
+      if (pwdInput) pwdInput.value = '';
+      selectOjtLoginSection(ojtSession || 'Safety');
+    } else {
       if (loginWrapper) loginWrapper.style.display = 'none';
       if (dashWrapper) dashWrapper.style.display = 'block';
       renderOjtDashboard(ojtSession);
-    } else {
-      if (loginWrapper) loginWrapper.style.display = 'block';
-      if (dashWrapper) dashWrapper.style.display = 'none';
     }
     return;
   }
@@ -5826,6 +5830,13 @@ function selectOjtLoginSection(secName) {
   });
   const activeBtn = document.getElementById(mapBtn[secName]);
   if (activeBtn) activeBtn.classList.add('active');
+
+  // Reset password field to empty so evaluator must actually type their password
+  if (pwdInput) {
+    pwdInput.value = '';
+    pwdInput.placeholder = `Enter ${secName} evaluator password`;
+    pwdInput.focus();
+  }
 }
 
 function handleOjtSectionLogin(e) {
@@ -5835,17 +5846,27 @@ function handleOjtSectionLogin(e) {
   const pwdInput = document.getElementById('ojtSectionPassword');
   const pwd = pwdInput ? pwdInput.value.trim().toLowerCase() : '';
 
+  if (!pwd) {
+    showToast(`Please enter the password for ${section} Evaluator.`);
+    if (pwdInput) pwdInput.focus();
+    return;
+  }
+
   const validPasswords = {
     'Safety': ['safety123', 'ojt123'],
-    'CI & TPM': ['ci123', 'cpm123', 'ojt123'],
+    'CI & TPM': ['ci123', 'cpm123', 'citpm123', 'ojt123'],
     'Quality': ['quality123', 'ojt123'],
     'Technical': ['tech123', 'technical123', 'ojt123'],
     'HR': ['hr123', 'ojt123']
   };
 
   const allowed = validPasswords[section] || ['ojt123'];
-  if (pwd && !allowed.includes(pwd)) {
-    showToast(`Invalid password for ${section} Evaluator.`);
+  if (!allowed.includes(pwd)) {
+    showToast(`Invalid password for ${section} Evaluator. Please try again.`);
+    if (pwdInput) {
+      pwdInput.value = '';
+      pwdInput.focus();
+    }
     return;
   }
 
@@ -5861,22 +5882,22 @@ function handleOjtSectionLogin(e) {
 }
 
 function quickEnterOjtSection(secName) {
+  // No auto-login: selecting section only
   selectOjtLoginSection(secName);
-  sessionStorage.setItem('iluo_ojt_session', secName);
-  const loginWrapper = document.getElementById('ojtLoginWrapper');
-  const dashWrapper = document.getElementById('ojtDashboardWrapper');
-  if (loginWrapper) loginWrapper.style.display = 'none';
-  if (dashWrapper) dashWrapper.style.display = 'block';
-  renderOjtDashboard(secName);
-  showToast(`Signed in to ${secName} Skill Assessment Center`);
 }
 
 function ojtLogout() {
   sessionStorage.removeItem('iluo_ojt_session');
+  try { localStorage.removeItem('iluo_ojt_session'); } catch (e) {}
   const loginWrapper = document.getElementById('ojtLoginWrapper');
   const dashWrapper = document.getElementById('ojtDashboardWrapper');
   if (loginWrapper) loginWrapper.style.display = 'block';
   if (dashWrapper) dashWrapper.style.display = 'none';
+  const pwdInput = document.getElementById('ojtSectionPassword');
+  if (pwdInput) {
+    pwdInput.value = '';
+    pwdInput.focus();
+  }
   showToast('Signed out of Skill Assessment Center');
 }
 
