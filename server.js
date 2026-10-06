@@ -34,10 +34,23 @@ app.use((req, res, next) => {
 app.use('/QC_templates', express.static(path.join(__dirname, 'QC_templates')));
 app.use(express.static(path.join(__dirname), { dotfiles: 'ignore' }));
 
-// Explicit favicon handler (prevents 120KB HTML response)
-app.get('/favicon.ico', (req, res) => {
+// Explicit logo & favicon handlers
+app.get(['/atg_logo.png', '/assets/atg_logo.png'], (req, res) => {
   res.setHeader('Cache-Control', 'public, max-age=86400');
-  res.sendFile(path.join(__dirname, 'yokohama_logo.png'));
+  res.setHeader('Content-Type', 'image/png');
+  const p = fs.existsSync(path.join(__dirname, 'atg_logo.png'))
+    ? path.join(__dirname, 'atg_logo.png')
+    : path.join(__dirname, 'yokohama_logo.png');
+  res.sendFile(p);
+});
+
+app.get(['/favicon.ico', '/favicon.png'], (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.setHeader('Content-Type', 'image/png');
+  const p = fs.existsSync(path.join(__dirname, 'atg_logo.png'))
+    ? path.join(__dirname, 'atg_logo.png')
+    : path.join(__dirname, 'yokohama_logo.png');
+  res.sendFile(p);
 });
 
 // Explicit OJT Official Templates script handler
