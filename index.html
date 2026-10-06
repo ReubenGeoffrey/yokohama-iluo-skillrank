@@ -3,18 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Yokohama ILUO Skill Assessment Portal | Tire Building QA</title>
-  <link rel="icon" type="image/png" href="yokohama_logo.png">
-  <link rel="stylesheet" href="styles.css?v=47.0">
+  <title>Yokohama ATG ILUO Skill Assessment Portal | QA System</title>
+  <link rel="icon" type="image/png" href="atg_logo.png">
+  <link rel="apple-touch-icon" href="atg_logo.png">
+  <link rel="stylesheet" href="styles.css?v=48.0">
 </head>
 <body>
 
   <!-- Top Navigation Header -->
   <header class="navbar">
     <div class="brand-section" style="cursor: pointer;" onclick="navigateTo('/')" title="Return to Portal Hub">
-      <div class="brand-logo">
+      <div class="brand-logo" style="display: flex; align-items: center; gap: 10px;">
+        <img src="atg_logo.png" alt="Yokohama ATG Logo" class="brand-app-logo" style="width: 38px; height: 38px; border-radius: 8px; object-fit: contain; background: #ffffff; padding: 1px; box-shadow: 0 2px 6px rgba(0,0,0,0.25); flex-shrink: 0;">
         <span>YOKOHAMA</span>
-        <span class="brand-badge">ATC TIRES</span>
+        <span class="brand-badge">ATG TIRES</span>
       </div>
       <div class="system-title" id="navbarSystemTitle">ILUO QA Skill Assessment &amp; Analytics Portal</div>
     </div>
@@ -55,8 +57,9 @@
 
     <!-- VIEW 0: Role-Based Portal Hub Landing (ui.pptx) -->
     <section class="view-section active" id="viewPublicLanding">
-      <div class="landing-hero-simple">
-        <div class="landing-eyebrow">YOKOHAMA ATC TIRES</div>
+      <div class="landing-hero-simple" style="display: flex; flex-direction: column; align-items: center;">
+        <img src="atg_logo.png" alt="Yokohama ATG Logo" style="width: 86px; height: 86px; border-radius: 20px; margin-bottom: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); object-fit: contain; background: white; border: 1px solid rgba(0,0,0,0.06);">
+        <div class="landing-eyebrow">YOKOHAMA ATG TIRES</div>
         <h1 class="landing-title">QA Skill Assessment Portal</h1>
       </div>
 
@@ -113,6 +116,7 @@
       <div class="login-wrapper">
         <div class="login-card">
           <div class="login-header">
+            <img src="atg_logo.png" alt="Yokohama ATG Logo" style="width: 58px; height: 58px; border-radius: 12px; margin-bottom: 10px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
             <h2>Employee Portal Login</h2>
             <p>Enter your Employee ID &amp; Password to access your assessments and profile</p>
           </div>
@@ -144,6 +148,7 @@
       <div class="login-wrapper">
         <div class="login-card" style="border: 2px solid #0F172A;">
           <div class="login-header" style="background: linear-gradient(135deg, #0F172A 0%, #003D6B 100%);">
+            <img src="atg_logo.png" alt="Yokohama ATG Logo" style="width: 58px; height: 58px; border-radius: 12px; margin-bottom: 10px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
             <div style="font-size: 0.75rem; background: var(--accent-red); color: white; display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 700; margin-bottom: 8px;">ADMIN CONTROL CENTER</div>
             <h2>Admin Sign In</h2>
             <p>Enter authorized credentials to access Control Center</p>
@@ -506,6 +511,7 @@
       <div class="login-wrapper" id="sectionLoginWrapper">
         <div class="login-card" style="border-top: 4px solid #0284C7;">
           <div class="login-header" style="background: linear-gradient(135deg, #0284C7 0%, #003D6B 100%);">
+            <img src="atg_logo.png" alt="Yokohama ATG Logo" style="width: 58px; height: 58px; border-radius: 12px; margin-bottom: 10px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
             <h2>Section Portal Sign In</h2>
             <p>Select your QA Section to access employee roster &amp; ILUO metrics</p>
           </div>
@@ -647,6 +653,7 @@
       <div class="login-wrapper" id="deptLoginWrapper">
         <div class="login-card" style="border-top: 4px solid #8B5CF6;">
           <div class="login-header" style="background: linear-gradient(135deg, #6D28D9 0%, #003D6B 100%);">
+            <img src="atg_logo.png" alt="Yokohama ATG Logo" style="width: 58px; height: 58px; border-radius: 12px; margin-bottom: 10px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
             <h2>Department / HOD Sign In</h2>
             <p>Quality Assurance Department &bull; Executive ILUO Overview</p>
           </div>
@@ -774,6 +781,7 @@
       <div class="login-wrapper" id="ojtLoginWrapper" style="max-width: 920px; margin: 30px auto;">
         <div class="login-card" style="border-top: 4px solid #059669; max-width: 100%;">
           <div class="login-header" style="background: linear-gradient(135deg, #059669 0%, #003D6B 100%);">
+            <img src="atg_logo.png" alt="Yokohama ATG Logo" style="width: 58px; height: 58px; border-radius: 12px; margin-bottom: 10px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
             <h2>Skill Assessment Portal Sign In</h2>
             <p>Select your Evaluation Section below to access Practical Skill evaluations &amp; checkpoints</p>
           </div>
@@ -951,6 +959,10 @@
 
         <!-- Sidebar Navigation -->
         <aside class="admin-sidebar">
+          <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin-bottom: 12px; background: rgba(255,255,255,0.08); border-radius: 8px;">
+            <img src="atg_logo.png" alt="Yokohama ATG Logo" style="width: 32px; height: 32px; border-radius: 6px; background: white; object-fit: contain; flex-shrink: 0;">
+            <div style="font-size: 0.85rem; font-weight: 800; color: white; letter-spacing: 0.5px;">YOKOHAMA ATG</div>
+          </div>
           <div class="sidebar-title">CONTROL CENTER</div>
           <a class="sidebar-link" id="navCtrlDashboard" onclick="navigateTo('/control-center/dashboard')">
             <span class="sidebar-icon">
