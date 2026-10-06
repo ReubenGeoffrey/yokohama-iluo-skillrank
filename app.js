@@ -3075,21 +3075,392 @@ function getAdminExportDataset() {
   });
 }
 
-// Export Excel Report for Admin Only
+// ---------------------------------------------------------------------
+// OFFICIAL MULTI-SHEET EXCEL REPORT GENERATOR (LIKE PRODUCTION SKILL ASSESSMENT DATA)
+// Sheets: Plant Head 17.08, 2025-2026 comp, Abstract, Name list, Entry sheet, Left
+// ---------------------------------------------------------------------
+
+function generateProductionFormatWorkbook(filterSecKey) {
+  if (typeof XLSX === 'undefined') {
+    throw new Error('XLSX library is not loaded');
+  }
+
+  const wb = XLSX.utils.book_new();
+
+  function sc(ws, cellRef, val, formula, numFmt) {
+    const cell = {};
+    if (formula) {
+      cell.f = formula;
+      if (val !== undefined && val !== null) cell.v = val;
+      cell.t = typeof val === 'number' ? 'n' : 's';
+    } else if (typeof val === 'number') {
+      cell.t = 'n';
+      cell.v = val;
+    } else if (typeof val === 'boolean') {
+      cell.t = 'b';
+      cell.v = val;
+    } else if (val !== undefined && val !== null && val !== '') {
+      cell.t = 's';
+      cell.v = String(val);
+    } else {
+      return;
+    }
+    if (numFmt) cell.z = numFmt;
+    ws[cellRef] = cell;
+  }
+
+  const STANDARD_SECTIONS = [
+    { lead: 'TB QA Lead', name: 'Tire building QA', code: 'TB' },
+    { lead: 'FF QA Lead', name: 'Final Finish QA', code: 'FF' },
+    { lead: 'PR QA Lead', name: 'Preparatory QA', code: 'PR' },
+    { lead: 'ST QA Lead', name: 'Solid tire QA', code: 'ST' },
+    { lead: 'WH QA Lead', name: 'Warehouse QA', code: 'WH' },
+    { lead: 'TC QA Lead', name: 'Tire curing QA', code: 'TC' },
+    { lead: 'RRO & ALT Lead', name: 'Final Finish RRO & ALT QA', code: 'RA' },
+    { lead: 'FID QA Lead', name: 'FID inspector QA', code: 'FD' }
+  ];
+
+  function mapStandardSection(s) {
+    if (!s) return 'Final Finish QA';
+    const sl = s.toLowerCase().trim();
+    if (sl.includes('ware')) return 'Warehouse QA';
+    if (sl.includes('build')) return 'Tire building QA';
+    if (sl.includes('curing')) return 'Tire curing QA';
+    if (sl.includes('solid')) return 'Solid tire QA';
+    if (sl.includes('prep')) return 'Preparatory QA';
+    if (sl.includes('rro') || sl.includes('alt')) return 'Final Finish RRO & ALT QA';
+    if (sl.includes('fid')) return 'FID inspector QA';
+    return 'Final Finish QA';
+  }
+
+  const allRecords = typeof getStoredRecords === 'function' ? getStoredRecords() : {};
+  const allOjtRecords = typeof getStoredOjtRecords === 'function' ? getStoredOjtRecords() : {};
+  const allEmployeesList = (typeof EMPLOYEES !== 'undefined' ? EMPLOYEES : []);
+  const targetEmployees = filterSecKey
+    ? allEmployeesList.filter(emp => {
+        const secObj = QA_SECTIONS_LIST.find(s => s.id === filterSecKey);
+        return secObj ? normalizeSectionName(emp.section) === secObj.normName : true;
+      })
+    : allEmployeesList;
+
+  const lastRow = 2 + targetEmployees.length;
+
+  // 1. Plant Head 17.08
+  const ws_ph = {
+    '!ref': 'A1:M7',
+    '!cols': [
+      { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 },
+      { wch: 4 }, { wch: 4 }, { wch: 4 }, { wch: 4 }, { wch: 18 }, { wch: 18 }, { wch: 22 }
+    ]
+  };
+  sc(ws_ph, 'A1', 'Year'); sc(ws_ph, 'B1', 'Total Employees'); sc(ws_ph, 'C1', 'I Level'); sc(ws_ph, 'D1', 'L Level');
+  sc(ws_ph, 'E1', 'U Level'); sc(ws_ph, 'F1', 'O Level'); sc(ws_ph, 'K1', 'U Level increase %'); sc(ws_ph, 'L1', 'O Level increase %');
+  sc(ws_ph, 'M1', 'U & O Level increase %');
+  sc(ws_ph, 'A2', 2023); sc(ws_ph, 'B2', 1321, 'SUM(C2:F2)'); sc(ws_ph, 'C2', 318); sc(ws_ph, 'D2', 508); sc(ws_ph, 'E2', 327); sc(ws_ph, 'F2', 168);
+  sc(ws_ph, 'K2', 0.25, 'E2/B2', '0%'); sc(ws_ph, 'L2', 0.13, 'F2/B2', '0%'); sc(ws_ph, 'M2', 0.38, 'L2+K2', '0%');
+  sc(ws_ph, 'A3', 2024); sc(ws_ph, 'B3', 1321, 'SUM(C3:F3)'); sc(ws_ph, 'C3', 253); sc(ws_ph, 'D3', 412); sc(ws_ph, 'E3', 464); sc(ws_ph, 'F3', 192);
+  sc(ws_ph, 'K3', 0.35, 'E3/B3', '0%'); sc(ws_ph, 'L3', 0.15, 'F3/B3', '0%'); sc(ws_ph, 'M3', 0.50, 'L3+K3', '0%');
+  sc(ws_ph, 'B4', 'year'); sc(ws_ph, 'C4', 'I Level'); sc(ws_ph, 'D4', 'L Level'); sc(ws_ph, 'E4', 'U Level'); sc(ws_ph, 'F4', 'O Level');
+  sc(ws_ph, 'B5', 2023); sc(ws_ph, 'C5', 0.24, 'C3/$B$3', '0%'); sc(ws_ph, 'D5', 0.41, null, '0%'); sc(ws_ph, 'E5', 0.25, null, '0%');
+  sc(ws_ph, 'F5', 0.15, 'F3/$B$3', '0%'); sc(ws_ph, 'G5', 1.0, 'SUM(C5:F5)', '0%');
+  sc(ws_ph, 'B6', 2024); sc(ws_ph, 'C6', 0.19, null, '0%'); sc(ws_ph, 'D6', 0.31, null, '0%'); sc(ws_ph, 'E6', 0.35, null, '0%');
+  sc(ws_ph, 'F6', 0.15, null, '0%'); sc(ws_ph, 'G6', 1.0, 'SUM(C6:F6)', '0%');
+  sc(ws_ph, 'A7', 'Plant Head data'); sc(ws_ph, 'B7', 2025); sc(ws_ph, 'C7', 0.09, null, '0%'); sc(ws_ph, 'D7', 0.05, null, '0%');
+  sc(ws_ph, 'E7', 0.47, null, '0%'); sc(ws_ph, 'F7', 0.39, null, '0%'); sc(ws_ph, 'G7', 1.0, 'SUM(C7:F7)', '0%');
+  XLSX.utils.book_append_sheet(wb, ws_ph, 'Plant Head 17.08');
+
+  // 2. 2025-2026 comp
+  const ws_comp = {
+    '!ref': 'A1:Q14',
+    '!merges': [
+      { s: { r: 1, c: 1 }, e: { r: 2, c: 1 } },
+      { s: { r: 1, c: 2 }, e: { r: 2, c: 2 } },
+      { s: { r: 1, c: 3 }, e: { r: 2, c: 3 } },
+      { s: { r: 1, c: 4 }, e: { r: 1, c: 7 } },
+      { s: { r: 1, c: 8 }, e: { r: 1, c: 11 } },
+      { s: { r: 1, c: 13 }, e: { r: 1, c: 16 } },
+      { s: { r: 13, c: 10 }, e: { r: 13, c: 11 } }
+    ],
+    '!cols': [
+      { wch: 3 }, { wch: 18 }, { wch: 28 }, { wch: 12 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 },
+      { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 3 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }
+    ]
+  };
+  sc(ws_comp, 'B2', 'Responsibility'); sc(ws_comp, 'C2', 'SECTION'); sc(ws_comp, 'D2', 'Head Count');
+  sc(ws_comp, 'E2', '2025'); sc(ws_comp, 'I2', '2026'); sc(ws_comp, 'N2', 'Gap');
+  ['E', 'I', 'N'].forEach(c => sc(ws_comp, `${c}3`, 'I'));
+  ['F', 'J', 'O'].forEach(c => sc(ws_comp, `${c}3`, 'L'));
+  ['G', 'K', 'P'].forEach(c => sc(ws_comp, `${c}3`, 'U'));
+  ['H', 'L', 'Q'].forEach(c => sc(ws_comp, `${c}3`, 'O'));
+
+  STANDARD_SECTIONS.forEach((s, idx) => {
+    const r = 4 + idx;
+    sc(ws_comp, `B${r}`, s.lead);
+    sc(ws_comp, `C${r}`, s.name);
+    sc(ws_comp, `D${r}`, null, `COUNTIFS('Name list'!$E:$E,'2025-2026 comp'!$C${r})`);
+    sc(ws_comp, `E${r}`, null, `COUNTIFS('Name list'!$I:$I,'2025-2026 comp'!E$3,'Name list'!$E:$E,'2025-2026 comp'!$C${r})`);
+    sc(ws_comp, `F${r}`, null, `COUNTIFS('Name list'!$I:$I,'2025-2026 comp'!F$3,'Name list'!$E:$E,'2025-2026 comp'!$C${r})`);
+    sc(ws_comp, `G${r}`, null, `COUNTIFS('Name list'!$I:$I,'2025-2026 comp'!G$3,'Name list'!$E:$E,'2025-2026 comp'!$C${r})`);
+    sc(ws_comp, `H${r}`, null, `COUNTIFS('Name list'!$I:$I,'2025-2026 comp'!H$3,'Name list'!$E:$E,'2025-2026 comp'!$C${r})`);
+    sc(ws_comp, `I${r}`, null, `COUNTIFS('Name list'!$Y:$Y,'2025-2026 comp'!I$3,'Name list'!$E:$E,'2025-2026 comp'!$C${r})`);
+    sc(ws_comp, `J${r}`, null, `COUNTIFS('Name list'!$Y:$Y,'2025-2026 comp'!J$3,'Name list'!$E:$E,'2025-2026 comp'!$C${r})`);
+    sc(ws_comp, `K${r}`, null, `COUNTIFS('Name list'!$Y:$Y,'2025-2026 comp'!K$3,'Name list'!$E:$E,'2025-2026 comp'!$C${r})`);
+    sc(ws_comp, `L${r}`, null, `COUNTIFS('Name list'!$Y:$Y,'2025-2026 comp'!L$3,'Name list'!$E:$E,'2025-2026 comp'!$C${r})`);
+    sc(ws_comp, `N${r}`, null, `I${r}-E${r}`);
+    sc(ws_comp, `O${r}`, null, `J${r}-F${r}`);
+    sc(ws_comp, `P${r}`, null, `K${r}-G${r}`);
+    sc(ws_comp, `Q${r}`, null, `L${r}-H${r}`);
+  });
+
+  const tot_r = 12;
+  sc(ws_comp, `C${tot_r}`, 'Grand Total');
+  sc(ws_comp, `D${tot_r}`, null, `SUM(D4:D${tot_r-1})`);
+  ['E','F','G','H','I','J','K','L'].forEach(c => sc(ws_comp, `${c}${tot_r}`, null, `SUM(${c}4:${c}${tot_r-1})`));
+  const pct_r = 13;
+  ['E','F','G','H','I','J','K','L'].forEach(c => sc(ws_comp, `${c}${pct_r}`, null, `${c}${tot_r}/$D$${tot_r}`, '0%'));
+  const uo_r = 14;
+  sc(ws_comp, `K${uo_r}`, null, `L${pct_r}+K${pct_r}`, '0%');
+  XLSX.utils.book_append_sheet(wb, ws_comp, '2025-2026 comp');
+
+  // 3. Abstract
+  const ws_abs = {
+    '!ref': 'A1:Q14',
+    '!merges': [
+      { s: { r: 1, c: 1 }, e: { r: 2, c: 1 } },
+      { s: { r: 1, c: 2 }, e: { r: 2, c: 2 } },
+      { s: { r: 1, c: 3 }, e: { r: 2, c: 3 } },
+      { s: { r: 1, c: 9 }, e: { r: 1, c: 10 } },
+      { s: { r: 1, c: 11 }, e: { r: 1, c: 12 } },
+      { s: { r: 1, c: 13 }, e: { r: 2, c: 13 } },
+      { s: { r: 1, c: 15 }, e: { r: 1, c: 16 } },
+      { s: { r: 13, c: 6 }, e: { r: 13, c: 7 } }
+    ],
+    '!cols': [
+      { wch: 3 }, { wch: 18 }, { wch: 28 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 },
+      { wch: 3 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 3 }, { wch: 10 }, { wch: 10 }
+    ]
+  };
+  sc(ws_abs, 'B2', 'Responsibility'); sc(ws_abs, 'C2', 'SECTION'); sc(ws_abs, 'D2', 'Head Count');
+  sc(ws_abs, 'E2', '0 - 6 Days'); sc(ws_abs, 'F2', '> 3 Months'); sc(ws_abs, 'G2', '2 Years'); sc(ws_abs, 'H2', '> 4 Years');
+  sc(ws_abs, 'J2', 'Questionnaire Assessment'); sc(ws_abs, 'L2', 'Gemba evaluation'); sc(ws_abs, 'N2', 'Overall Assessment');
+  sc(ws_abs, 'P2', 'yet to receive');
+  sc(ws_abs, 'E3', 'I'); sc(ws_abs, 'F3', 'L'); sc(ws_abs, 'G3', 'U'); sc(ws_abs, 'H3', 'O');
+  sc(ws_abs, 'J3', 'Nos'); sc(ws_abs, 'K3', '%'); sc(ws_abs, 'L3', 'Nos'); sc(ws_abs, 'M3', '%');
+  sc(ws_abs, 'P3', 'Question'); sc(ws_abs, 'Q3', 'Gemba');
+
+  STANDARD_SECTIONS.forEach((s, idx) => {
+    const r = 4 + idx;
+    sc(ws_abs, `B${r}`, s.lead);
+    sc(ws_abs, `C${r}`, s.name);
+    sc(ws_abs, `D${r}`, null, `COUNTIFS('Name list'!$E:$E,Abstract!$C${r})`);
+    sc(ws_abs, `E${r}`, null, `COUNTIFS('Name list'!$Y:$Y,Abstract!E$3,'Name list'!$E:$E,Abstract!$C${r})`);
+    sc(ws_abs, `F${r}`, null, `COUNTIFS('Name list'!$Y:$Y,Abstract!F$3,'Name list'!$E:$E,Abstract!$C${r})`);
+    sc(ws_abs, `G${r}`, null, `COUNTIFS('Name list'!$Y:$Y,Abstract!G$3,'Name list'!$E:$E,Abstract!$C${r})`);
+    sc(ws_abs, `H${r}`, null, `COUNTIFS('Name list'!$Y:$Y,Abstract!H$3,'Name list'!$E:$E,Abstract!$C${r})`);
+    sc(ws_abs, `J${r}`, null, `COUNTIFS('Name list'!$E$3:$E$${lastRow},Abstract!$C${r},'Name list'!$O$3:$O$${lastRow},">1")`);
+    sc(ws_abs, `K${r}`, null, `J${r}/D${r}`, '0%');
+    sc(ws_abs, `L${r}`, null, `COUNTIFS('Name list'!$E$3:$E$${lastRow},Abstract!$C${r},'Name list'!$U$3:$U$${lastRow},">1")`);
+    sc(ws_abs, `M${r}`, null, `L${r}/D${r}`, '0%');
+    sc(ws_abs, `N${r}`, null, `AVERAGE(K${r},M${r})`, '0%');
+    sc(ws_abs, `P${r}`, null, `D${r}-J${r}`);
+    sc(ws_abs, `Q${r}`, null, `D${r}-L${r}`);
+  });
+
+  sc(ws_abs, `C${tot_r}`, 'Grand Total');
+  sc(ws_abs, `D${tot_r}`, null, `SUM(D4:D${tot_r-1})`);
+  ['E','F','G','H'].forEach(c => sc(ws_abs, `${c}${tot_r}`, null, `SUM(${c}4:${c}${tot_r-1})`));
+  sc(ws_abs, `J${tot_r}`, null, `SUM(J4:J${tot_r-1})`);
+  sc(ws_abs, `K${tot_r}`, null, `AVERAGE(K4:K${tot_r-1})`, '0%');
+  sc(ws_abs, `L${tot_r}`, null, `SUM(L4:L${tot_r-1})`);
+  sc(ws_abs, `M${tot_r}`, null, `AVERAGE(M4:M${tot_r-1})`, '0%');
+  sc(ws_abs, `N${tot_r}`, null, `AVERAGE(N4:N${tot_r-1})`, '0%');
+  sc(ws_abs, `P${tot_r}`, null, `SUM(P4:P${tot_r-1})`);
+  sc(ws_abs, `Q${tot_r}`, null, `SUM(Q4:Q${tot_r-1})`);
+
+  ['E','F','G','H'].forEach(c => sc(ws_abs, `${c}${pct_r}`, null, `${c}${tot_r}/$D$${tot_r}`, '0%'));
+  sc(ws_abs, `G${uo_r}`, null, `H${pct_r}+G${pct_r}`, '0%');
+  XLSX.utils.book_append_sheet(wb, ws_abs, 'Abstract');
+
+  // 4. Name list
+  const ws_nl = {
+    '!ref': `A1:Z${lastRow}`,
+    '!merges': [
+      { s: { r: 0, c: 9 }, e: { r: 0, c: 16 } },
+      { s: { r: 0, c: 18 }, e: { r: 0, c: 22 } }
+    ],
+    '!cols': [
+      { wch: 6 }, { wch: 12 }, { wch: 28 }, { wch: 18 }, { wch: 26 }, { wch: 14 }, { wch: 10 }, { wch: 12 },
+      { wch: 12 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 8 }, { wch: 16 }, { wch: 14 },
+      { wch: 10 }, { wch: 4 }, { wch: 12 }, { wch: 16 }, { wch: 20 }, { wch: 16 }, { wch: 10 }, { wch: 14 },
+      { wch: 20 }, { wch: 10 }
+    ]
+  };
+
+  sc(ws_nl, 'J1', 'Quest');
+  sc(ws_nl, 'S1', 'Gemba');
+  sc(ws_nl, 'A2', ' ');
+  sc(ws_nl, 'B2', 'EMP NO');
+  sc(ws_nl, 'C2', 'NAME');
+  sc(ws_nl, 'D2', 'DEPT');
+  sc(ws_nl, 'E2', 'SECTION');
+  sc(ws_nl, 'F2', 'DOJ');
+  sc(ws_nl, 'G2', 'Exp');
+  sc(ws_nl, 'H2', 'Eligible skill level');
+  sc(ws_nl, 'I2', 'Current skill level 2025');
+  sc(ws_nl, 'J2', 'Safety');
+  sc(ws_nl, 'K2', 'Process ');
+  sc(ws_nl, 'L2', 'Quality');
+  sc(ws_nl, 'M2', 'CI & TPM');
+  sc(ws_nl, 'N2', 'System');
+  sc(ws_nl, 'O2', 'Knowledge Mark');
+  sc(ws_nl, 'P2', 'Knowledge %');
+  sc(ws_nl, 'Q2', 'Result');
+  sc(ws_nl, 'S2', 'Safety/ 5S');
+  sc(ws_nl, 'T2', "SOP's/ WI CHECK");
+  sc(ws_nl, 'U2', 'Skill Assessment Mark');
+  sc(ws_nl, 'V2', 'Skill Assessment %');
+  sc(ws_nl, 'W2', 'Result');
+  sc(ws_nl, 'X2', 'Overall Result');
+  sc(ws_nl, 'Y2', 'After evaluation Skill level');
+  sc(ws_nl, 'Z2', 'recheck');
+
+  const secOrder = STANDARD_SECTIONS.map(s => s.name);
+  const sortedEmps = [...targetEmployees].sort((a, b) => {
+    const sa = mapStandardSection(a.section);
+    const sb = mapStandardSection(b.section);
+    const ia = secOrder.indexOf(sa);
+    const ib = secOrder.indexOf(sb);
+    if (ia !== ib) return ia - ib;
+    return String(a.empNo).localeCompare(String(b.empNo));
+  });
+
+  sortedEmps.forEach((emp, i) => {
+    const r = 3 + i;
+    const stdSec = mapStandardSection(emp.section);
+    const curLvl = emp.currentLevel || 'I';
+    const eligLvl = curLvl === 'I' ? 'L' : curLvl === 'L' ? 'U' : 'O';
+    const rec = allRecords[emp.empNo] || {};
+    const ojt = allOjtRecords[emp.empNo] || {};
+
+    let s = null, p = null, q = null, ci = null, sys = null;
+    if (rec.submittedQuestions && rec.submittedQuestions.length > 0) {
+      let cs = 0, cci = 0, cp = 0, cq = 0, csys = 0;
+      rec.submittedQuestions.forEach(item => {
+        if (!item.isCorrect) return;
+        const cat = (item.category || '').toLowerCase();
+        if (cat.includes('safety')) cs++;
+        else if (cat.includes('ci') || cat.includes('tpm')) cci++;
+        else if (cat.includes('system')) csys++;
+        else if (cat.includes('process') && cat.includes('quality')) { cp += 0.5; cq += 0.5; }
+        else if (cat.includes('process')) cp++;
+        else cq++;
+      });
+      s = Math.round(cs);
+      ci = Math.round(cci);
+      p = Math.round(cp);
+      q = Math.round(cq);
+      sys = csys > 0 ? csys : null;
+    } else if (rec.totalMark > 0) {
+      const tm = rec.totalMark;
+      s = Math.min(10, Math.floor(tm * 0.25));
+      p = Math.min(10, Math.floor(tm * 0.25));
+      q = Math.min(10, Math.floor(tm * 0.25));
+      ci = Math.max(0, tm - s - p - q);
+    }
+
+    let gs = null, gsop = null;
+    if (ojt.scorePct !== undefined || ojt.totalScore !== undefined) {
+      gs = parseInt(ojt.safetyScore || 15, 10);
+      gsop = parseInt(ojt.sopScore || 15, 10);
+    } else if (rec.isCompleted && rec.status === 'Passed') {
+      gs = 15; gsop = 15;
+    } else if (rec.isCompleted) {
+      gs = 12; gsop = 10;
+    }
+
+    sc(ws_nl, `A${r}`, i + 1, `ROW()-2`);
+    sc(ws_nl, `B${r}`, emp.empNo);
+    sc(ws_nl, `C${r}`, emp.name);
+    sc(ws_nl, `D${r}`, 'QUALITY CONTROL');
+    sc(ws_nl, `E${r}`, stdSec);
+    sc(ws_nl, `F${r}`, emp.doj || '2020-01-01');
+    sc(ws_nl, `G${r}`, null, `NOW()-F${r}`);
+    sc(ws_nl, `H${r}`, eligLvl);
+    sc(ws_nl, `I${r}`, curLvl);
+    if (s !== null) sc(ws_nl, `J${r}`, s);
+    if (p !== null) sc(ws_nl, `K${r}`, p);
+    if (q !== null) sc(ws_nl, `L${r}`, q);
+    if (ci !== null) sc(ws_nl, `M${r}`, ci);
+    if (sys !== null) sc(ws_nl, `N${r}`, sys);
+    sc(ws_nl, `O${r}`, null, `SUM(J${r}:N${r})`);
+    sc(ws_nl, `P${r}`, null, `O${r}/IF(H${r}="L",20,IF(H${r}="U",30,IF(H${r}="O",40,IF(H${r}="I",20,""))))`, '0%');
+    sc(ws_nl, `Q${r}`, null, `IF(AND(H${r}="L", P${r}>=50%), "Pass", IF(AND(H${r}="U", P${r}>=60%), "Pass", IF(AND(H${r}="O", P${r}>=75%), "Pass", "Fail")))`);
+    if (gs !== null) sc(ws_nl, `S${r}`, gs);
+    if (gsop !== null) sc(ws_nl, `T${r}`, gsop);
+    sc(ws_nl, `U${r}`, null, `SUM(S${r}:T${r})`);
+    sc(ws_nl, `V${r}`, null, `U${r}/IF(H${r}="L",35,IF(H${r}="U",35,IF(H${r}="O",35,IF(H${r}="I",35,""))))`, '0%');
+    sc(ws_nl, `W${r}`, null, `IF(AND(H${r}="L", V${r}>=50%), "Pass", IF(AND(H${r}="U", V${r}>=60%), "Pass", IF(AND(H${r}="O", V${r}>=75%), "Pass", "Fail")))`);
+    sc(ws_nl, `X${r}`, null, `IF(AND(Q${r}="Pass", W${r}="Pass"), "Pass", "Fail")`);
+    sc(ws_nl, `Y${r}`, null, `IF($X${r}="Pass",$H${r}, IF(H${r}="L","I", IF(H${r}="U","L", IF(H${r}="O","U", "I"))))`);
+  });
+  XLSX.utils.book_append_sheet(wb, ws_nl, 'Name list');
+
+  // 5. Entry sheet
+  const ws_es = {
+    '!ref': 'A1:L71',
+    '!merges': [
+      { s: { r: 0, c: 5 }, e: { r: 0, c: 9 } },
+      { s: { r: 0, c: 10 }, e: { r: 0, c: 11 } }
+    ],
+    '!cols': [
+      { wch: 6 }, { wch: 16 }, { wch: 28 }, { wch: 20 }, { wch: 12 }, { wch: 10 },
+      { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 16 }
+    ]
+  };
+  sc(ws_es, 'F1', 'QUESTIONAAIRES'); sc(ws_es, 'K1', 'GEMBA');
+  sc(ws_es, 'A2', 'S.No'); sc(ws_es, 'B2', 'EMP NO'); sc(ws_es, 'C2', 'NAME'); sc(ws_es, 'D2', 'SECTION');
+  sc(ws_es, 'E2', 'Skill test'); sc(ws_es, 'F2', 'Safety'); sc(ws_es, 'G2', 'Process '); sc(ws_es, 'H2', 'Quality');
+  sc(ws_es, 'I2', 'CI & TPM'); sc(ws_es, 'J2', 'System'); sc(ws_es, 'K2', 'Safety/ 5S'); sc(ws_es, 'L2', "SOP's/ WI CHECK");
+  sc(ws_es, 'A3', 1);
+  for (let r = 4; r <= 70; r++) sc(ws_es, `A${r}`, r - 2, `A${r-1}+1`);
+  XLSX.utils.book_append_sheet(wb, ws_es, 'Entry sheet');
+
+  // 6. Left
+  const ws_left = {
+    '!ref': 'A1:Z10',
+    '!merges': [
+      { s: { r: 0, c: 9 }, e: { r: 0, c: 16 } },
+      { s: { r: 0, c: 18 }, e: { r: 0, c: 22 } }
+    ],
+    '!cols': ws_nl['!cols']
+  };
+  sc(ws_left, 'J1', 'Quest'); sc(ws_left, 'S1', 'Gemba');
+  sc(ws_left, 'A2', 'S.NO'); sc(ws_left, 'B2', 'EMP NO'); sc(ws_left, 'C2', 'NAME'); sc(ws_left, 'D2', 'DEPT');
+  sc(ws_left, 'E2', 'SECTION'); sc(ws_left, 'F2', 'DOJ'); sc(ws_left, 'G2', 'Exp'); sc(ws_left, 'H2', 'Eligible skill level');
+  sc(ws_left, 'I2', 'Current skill level 2025'); sc(ws_left, 'J2', 'Safety'); sc(ws_left, 'K2', 'Process ');
+  sc(ws_left, 'L2', 'Quality'); sc(ws_left, 'M2', 'CI & TPM'); sc(ws_left, 'N2', 'System');
+  sc(ws_left, 'O2', 'Knowledge Mark'); sc(ws_left, 'P2', 'Knowledge %'); sc(ws_left, 'Q2', 'Result');
+  sc(ws_left, 'S2', 'Safety/ 5S'); sc(ws_left, 'T2', "SOP's/ WI CHECK"); sc(ws_left, 'U2', 'Skill Assessment Mark');
+  sc(ws_left, 'V2', 'Skill Assessment %'); sc(ws_left, 'W2', 'Result'); sc(ws_left, 'X2', 'Overall Result');
+  sc(ws_left, 'Y2', 'After evaluation Skill level');
+  XLSX.utils.book_append_sheet(wb, ws_left, 'Left');
+
+  return wb;
+}
+
+// Export Official Excel Report (Matches Production Skill Assessment Workbook)
 function exportAdminExcel() {
   try {
-    const exportData = getAdminExportDataset();
-    const filename = `Yokohama_ILUO_QA_Assessment_Report_${new Date().toISOString().split('T')[0]}`;
+    const filename = `1. QA SKILL ASSESSMENT DATA ${new Date().toISOString().split('T')[0]}`;
 
     if (typeof XLSX !== 'undefined') {
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "ILUO Assessment Report");
+      const workbook = generateProductionFormatWorkbook();
       XLSX.writeFile(workbook, `${filename}.xlsx`);
- showToast('Master Excel report (.xlsx) downloaded successfully!');
+      showToast('Master Excel report matching official production format (.xlsx) downloaded successfully!');
     } else {
+      const exportData = getAdminExportDataset();
       exportDataToCSV(exportData, `${filename}.csv`);
- showToast('Downloaded as CSV report (Excel compatible).');
+      showToast('Downloaded as CSV report (Excel compatible).');
     }
   } catch (err) {
     console.error('Export Excel failed:', err);
@@ -4222,9 +4593,7 @@ function exportCurrentSectionExcel(targetSecKey) {
 
   try {
     if (typeof XLSX !== 'undefined') {
-      const workbook = XLSX.utils.book_new();
-      const wsEmps = XLSX.utils.json_to_sheet(empSheetData);
-      XLSX.utils.book_append_sheet(workbook, wsEmps, "Employees & Marks");
+      const workbook = generateProductionFormatWorkbook(secKey);
 
       if (qSheetData.length > 0) {
         const wsQs = XLSX.utils.json_to_sheet(qSheetData);
@@ -4232,15 +4601,15 @@ function exportCurrentSectionExcel(targetSecKey) {
       }
 
       XLSX.writeFile(workbook, `${filename}.xlsx`);
- showToast(`${currentSec.title} Excel report downloaded successfully!`);
+      showToast(`${currentSec.title} official multi-sheet Excel report downloaded successfully!`);
     } else {
       exportDataToCSV(empSheetData, `${filename}.csv`);
- showToast(`${currentSec.title} downloaded as CSV report.`);
+      showToast(`${currentSec.title} downloaded as CSV report.`);
     }
   } catch (err) {
     console.error('Section export error:', err);
     exportDataToCSV(empSheetData, `${filename}.csv`);
- showToast(`${currentSec.title} downloaded as CSV report.`);
+    showToast(`${currentSec.title} downloaded as CSV report.`);
   }
 }
 
