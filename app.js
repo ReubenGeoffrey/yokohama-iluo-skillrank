@@ -36,6 +36,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initCapacitorMobileCapabilities();
   window.addEventListener('hashchange', handleRoute);
   checkExistingSession();
+  setTimeout(() => {
+    if (typeof initExamSchedulingCenter === 'function') initExamSchedulingCenter();
+  }, 500);
 });
 
 // Professional Native Mobile & Offline Capabilities (Capacitor Android + Mobile Web)
@@ -1216,45 +1219,13 @@ function showEmpDashboard() {
 }
 
 async function downloadCurrentEmployeeDocx() {
-  let empNo = (currentUser && currentUser.empNo) ? currentUser.empNo : null;
-  if (!empNo) {
-    try {
-      const s = localStorage.getItem(STORAGE_KEY_SESSION);
-      if (s) empNo = JSON.parse(s)?.empNo;
-    } catch (e) {}
-  }
-  if (!empNo) {
-    showToast('Please sign in to download your report.');
-    return;
-  }
-  showToast('Generating official DOCX report with mapped answer ticks...');
-  try {
-    await downloadEmployeeDocx(empNo);
-  } catch (err) {
-    console.error('DOCX download error:', err);
-    showToast('Failed to download DOCX: ' + err.message);
-  }
+  showToast('Download is restricted in Employee Portal. Official reports can only be downloaded by Section Supervisors and Admins.');
+  return;
 }
 
 async function downloadCurrentEmployeePDF() {
-  let empNo = (currentUser && currentUser.empNo) ? currentUser.empNo : null;
-  if (!empNo) {
-    try {
-      const s = localStorage.getItem(STORAGE_KEY_SESSION);
-      if (s) empNo = JSON.parse(s)?.empNo;
-    } catch (e) {}
-  }
-  if (!empNo) {
-    showToast('Please sign in to download your PDF report.');
-    return;
-  }
-  showToast('Generating official PDF report...');
-  try {
-    await downloadEmployeePDF(empNo);
-  } catch (err) {
-    console.error('PDF download error:', err);
-    showToast('Failed to download PDF: ' + err.message);
-  }
+  showToast('Download is restricted in Employee Portal. Official reports can only be downloaded by Section Supervisors and Admins.');
+  return;
 }
 
 function showEmpExamsView() {
@@ -1263,14 +1234,18 @@ function showEmpExamsView() {
   
   const currentLevel = currentUser.currentLevel || 'I';
   const currentRules = LEVEL_RULES[currentLevel] || LEVEL_RULES['I'];
-  const targetLevel = currentRules.nextLevel;
-  const targetRules = LEVEL_RULES[targetLevel] || LEVEL_RULES['L'];
+  let targetLevel = currentRules.nextLevel || 'L';
 
   const records = getStoredRecords();
   const rec = records[currentUser.empNo];
   const trainingRecords = getStoredTrainingRecords();
   const tr = trainingRecords[currentUser.empNo];
   const isScheduled = tr && tr.status === 'SCHEDULED';
+
+  if (isScheduled && tr.targetLevel && tr.targetLevel !== 'AUTO') {
+    targetLevel = tr.targetLevel;
+  }
+  const targetRules = LEVEL_RULES[targetLevel] || LEVEL_RULES['L'];
 
   const container = document.getElementById('empExamListContainer');
   
@@ -1416,22 +1391,58 @@ function getQuestionsForSection(targetLevel, section) {
 async function startOrResumeExam() {
   if (!currentUser) return;
 
-  const targetLevel = currentUser.targetLevel || 'L';
+  const currentLevel = currentUser.currentLevel || 'I';
+  const currentRules = LEVEL_RULES[currentLevel] || LEVEL_RULES['I'];
+  let targetLevel = currentUser.targetLevel || currentRules.nextLevel || 'L';
+
   const records = getStoredRecords();
   let empRecord = records[currentUser.empNo];
+  const trainingRecords = (typeof getStoredTrainingRecords === 'function') ? getStoredTrainingRecords() : {};
+  const tr = trainingRecords[currentUser.empNo];
+  const isScheduled = tr && tr.status === 'SCHEDULED';
+  if (isScheduled && tr.targetLevel && tr.targetLevel !== 'AUTO') {
+    targetLevel = tr.targetLevel;
+  }
 
   // Try starting / resuming via secure server exam session
   try {
     const res = await fetch('/api/exam/start', {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({ empNo: currentUser.empNo, targetLevel })
+      body: JSON.stringify({
+        empNo: currentUser.empNo,
+        targetLevel,
+        forceRetake: !!isScheduled
+      })
     });
-    const data = await res.json();
+    let data = await res.json();
     if (res.status === 409 && data.record) {
-      showToast('Assessment already completed for this candidate.');
-      showResultView(data.record, false);
-      return;
+      if (isScheduled) {
+        // Automatic retry with forceRetake
+        try {
+          const retryRes = await fetch('/api/exam/start', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ empNo: currentUser.empNo, targetLevel, forceRetake: true })
+          });
+          const retryData = await retryRes.json();
+          if (retryData.success && retryData.activeExam) {
+            data = retryData;
+          } else {
+            showToast('Assessment already completed for this candidate.');
+            showResultView(data.record, false);
+            return;
+          }
+        } catch (e) {
+          showToast('Assessment already completed for this candidate.');
+          showResultView(data.record, false);
+          return;
+        }
+      } else {
+        showToast('Assessment already completed for this candidate.');
+        showResultView(data.record, false);
+        return;
+      }
     }
     if (data.success && data.activeExam) {
       const serverExam = data.activeExam;
@@ -1467,7 +1478,7 @@ async function startOrResumeExam() {
     return rest;
   });
 
-  if (empRecord && empRecord.inProgress && !empRecord.isCompleted) {
+  if (empRecord && empRecord.inProgress && !empRecord.isCompleted && !isScheduled) {
     activeExam = {
       empNo: currentUser.empNo,
       targetLevel: targetLevel,
@@ -1705,48 +1716,10 @@ function showResultView(record, isImmediateCompletion = false) {
     statusEl.style.color = record.status === 'Passed' ? 'var(--success-color)' : 'var(--accent-red)';
   }
 
-  // Handle One-Time Answer Review Container
+  // Employee Login: No answer sheet or question review is rendered. Clean score summary only.
   const reviewContainer = document.getElementById('oneTimeAnswerReviewContainer');
   if (reviewContainer) {
     reviewContainer.innerHTML = '';
-    
-    if (record.submittedQuestions && record.submittedQuestions.length > 0) {
-      let html = `
-        <h3 style="font-size: 1.1rem; color: var(--primary-dark); margin-bottom: 12px; border-bottom: 1.5px solid var(--border-color); padding-bottom: 6px;">
-          Question Review &amp; Official Key Audit
-        </h3>
-      `;
-
-      record.submittedQuestions.forEach((q, idx) => {
-        const isCorr = q.isCorrect;
-        const borderCol = isCorr ? 'var(--success-color)' : 'var(--accent-red)';
-        const badgeBg = isCorr ? '#ECFDF5' : '#FEF2F2';
-        const badgeCol = isCorr ? '#065F46' : '#991B1B';
-
-        html += `
-          <div style="background: #FFFFFF; border: 1px solid var(--border-color); border-left: 4px solid ${borderCol}; border-radius: 6px; padding: 12px 14px; margin-bottom: 10px;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
-              <div style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);">
-                <span style="color: var(--primary-color);">Q${idx + 1}.</span> [${q.category || 'QA'}] ${q.question}
-              </div>
-              <span style="font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: ${badgeBg}; color: ${badgeCol};">
-                ${isCorr ? 'Correct (1 Mark)' : 'Incorrect (0 Marks)'}
-              </span>
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.85rem; margin-top: 6px;">
-              <div style="background: ${isCorr ? '#F0FDF4' : '#FFF1F2'}; padding: 6px 10px; border-radius: 4px;">
-                <strong>Your Answer:</strong> [${q.selectedKey}] ${q.selectedText}
-              </div>
-              <div style="background: #F8FAFC; padding: 6px 10px; border-radius: 4px;">
-                <strong>Correct Key:</strong> [${q.correctKey}] ${q.correctText}
-              </div>
-            </div>
-          </div>
-        `;
-      });
-
-      reviewContainer.innerHTML = html;
-    }
   }
 
   showView('viewResult');
@@ -1779,6 +1752,7 @@ function showControlCenterSubView(subName) {
   else if (subName === 'exams') {
     if (typeof updateAdminResetSecInfo === 'function') updateAdminResetSecInfo();
     if (typeof updateAdminResetDeptInfo === 'function') updateAdminResetDeptInfo();
+    if (typeof initExamSchedulingCenter === 'function') initExamSchedulingCenter();
   }
   else if (subName === 'employees') renderEmployeeDirectory();
   else if (subName === 'results') renderAdminTable('');
@@ -4658,10 +4632,12 @@ async function unlockEmployeeExam(empNo, empName) {
     } catch (e) {}
 
     showToast(`Exam unlocked for Employee ${empNo}. The candidate can now start and finish their assessment.`);
-    renderTrainingRequirements();
+    if (typeof renderScheduledExamsTable === 'function') renderScheduledExamsTable();
+    if (typeof renderTrainingRequirements === 'function') renderTrainingRequirements();
     if (typeof renderAdminTable === 'function') renderAdminTable('');
   }
 }
+window.unlockEmployeeExam = unlockEmployeeExam;
 
 function toggleTrainingComplete(empNo) {
   saveTrainingRecord(empNo, { status: 'COMPLETED', completedAt: new Date().toISOString().split('T')[0] });
@@ -5005,6 +4981,391 @@ function resetCurrentActiveSectionExams() {
   resetSectionExams(secKey, sec ? sec.title : currentActiveSection);
 }
 window.resetCurrentActiveSectionExams = resetCurrentActiveSectionExams;
+
+// ---------------------------------------------------------------------
+// DEDICATED ADMIN EXAM SCHEDULING CENTER (Section Bulk & Individual)
+// ---------------------------------------------------------------------
+let currentExamScheduleMode = 'section'; // 'section' | 'individual'
+
+function switchExamScheduleMode(mode) {
+  currentExamScheduleMode = mode;
+  const pSec = document.getElementById('panelSchedSection');
+  const pInd = document.getElementById('panelSchedIndividual');
+  const bSec = document.getElementById('btnSchedModeSec');
+  const bInd = document.getElementById('btnSchedModeInd');
+
+  if (pSec && pInd) {
+    if (mode === 'section') {
+      pSec.style.opacity = '1';
+      pSec.style.border = '2px solid #0284C7';
+      pInd.style.opacity = '0.75';
+      pInd.style.border = '1px solid #C7D2FE';
+      if (bSec) { bSec.style.background = '#0284C7'; bSec.style.color = '#fff'; }
+      if (bInd) { bInd.style.background = '#F1F5F9'; bInd.style.color = '#334155'; bInd.style.borderColor = '#CBD5E1'; }
+      pSec.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else {
+      pSec.style.opacity = '0.75';
+      pSec.style.border = '1px solid #BAE6FD';
+      pInd.style.opacity = '1';
+      pInd.style.border = '2px solid #4F46E5';
+      if (bSec) { bSec.style.background = '#F1F5F9'; bSec.style.color = '#334155'; bSec.style.borderColor = '#CBD5E1'; }
+      if (bInd) { bInd.style.background = '#4F46E5'; bInd.style.color = '#fff'; }
+      pInd.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+}
+window.switchExamScheduleMode = switchExamScheduleMode;
+
+function initExamSchedulingCenter() {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const dateSec = document.getElementById('schedSectionDate');
+  const dateEmp = document.getElementById('schedEmpDate');
+  if (dateSec && !dateSec.value) dateSec.value = todayStr;
+  if (dateEmp && !dateEmp.value) dateEmp.value = todayStr;
+
+  populateScheduleEmployeeDropdown();
+  updateScheduleSectionPreview();
+  updateScheduleEmpPreview();
+  renderScheduledExamsTable();
+}
+window.initExamSchedulingCenter = initExamSchedulingCenter;
+
+function populateScheduleEmployeeDropdown() {
+  const select = document.getElementById('schedEmpSelect');
+  if (!select) return;
+
+  const currentVal = select.value;
+  select.innerHTML = '';
+
+  const emps = (typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES)) ? [...EMPLOYEES] : [];
+  emps.sort((a, b) => {
+    const secComp = (a.section || '').localeCompare(b.section || '');
+    if (secComp !== 0) return secComp;
+    return String(a.name || '').localeCompare(String(b.name || ''));
+  });
+
+  emps.forEach(emp => {
+    const opt = document.createElement('option');
+    opt.value = emp.empNo;
+    opt.textContent = `[${emp.empNo}] ${emp.name} — ${emp.section || 'QA'} (Current: Level ${emp.currentLevel || 'I'})`;
+    select.appendChild(opt);
+  });
+
+  if (currentVal && emps.some(e => e.empNo === currentVal)) {
+    select.value = currentVal;
+  }
+}
+window.populateScheduleEmployeeDropdown = populateScheduleEmployeeDropdown;
+
+function updateScheduleSectionPreview() {
+  const selectSec = document.getElementById('schedSectionSelect');
+  const selectLvl = document.getElementById('schedSectionLevel');
+  const previewEl = document.getElementById('schedSectionPreview');
+  if (!selectSec || !previewEl) return;
+
+  const secId = selectSec.value;
+  const sec = QA_SECTIONS_LIST.find(s => s.id === secId) || QA_SECTIONS_LIST[0];
+  const sectionEmps = (typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES))
+    ? EMPLOYEES.filter(e => normalizeSectionName(e.section || '') === sec.normName)
+    : [];
+
+  const records = getStoredRecords();
+  const trainingRecords = (typeof getStoredTrainingRecords === 'function') ? getStoredTrainingRecords() : {};
+
+  let completedCount = 0;
+  let scheduledCount = 0;
+
+  sectionEmps.forEach(e => {
+    if (records[e.empNo] && records[e.empNo].isCompleted) completedCount++;
+    if (trainingRecords[e.empNo] && trainingRecords[e.empNo].status === 'SCHEDULED') scheduledCount++;
+  });
+
+  const lvlText = selectLvl ? (selectLvl.options[selectLvl.selectedIndex]?.text || selectLvl.value) : 'Auto Next Level';
+
+  previewEl.innerHTML = `
+    <div style="font-weight: 700; margin-bottom: 4px; color: #0369A1;">
+      🏢 ${sec.title} &bull; ${sectionEmps.length} Total Registered Candidates
+    </div>
+    <div style="display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; font-size: 0.8rem;">
+      <span><strong>Currently Scheduled:</strong> <span style="color: #2563EB; font-weight: 700;">${scheduledCount}</span></span>
+      <span><strong>Past Completed:</strong> <span style="color: #059669; font-weight: 700;">${completedCount}</span></span>
+      <span><strong>Target Level:</strong> <span style="color: #7C3AED; font-weight: 700;">${lvlText}</span></span>
+    </div>
+    <div style="margin-top: 8px; font-size: 0.76rem; color: #64748B;">
+      ⚡ Scheduling sets all ${sectionEmps.length} section employees to SCHEDULED and unlocks their assessments for fresh test completion.
+    </div>
+  `;
+}
+window.updateScheduleSectionPreview = updateScheduleSectionPreview;
+
+function updateScheduleEmpPreview() {
+  const selectEmp = document.getElementById('schedEmpSelect');
+  const selectLvl = document.getElementById('schedEmpLevel');
+  const previewEl = document.getElementById('schedEmpPreview');
+  if (!selectEmp || !previewEl) return;
+
+  const empNo = selectEmp.value;
+  const emp = (typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES))
+    ? EMPLOYEES.find(e => String(e.empNo).trim() === String(empNo).trim())
+    : null;
+
+  if (!emp) {
+    previewEl.innerHTML = 'Select an employee from the dropdown above.';
+    return;
+  }
+
+  const records = getStoredRecords();
+  const rec = records[emp.empNo];
+  const trainingRecords = (typeof getStoredTrainingRecords === 'function') ? getStoredTrainingRecords() : {};
+  const tr = trainingRecords[emp.empNo];
+
+  const currentLevel = emp.currentLevel || 'I';
+  const currentRules = LEVEL_RULES[currentLevel] || LEVEL_RULES['I'];
+  const nextTargetLevel = currentRules.nextLevel || 'L';
+
+  const chosenLvl = (selectLvl && selectLvl.value !== 'AUTO') ? selectLvl.value : nextTargetLevel;
+  const rules = LEVEL_RULES[chosenLvl] || LEVEL_RULES['L'];
+
+  const isExamDone = rec && rec.isCompleted;
+  const isSched = tr && tr.status === 'SCHEDULED';
+
+  previewEl.innerHTML = `
+    <div style="font-weight: 700; margin-bottom: 4px; color: #3730A3;">
+      👤 ${emp.name} (${emp.empNo}) &bull; ${emp.section || 'QA'}
+    </div>
+    <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; font-size: 0.8rem;">
+      <span><strong>Current Level:</strong> <span class="skill-level-badge level-${currentLevel}">${currentLevel}</span></span>
+      <span><strong>Target Exam:</strong> <span style="color: #4F46E5; font-weight: 700;">Level ${chosenLvl} (${rules.numQuestions || 30} Qs)</span></span>
+      <span><strong>Status:</strong> ${isSched ? '<span style="color: #2563EB; font-weight: 700;">Scheduled (' + (tr.date || 'Pending') + ')</span>' : (isExamDone ? '<span style="color: #059669; font-weight: 700;">Completed (' + (rec.totalMark !== undefined ? rec.totalMark : 0) + ' Marks)</span>' : '<span style="color: #D97706; font-weight: 700;">Not Started</span>')}</span>
+    </div>
+  `;
+}
+window.updateScheduleEmpPreview = updateScheduleEmpPreview;
+
+async function scheduleSectionExam() {
+  const selectSec = document.getElementById('schedSectionSelect');
+  const selectLvl = document.getElementById('schedSectionLevel');
+  const dateInput = document.getElementById('schedSectionDate');
+  if (!selectSec) return;
+
+  const secId = selectSec.value;
+  const sec = QA_SECTIONS_LIST.find(s => s.id === secId) || QA_SECTIONS_LIST[0];
+  const sectionEmps = (typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES))
+    ? EMPLOYEES.filter(e => normalizeSectionName(e.section || '') === sec.normName)
+    : [];
+
+  if (sectionEmps.length === 0) {
+    showToast(`No employees found in ${sec.title}.`);
+    return;
+  }
+
+  const scheduledDate = (dateInput && dateInput.value) ? dateInput.value : new Date().toISOString().split('T')[0];
+  const chosenLvl = (selectLvl && selectLvl.value) ? selectLvl.value : 'AUTO';
+
+  if (!confirm(`📅 Schedule Assessment for entire QA Section: "${sec.title}"?\n\n• Total Candidates: ${sectionEmps.length}\n• Target Date: ${scheduledDate}\n• Target Level: ${chosenLvl === 'AUTO' ? 'Auto Next Level per Employee' : 'Level ' + chosenLvl}\n\nThis will clear any completed exam locks so all section employees can start & finish their assessment without restrictions.`)) {
+    return;
+  }
+
+  showToast(`Scheduling exams & unlocking candidates for ${sec.title}...`);
+
+  // 1. Update training status and clear local exam records
+  const records = getStoredRecords();
+  sectionEmps.forEach(emp => {
+    let tgtLvl = chosenLvl;
+    if (tgtLvl === 'AUTO') {
+      const curLvl = emp.currentLevel || 'I';
+      tgtLvl = (LEVEL_RULES[curLvl] && LEVEL_RULES[curLvl].nextLevel) ? LEVEL_RULES[curLvl].nextLevel : 'L';
+    }
+
+    saveTrainingRecord(emp.empNo, {
+      status: 'SCHEDULED',
+      date: scheduledDate,
+      targetLevel: tgtLvl,
+      scheduledBy: 'Admin (Section Bulk)',
+      scheduledAt: new Date().toISOString()
+    });
+
+    if (records[emp.empNo]) {
+      delete records[emp.empNo];
+    }
+  });
+
+  localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(records));
+
+  // 2. Reset section exam records on server to prevent 409 conflict
+  try {
+    await fetch('/api/records/reset-section', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify({ section: sec.title, sectionId: sec.id })
+    });
+  } catch (err) {
+    console.warn('Server reset-section network response:', err.message);
+  }
+
+  showToast(`✅ Successfully scheduled exams for all ${sectionEmps.length} employees in ${sec.title}!`);
+
+  updateScheduleSectionPreview();
+  renderScheduledExamsTable();
+  if (typeof renderAdminTable === 'function') renderAdminTable('');
+  if (typeof renderTrainingRequirements === 'function') renderTrainingRequirements();
+  if (typeof filterSectionTable === 'function') filterSectionTable();
+}
+window.scheduleSectionExam = scheduleSectionExam;
+
+async function scheduleIndividualEmployeeExam() {
+  const selectEmp = document.getElementById('schedEmpSelect');
+  const selectLvl = document.getElementById('schedEmpLevel');
+  const dateInput = document.getElementById('schedEmpDate');
+  if (!selectEmp) return;
+
+  const empNo = selectEmp.value;
+  const emp = (typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES))
+    ? EMPLOYEES.find(e => String(e.empNo).trim() === String(empNo).trim())
+    : null;
+
+  if (!emp) {
+    showToast('Please select an employee to schedule.');
+    return;
+  }
+
+  const scheduledDate = (dateInput && dateInput.value) ? dateInput.value : new Date().toISOString().split('T')[0];
+  const curLvl = emp.currentLevel || 'I';
+  let tgtLvl = (selectLvl && selectLvl.value !== 'AUTO') ? selectLvl.value : ((LEVEL_RULES[curLvl] && LEVEL_RULES[curLvl].nextLevel) || 'L');
+
+  if (!confirm(`📅 Schedule Exam for Employee ${emp.empNo} (${emp.name})?\n\n• QA Section: ${emp.section}\n• Target Level: Level ${tgtLvl}\n• Scheduled Date: ${scheduledDate}\n\nThis will clear any previous exam locks locally and on the server so the candidate can start, take, and finish their exam.`)) {
+    return;
+  }
+
+  saveTrainingRecord(emp.empNo, {
+    status: 'SCHEDULED',
+    date: scheduledDate,
+    targetLevel: tgtLvl,
+    scheduledBy: 'Admin (Individual)',
+    scheduledAt: new Date().toISOString()
+  });
+
+  // Clear previous exam record locally
+  const records = getStoredRecords();
+  if (records[emp.empNo]) {
+    delete records[emp.empNo];
+    localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(records));
+  }
+
+  // Clear previous exam record on server
+  try {
+    await fetch('/api/records/' + encodeURIComponent(emp.empNo), {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+  } catch (e) {
+    console.warn('Server delete record network error:', e.message);
+  }
+
+  showToast(`✅ Exam scheduled & unlocked for ${emp.name} (${emp.empNo}) on ${scheduledDate}!`);
+
+  updateScheduleEmpPreview();
+  renderScheduledExamsTable();
+  if (typeof renderAdminTable === 'function') renderAdminTable('');
+  if (typeof renderTrainingRequirements === 'function') renderTrainingRequirements();
+}
+window.scheduleIndividualEmployeeExam = scheduleIndividualEmployeeExam;
+
+function renderScheduledExamsTable() {
+  const tbody = document.getElementById('scheduledExamsTableBody');
+  const countBadge = document.getElementById('scheduledExamsCountBadge');
+  const filterInput = document.getElementById('schedFilterInput');
+  if (!tbody) return;
+
+  const trainingRecords = (typeof getStoredTrainingRecords === 'function') ? getStoredTrainingRecords() : {};
+  const query = filterInput ? filterInput.value.toLowerCase().trim() : '';
+
+  const scheduledList = [];
+  const allEmps = (typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES)) ? EMPLOYEES : [];
+
+  for (const [empNo, tr] of Object.entries(trainingRecords)) {
+    if (tr && tr.status === 'SCHEDULED') {
+      const emp = allEmps.find(e => String(e.empNo).trim() === String(empNo).trim()) || { empNo, name: 'Unknown', section: 'QA', currentLevel: 'I' };
+      scheduledList.push({
+        empNo,
+        name: emp.name,
+        section: emp.section || 'QA',
+        currentLevel: emp.currentLevel || 'I',
+        targetLevel: tr.targetLevel || 'L',
+        date: tr.date || 'Scheduled',
+        scheduledBy: tr.scheduledBy || 'Admin'
+      });
+    }
+  }
+
+  if (countBadge) {
+    countBadge.innerText = `${scheduledList.length} Scheduled`;
+  }
+
+  const filtered = scheduledList.filter(item => {
+    if (!query) return true;
+    return item.empNo.toLowerCase().includes(query) ||
+           item.name.toLowerCase().includes(query) ||
+           item.section.toLowerCase().includes(query);
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" style="text-align: center; padding: 24px 16px; color: #94A3B8; font-size: 0.88rem;">
+          ${scheduledList.length === 0 ? 'No exams currently scheduled. Use the Section Exam or Individual Employee cards above to schedule assessments.' : 'No scheduled exams match your search filter.'}
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map((item, idx) => {
+    return `
+      <tr>
+        <td style="font-weight: 700; color: var(--text-muted);">${idx + 1}</td>
+        <td><strong style="color: #005B9E; font-family: monospace;">${item.empNo}</strong></td>
+        <td><strong>${item.name}</strong></td>
+        <td><span style="font-size: 0.85rem; color: #475569;">${item.section}</span></td>
+        <td>
+          <span class="skill-level-badge level-${item.targetLevel}" style="font-size: 0.76rem; padding: 2px 8px;">
+            Level ${item.targetLevel}
+          </span>
+        </td>
+        <td style="font-size: 0.82rem; font-weight: 600; color: #1E40AF;">${item.date}</td>
+        <td>
+          <span style="background: #DBEAFE; color: #1E40AF; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 0.74rem;">
+            Scheduled
+          </span>
+        </td>
+        <td style="text-align: center;">
+          <div style="display: flex; gap: 6px; justify-content: center;">
+            <button class="btn-secondary" style="padding: 3px 8px; font-size: 0.72rem; background: #FEF2F2; color: #DC2626; border-color: #FCA5A5;" onclick="cancelScheduledExam('${item.empNo}', '${item.name}')" title="Cancel scheduled exam">
+              Cancel
+            </button>
+            <button class="btn-primary" style="padding: 3px 8px; font-size: 0.72rem; background: #0284C7; border-color: #0284C7;" onclick="unlockEmployeeExam('${item.empNo}', '${item.name}')" title="Re-clear & unlock assessment">
+              Unlock
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+window.renderScheduledExamsTable = renderScheduledExamsTable;
+
+function cancelScheduledExam(empNo, name) {
+  const nameStr = name ? ` (${name})` : '';
+  if (confirm(`Cancel scheduled assessment for Employee ${empNo}${nameStr}?`)) {
+    resetTrainingStatus(empNo);
+    renderScheduledExamsTable();
+    updateScheduleSectionPreview();
+    updateScheduleEmpPreview();
+  }
+}
+window.cancelScheduledExam = cancelScheduledExam;
 
 function saveOjtRecord(empNo, data) {
   const all = getStoredOjtRecords();
