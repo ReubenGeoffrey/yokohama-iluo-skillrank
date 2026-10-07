@@ -8,6 +8,7 @@ __pycache__/
 !generate_employee_docx.py
 !generate_qa_workbook.py
 !combine_production_and_qa.py
+!populate_all_production_data.py
 output_docx/
 /pdf_reports/
 test_*.docx

@@ -85,7 +85,7 @@ function initCapacitorMobileCapabilities() {
           App.exitApp();
         } else {
           lastBackPress = now;
-          showToast('Tap BACK again to exit Yokohama ILUO');
+          showToast('Tap BACK again to exit ILUO Portal');
         }
       });
     }
@@ -220,15 +220,25 @@ function getAuthHeaders(extraHeaders = {}) {
 
 function getStoredRecords() {
   try {
+    const seed = (typeof SEED_RECORDS !== 'undefined' && SEED_RECORDS && Object.keys(SEED_RECORDS).length > 0)
+      ? SEED_RECORDS
+      : ((typeof YOKOHAMA_SEED_RECORDS !== 'undefined' && YOKOHAMA_SEED_RECORDS && Object.keys(YOKOHAMA_SEED_RECORDS).length > 0)
+          ? YOKOHAMA_SEED_RECORDS
+          : {});
+
     const raw = localStorage.getItem(STORAGE_KEY_RECORDS);
     if (!raw) {
-      const initial = (typeof YOKOHAMA_SEED_RECORDS !== 'undefined' && YOKOHAMA_SEED_RECORDS && Object.keys(YOKOHAMA_SEED_RECORDS).length > 0)
-        ? { ...YOKOHAMA_SEED_RECORDS }
-        : {};
+      const initial = { ...seed };
       localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(initial));
       return initial;
     }
-    return JSON.parse(raw) || {};
+    const parsed = JSON.parse(raw) || {};
+    if (seed && Object.keys(seed).length > 500 && Object.keys(parsed).length < 500) {
+      const merged = { ...seed, ...parsed };
+      localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(merged));
+      return merged;
+    }
+    return parsed;
   } catch (e) {
     return {};
   }
@@ -1315,9 +1325,17 @@ function showEmpProfileView() {
   `;
 }
 
+const PROD_SECTION_NAMES = [
+  '3 roll-p2', '4 roll', 'auto biascutter', 'band building-p1', 'band building-p2', 'band building-p3',
+  'bead winding', 'bias cutting-1', 'bias cutting-2', 'bias cutting-4', 'bias cutting-5', 'bias marangoni&bestry',
+  'extruder', 'liner dressing', 'mixing', 'radial marangoni', 'salvage', 'slitting', 'solid tyre', 'steelastic',
+  'tyre building-p1', 'tyre building-p2', 'tyre building-p3', 'tyre curing', 'yanthai'
+];
+
 function normalizeSectionName(sec) {
   let s = (sec || '').toLowerCase().trim();
   s = s.replace(/\s+/g, ' ');
+  if (PROD_SECTION_NAMES.includes(s)) return s;
   s = s.replace('ware house', 'warehouse');
   if (s.includes('rro') || s.includes('alt')) return 'final finish rro & alt qa';
   if (s.includes('building') || s.includes('tbm')) return 'tire building qa';
@@ -4221,7 +4239,7 @@ function renderSectionsExplorer(targetSecKey) {
               <span class="brand-badge" style="background: var(--primary-color); font-size: 0.72rem;">QUALITY CONTROL</span>
             </div>
             <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 2px;">
-              Yokohama Industrial QA &bull; Normalization: <code>${currentSec.normName}</code>
+              Industrial Operations &bull; Normalization: <code>${currentSec.normName}</code>
             </div>
           </div>
         </div>
@@ -5095,8 +5113,26 @@ function getOjtTemplateForSection(secName) {
 
 function getStoredOjtRecords() {
   try {
+    const seed = (typeof SEED_OJT_RECORDS !== 'undefined' && SEED_OJT_RECORDS && Object.keys(SEED_OJT_RECORDS).length > 0)
+      ? SEED_OJT_RECORDS
+      : ((typeof YOKOHAMA_SEED_OJT_RECORDS !== 'undefined' && YOKOHAMA_SEED_OJT_RECORDS && Object.keys(YOKOHAMA_SEED_OJT_RECORDS).length > 0)
+          ? YOKOHAMA_SEED_OJT_RECORDS
+          : {});
+
     let ojt = JSON.parse(localStorage.getItem(STORAGE_KEY_OJT));
-    return (ojt && typeof ojt === 'object') ? ojt : {};
+    if (!ojt || typeof ojt !== 'object' || Object.keys(ojt).length === 0) {
+      if (seed && Object.keys(seed).length > 0) {
+        localStorage.setItem(STORAGE_KEY_OJT, JSON.stringify(seed));
+        return { ...seed };
+      }
+      return {};
+    }
+    if (seed && Object.keys(seed).length > 500 && Object.keys(ojt).length < 500) {
+      const merged = { ...seed, ...ojt };
+      localStorage.setItem(STORAGE_KEY_OJT, JSON.stringify(merged));
+      return merged;
+    }
+    return ojt;
   } catch (e) {
     return {};
   }
@@ -7116,7 +7152,7 @@ function renderDepartmentDashboard() {
         <ul style="padding-left: 20px; margin-top: 6px;">
           <li><strong>Level I to L Transition:</strong> Focus on ${countI} beginner associates in Tire Building QA &amp; Preparatory QA for induction completion.</li>
           <li><strong>Level L to U Promotion:</strong> Accelerate practical OJT checkpoints for ${countL} learners across all 8 QA sections.</li>
-          <li><strong>Target ILUO Ratio:</strong> Target distribution is 10% I, 30% L, 40% U, and 20% O across Yokohama ATC Tires plant operations.</li>
+          <li><strong>Target ILUO Ratio:</strong> Target distribution is 10% I, 30% L, 40% U, and 20% O across plant operations.</li>
         </ul>
       </div>
     `;

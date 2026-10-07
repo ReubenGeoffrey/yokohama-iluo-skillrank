@@ -157,7 +157,7 @@ function generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmp
         <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
         <td><strong>${escapeHtml(c.parameter || c.desc || 'Operational Check')}</strong></td>
         <td>${escapeHtml(c.method || 'Practical Inspection')}</td>
-        <td>${escapeHtml(c.standard || 'As per Yokohama ATC Standard')}</td>
+        <td>${escapeHtml(c.standard || 'As per ATC Standard')}</td>
         <td style="text-align: center;">${max}</td>
         <td style="text-align: center; font-weight: bold; color: #166534;">${scoreVal}</td>
       </tr>
@@ -178,7 +178,7 @@ function generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmp
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Yokohama ILUO Assessment Report - ${empNo}</title>
+  <title>ILUO Assessment Report - ${empNo}</title>
   <style>
     @page {
       size: A4 portrait;
@@ -427,7 +427,7 @@ function generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmp
   <table class="header-table">
     <tr>
       <td style="width: 100px; text-align: left;">
-        ${logoBase64 ? `<img src="${logoBase64}" style="height: 48px; max-width: 110px; object-fit: contain;">` : '<strong style="color:#C00000; font-size:16pt; font-family:impact;">YOKOHAMA</strong>'}
+        ${logoBase64 ? `<img src="${logoBase64}" style="height: 48px; max-width: 110px; object-fit: contain;">` : '<strong style="color:#C00000; font-size:16pt; font-family:impact;">ATC TIRES</strong>'}
       </td>
       <td class="header-title-box">
         <div class="company-title">ATC TIRES PRIVATE LIMITED</div>
@@ -518,7 +518,7 @@ function generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmp
     <table class="header-table">
       <tr>
         <td style="width: 100px; text-align: left;">
-          ${logoBase64 ? `<img src="${logoBase64}" style="height: 44px; max-width: 100px; object-fit: contain;">` : '<strong style="color:#C00000; font-size:15pt; font-family:impact;">YOKOHAMA</strong>'}
+          ${logoBase64 ? `<img src="${logoBase64}" style="height: 44px; max-width: 100px; object-fit: contain;">` : '<strong style="color:#C00000; font-size:15pt; font-family:impact;">ATC TIRES</strong>'}
         </td>
         <td class="header-title-box">
           <div class="company-title">ATC TIRES PRIVATE LIMITED</div>
@@ -563,7 +563,7 @@ function generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmp
           <th style="width: 40px;">S.No</th>
           <th>Evaluation Checkpoint &amp; Operational Parameter</th>
           <th style="width: 140px;">Evaluation Method</th>
-          <th style="width: 180px;">Yokohama Standard</th>
+          <th style="width: 180px;">Standard Parameter</th>
           <th style="width: 60px;">Max</th>
           <th style="width: 60px;">Awarded</th>
         </tr>

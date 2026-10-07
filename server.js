@@ -351,13 +351,13 @@ app.post('/api/auth/admin/send-otp', async (req, res) => {
   await setCloudOtp(emailRaw, newOtpRecord);
 
   const mailOptions = {
-    from: `"Yokohama ILUO Admin" <${user}>`,
+    from: `"ILUO Admin" <${user}>`,
     to: emailRaw,
-    subject: `Yokohama ILUO Admin Login OTP`,
+    subject: `ILUO Admin Login OTP`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 480px; padding: 24px; border: 2px solid #005B9E; border-radius: 12px; background: #FFFFFF; margin: 0 auto;">
         <div style="background: linear-gradient(135deg, #005B9E 0%, #003D6B 100%); color: white; padding: 16px; border-radius: 8px; font-weight: 800; font-size: 18px; text-align: center; letter-spacing: 0.5px;">
-          Yokohama ILUO Admin Login
+          ILUO Admin Login
         </div>
         <div style="padding: 24px 16px; text-align: center;">
           <p style="font-size: 16px; color: #334155; margin-bottom: 12px; font-weight: 600;">Your OTP is:</p>
@@ -367,7 +367,7 @@ app.post('/api/auth/admin/send-otp', async (req, res) => {
           <p style="color: #E31B23; font-weight: 800; font-size: 15px; margin-top: 8px;">⏱️ Expires in 1 minute (60 seconds)</p>
         </div>
         <div style="border-top: 1px solid #E2E8F0; padding-top: 16px; font-size: 12px; color: #94A3B8; text-align: center;">
-          Official Yokohama Off-Highway Tires Quality Assurance Portal
+          Official Plant Skill Qualification &amp; Analytics Portal
         </div>
       </div>
     `
@@ -1796,7 +1796,7 @@ app.get('/api/employee-docx/:empNo', async (req, res) => {
 
   try {
     const docxBuf = await buildDocxBufferForEmployee(empNo);
-    const fileName = `Yokohama_ILUO_Report_${empNo}.docx`;
+    const fileName = `ILUO_Report_${empNo}.docx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Length', docxBuf.length);
@@ -1844,7 +1844,7 @@ app.get('/api/ojt-docx/:empNo', async (req, res) => {
     const zip = await generateStandaloneOjtDocx(emp, ojtTmpl, (ojtRec && ojtRec.scores) || {}, (ojtRec && ojtRec.wiChecks) || {}, ojtRec || {}, JSZipLib);
     const buf = await zip.generateAsync({ type: 'nodebuffer' });
     const cleanName = (emp.name || empNo).replace(/[^a-zA-Z0-9]/g, '_');
-    const fileName = `Yokohama_OJT_${ojtTmpl ? ojtTmpl.id : 'Form'}_${empNo}_${cleanName}.docx`;
+    const fileName = `OJT_${ojtTmpl ? ojtTmpl.id : 'Form'}_${empNo}_${cleanName}.docx`;
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -1873,7 +1873,7 @@ app.post('/api/generate-docx', async (req, res) => {
   try {
     // Read-only generation: recordData is used purely in-memory for document rendering
     const docxBuf = await buildDocxBufferForEmployee(strEmpNo, recordData);
-    const fileName = `Yokohama_ILUO_Report_${strEmpNo}.docx`;
+    const fileName = `ILUO_Report_${strEmpNo}.docx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Length', docxBuf.length);
@@ -1901,7 +1901,7 @@ app.get('/api/generate-pdf/:empNo', async (req, res) => {
 
   try {
     const pdfBuf = await renderDynamicPdf(empNo);
-    const fileName = `Yokohama_ILUO_Report_${empNo}.pdf`;
+    const fileName = `ILUO_Report_${empNo}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Length', pdfBuf.length);
@@ -1933,7 +1933,7 @@ app.post('/api/generate-pdf', async (req, res) => {
 
   try {
     const pdfBuf = await renderDynamicPdf(strEmpNo, recordData);
-    const fileName = `Yokohama_ILUO_Report_${strEmpNo}.pdf`;
+    const fileName = `ILUO_Report_${strEmpNo}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Length', pdfBuf.length);
