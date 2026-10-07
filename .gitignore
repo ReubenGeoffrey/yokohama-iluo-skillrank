@@ -7,6 +7,7 @@ __pycache__/
 !update_ojt_excel.py
 !generate_employee_docx.py
 !generate_qa_workbook.py
+!combine_production_and_qa.py
 output_docx/
 /pdf_reports/
 test_*.docx

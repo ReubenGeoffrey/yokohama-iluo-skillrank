@@ -3448,6 +3448,22 @@ function generateProductionFormatWorkbook(filterSecKey) {
   return wb;
 }
 
+// Download Master Combined Excel (Production + QA Data with exact formatting and formulas)
+function downloadCombinedProductionAndQAExcel() {
+  try {
+    const a = document.createElement('a');
+    a.href = '1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx';
+    a.download = '1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast('Combined Master Excel (Production + QA Data) downloaded successfully!');
+  } catch (err) {
+    console.error('Download combined Excel failed:', err);
+    exportAdminExcel();
+  }
+}
+
 // Export Official Excel Report (Matches Production Skill Assessment Workbook)
 function exportAdminExcel() {
   try {
