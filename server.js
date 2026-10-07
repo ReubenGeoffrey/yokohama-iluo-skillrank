@@ -10,10 +10,10 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 let SESSION_SECRET = process.env.SESSION_SECRET;
 if (!SESSION_SECRET) {
-  if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
-    console.warn('⚠️ WARNING: SESSION_SECRET is not set in production. Generating cryptographically strong ephemeral secret.');
+  if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+    throw new Error('FATAL: SESSION_SECRET environment variable is required in production environment. A consistent secret across all instances is mandatory.');
   }
-  SESSION_SECRET = crypto.randomBytes(32).toString('hex');
+  SESSION_SECRET = 'dev_ephemeral_session_secret_for_local_testing_only';
 }
 const AUTHORIZED_ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
 const kvUrl = process.env.UPSTASH_REDIS_REST_URL;
@@ -77,20 +77,59 @@ app.use((req, res, next) => {
   next();
 });
 
-// Security Blocker: Prevent direct access to internal server files, json databases, configs, logs (Allow QC_templates)
+// Strict Allowlist of Public Static Assets
+const ALLOWED_STATIC_FILES = new Set([
+  '/',
+  '/index.html',
+  '/app.js',
+  '/data.js',
+  '/styles.css',
+  '/ojt_templates_data.js',
+  '/seed_data.js',
+  '/docx_generator.js',
+  '/report_html_generator.js',
+  '/docx-preview.min.js',
+  '/html2pdf.bundle.min.js',
+  '/jszip.min.js',
+  '/mammoth.browser.min.js',
+  '/xlsx.full.min.js',
+  '/atg_logo.png',
+  '/assets/atg_logo.png',
+  '/yokohama_logo.png',
+  '/favicon.ico',
+  '/favicon.png'
+]);
+
+// Static Security Middleware: Allowlist Only (Blocks /server.js, .env, .json, test files, configs)
 app.use((req, res, next) => {
-  // Allow official Word templates in QC_templates for client-side document generation
-  if (req.path.startsWith('/QC_templates/')) {
+  if (req.path.startsWith('/api/')) {
     return next();
   }
-  if (req.path.match(/\.(json|env|ps1|docx|md|log|gitignore|gitattributes)$/i) || req.path.includes('.git')) {
-    return res.status(403).json({ success: false, error: 'Forbidden: Direct file access is restricted' });
+
+  // Allow official Word templates in QC_templates
+  if (req.path.startsWith('/QC_templates/') && req.path.endsWith('.docx')) {
+    return next();
   }
-  next();
+
+  // Allow static images in /assets/
+  if (req.path.startsWith('/assets/') && /\.(png|jpe?g|svg|ico|webp)$/i.test(req.path)) {
+    return next();
+  }
+
+  if (ALLOWED_STATIC_FILES.has(req.path)) {
+    return next();
+  }
+
+  // Reject all other direct file access attempts
+  return res.status(403).json({
+    success: false,
+    error: 'Forbidden: Direct access to this resource is restricted by static security policy'
+  });
 });
 
-// Explicit static route for QC_templates Word files
+// Explicit static route for QC_templates Word files & assets
 app.use('/QC_templates', express.static(path.join(__dirname, 'QC_templates')));
+app.use('/assets', express.static(path.join(__dirname, 'assets')));
 app.use(express.static(path.join(__dirname), { dotfiles: 'ignore' }));
 
 // Explicit logo & favicon handlers
@@ -325,7 +364,10 @@ async function getAuthUser(req) {
 
 async function requireSuperAdminAuth(req, res, next) {
   const user = await getAuthUser(req);
-  if (!user || user.role !== 'SUPERADMIN') {
+  if (!user) {
+    return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
+  }
+  if (user.role !== 'SUPERADMIN') {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Superadmin access privilege required' });
   }
   next();
@@ -333,32 +375,44 @@ async function requireSuperAdminAuth(req, res, next) {
 
 async function requireAdminAuth(req, res, next) {
   const user = await getAuthUser(req);
-  if (!user || !['SUPERADMIN', 'ADMIN'].includes(user.role)) {
-    return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Administrator session required' });
+  if (!user) {
+    return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
+  }
+  if (!['SUPERADMIN', 'ADMIN'].includes(user.role)) {
+    return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Administrator privileges required' });
   }
   next();
 }
 
 async function requireEvaluatorAuth(req, res, next) {
   const user = await getAuthUser(req);
-  if (!user || !['EVALUATOR', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
-    return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Evaluator or Administrator session required' });
+  if (!user) {
+    return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
+  }
+  if (!['EVALUATOR', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
+    return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Evaluator privileges required' });
   }
   next();
 }
 
 async function requireSectionAuth(req, res, next) {
   const user = await getAuthUser(req);
-  if (!user || !['SECTION_HEAD', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
-    return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Section Head or Administrator session required' });
+  if (!user) {
+    return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
+  }
+  if (!['SECTION_HEAD', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
+    return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Section Head privileges required' });
   }
   next();
 }
 
 async function requireDeptAuth(req, res, next) {
   const user = await getAuthUser(req);
-  if (!user || !['DEPT_HEAD', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
-    return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Department HOD or Administrator session required' });
+  if (!user) {
+    return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
+  }
+  if (!['DEPT_HEAD', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
+    return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Department HOD privileges required' });
   }
   next();
 }
@@ -366,7 +420,10 @@ async function requireDeptAuth(req, res, next) {
 async function requireEmpAuth(req, res, next) {
   const user = await getAuthUser(req);
   if (!user) {
-    return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Employee or Administrator authentication required' });
+    return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Employee authentication required' });
+  }
+  if (!['emp', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
+    return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Employee privileges required' });
   }
   next();
 }
@@ -379,8 +436,40 @@ async function requireAnyAuth(req, res, next) {
   next();
 }
 
+async function canAccessEmployeeData(user, targetEmpNo) {
+  if (!user) return false;
+  if (['SUPERADMIN', 'ADMIN'].includes(user.role)) return true;
+
+  const strTarget = String(targetEmpNo).trim().toLowerCase();
+  if (user.role === 'emp') {
+    return String(user.empNo).trim().toLowerCase() === strTarget;
+  }
+
+  const employees = await getAuthoritativeEmployees();
+  const targetEmp = employees.find(e => String(e.empNo).trim().toLowerCase() === strTarget);
+  if (!targetEmp) return false;
+
+  if (user.role === 'SECTION_HEAD') {
+    return normalizeSectionNameServer(targetEmp.section) === normalizeSectionNameServer(user.section);
+  }
+
+  if (user.role === 'DEPT_HEAD') {
+    const userDept = String(user.department || '').trim().toLowerCase();
+    const empDept = String(targetEmp.dept || '').trim().toLowerCase();
+    return userDept === 'all' || userDept === empDept || empDept.includes(userDept) || userDept.includes(empDept);
+  }
+
+  if (user.role === 'EVALUATOR') {
+    const assignedSec = normalizeSectionNameServer(user.section || user.category || '');
+    const empSec = normalizeSectionNameServer(targetEmp.section);
+    return empSec.includes(assignedSec) || assignedSec.includes(empSec);
+  }
+
+  return false;
+}
+
 // ---------------------------------------------------------------------
-// Enterprise Persistent Audit Logging System
+// Enterprise Persistent Audit Logging System (Redis Cloud Single Source of Truth)
 // ---------------------------------------------------------------------
 const AUDIT_LOGS_FILE = path.join(__dirname, 'audit_logs.json');
 const auditLogsMemory = [];
@@ -408,10 +497,18 @@ async function logAuditEvent(action, user, details, req = null) {
   if (auditLogsMemory.length > 500) auditLogsMemory.shift();
 
   if (kvUrl && kvToken) {
-    syncWithCloudKv('SET', 'yokohama_audit_logs', auditLogsMemory.slice(-200)).catch(() => {});
+    try {
+      const existing = await syncWithCloudKv('GET', 'yokohama_audit_logs');
+      const allLogs = Array.isArray(existing) ? existing : [];
+      allLogs.push(entry);
+      const trimmed = allLogs.slice(-500);
+      await syncWithCloudKv('SET', 'yokohama_audit_logs', trimmed);
+    } catch (e) {
+      console.error('Failed to sync audit log to Redis:', e.message);
+    }
   }
   try {
-    fs.writeFileSync(AUDIT_LOGS_FILE, JSON.stringify(auditLogsMemory.slice(-200), null, 2), 'utf-8');
+    fs.writeFileSync(AUDIT_LOGS_FILE, JSON.stringify(auditLogsMemory.slice(-500), null, 2), 'utf-8');
   } catch (e) {}
 
   console.log(`[AUDIT] ${entry.timestamp} | ${entry.action} | ${entry.user} | ${entry.ip} | ${entry.details}`);
@@ -716,20 +813,16 @@ app.post('/api/auth/evaluator/login', async (req, res) => {
   }
 
   const secKey = section.toLowerCase();
-  const expectedPass = EVALUATOR_CREDENTIALS[secKey] || 'ojt123';
-  const allowed = [expectedPass, 'ojt123', `${secKey}123`];
+  const expectedPass = EVALUATOR_CREDENTIALS[secKey] || process.env.EVALUATOR_PASSWORD || 'ojt123';
 
   let isValid = false;
-  for (const p of allowed) {
-    try {
-      const pBuf = Buffer.from(password);
-      const expBuf = Buffer.from(p);
-      if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
-        isValid = true;
-        break;
-      }
-    } catch (e) {}
-  }
+  try {
+    const pBuf = Buffer.from(password);
+    const expBuf = Buffer.from(expectedPass);
+    if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
+      isValid = true;
+    }
+  } catch (e) {}
 
   if (!isValid) {
     return res.status(401).json({ success: false, message: `Invalid password for ${section} Evaluator` });
@@ -768,7 +861,7 @@ app.post('/api/auth/section/login', async (req, res) => {
   }
 
   const expectedPass = process.env.SECTION_PASSWORD || 'section123';
-  let isValid = (password === expectedPass || password === 'section123');
+  let isValid = false;
   try {
     const pBuf = Buffer.from(password);
     const expBuf = Buffer.from(expectedPass);
@@ -814,7 +907,7 @@ app.post('/api/auth/dept/login', async (req, res) => {
   }
 
   const expectedPass = process.env.DEPT_PASSWORD || 'hod123';
-  let isValid = (password === expectedPass || password === 'hod123');
+  let isValid = false;
   try {
     const pBuf = Buffer.from(password);
     const expBuf = Buffer.from(expectedPass);
@@ -964,13 +1057,7 @@ app.post('/api/auth/employee/login', async (req, res) => {
 
   await setCloudSession(empSessionToken, sessionData, 28800);
 
-  res.cookie('emp_session', empSessionToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 8 * 60 * 60 * 1000,
-    signed: true
-  });
+  res.cookie('emp_session', empSessionToken, getCookieOptions(8 * 60 * 60 * 1000));
 
   return res.json({
     success: true,
@@ -1007,6 +1094,7 @@ const os = require('os');
 const RECORDS_JSON_FILE = path.join(__dirname, 'assessment_records.json');
 const EMPLOYEES_JSON_FILE = path.join(__dirname, 'custom_employees.json');
 const QUESTIONS_JSON_FILE = path.join(__dirname, 'custom_questions.json');
+const MASTER_QUESTIONS_JSON_FILE = path.join(__dirname, 'master_questions.json');
 const OJT_JSON_FILE = path.join(__dirname, 'ojt_evaluations.json');
 const SETTINGS_JSON_FILE = path.join(__dirname, 'custom_settings.json');
 
@@ -1157,8 +1245,12 @@ async function saveAuthoritativeQuestions(qb) {
   if (kvUrl && kvToken) {
     await syncWithCloudKv('SET', 'yokohama_question_bank', qb);
   }
+  const serialized = JSON.stringify(qb, null, 2);
   try {
-    fs.writeFileSync(QUESTIONS_JSON_FILE, JSON.stringify(qb, null, 2), 'utf-8');
+    fs.writeFileSync(QUESTIONS_JSON_FILE, serialized, 'utf-8');
+  } catch (e) {}
+  try {
+    fs.writeFileSync(MASTER_QUESTIONS_JSON_FILE, serialized, 'utf-8');
   } catch (e) {}
 }
 
@@ -1402,41 +1494,76 @@ async function scoreAssessmentServerSide(empNo, targetLevel, responses, section)
 // ASSESSMENT RECORDS API (Scoped Access & Multi-Device Sync)
 // ---------------------------------------------------------------------
 
-// GET /api/records (Scoped: Superadmin sees all; Employee sees only own)
+// GET /api/records (Scoped: Superadmin/Admin see all; Sections/Dept scoped; Employee sees only own)
 app.get('/api/records', requireAnyAuth, async (req, res) => {
   const records = await getAuthoritativeRecords();
   const user = req.authUser;
 
-  if (user.role === 'SUPERADMIN') {
+  if (['SUPERADMIN', 'ADMIN'].includes(user.role)) {
     return res.json({ success: true, records });
   }
 
-  // Employee role: return only self record, or section if querying section
+  const employees = await getAuthoritativeEmployees();
+
+  // Employee role: strictly own record only (No cross-candidate or section leakage)
   if (user.role === 'emp') {
     const userEmpNo = String(user.empNo).trim();
-    const sectionQuery = req.query.section;
-
-    if (sectionQuery && user.section && normalizeSectionNameServer(sectionQuery) === normalizeSectionNameServer(user.section)) {
-      // Scoped section access
-      const employees = await getAuthoritativeEmployees();
-      const sectionEmpNos = new Set(
-        employees
-          .filter(e => normalizeSectionNameServer(e.section) === normalizeSectionNameServer(user.section))
-          .map(e => String(e.empNo).trim())
-      );
-      const scopedRecords = {};
-      Object.entries(records).forEach(([k, v]) => {
-        if (sectionEmpNos.has(k)) scopedRecords[k] = v;
-      });
-      return res.json({ success: true, records: scopedRecords });
-    }
-
-    // Default employee scope: own record only
     const ownRecord = records[userEmpNo] || null;
     return res.json({
       success: true,
       records: ownRecord ? { [userEmpNo]: ownRecord } : {}
     });
+  }
+
+  // Section Head role: scoped to assigned section
+  if (user.role === 'SECTION_HEAD') {
+    const secNorm = normalizeSectionNameServer(user.section);
+    const sectionEmpNos = new Set(
+      employees
+        .filter(e => normalizeSectionNameServer(e.section) === secNorm)
+        .map(e => String(e.empNo).trim())
+    );
+    const scopedRecords = {};
+    Object.entries(records).forEach(([k, v]) => {
+      if (sectionEmpNos.has(k)) scopedRecords[k] = v;
+    });
+    return res.json({ success: true, records: scopedRecords });
+  }
+
+  // Department Head role: scoped to assigned department
+  if (user.role === 'DEPT_HEAD') {
+    const deptNorm = String(user.department || '').trim().toLowerCase();
+    const deptEmpNos = new Set(
+      employees
+        .filter(e => {
+          const d = String(e.dept || '').trim().toLowerCase();
+          return deptNorm === 'all' || d === deptNorm || d.includes(deptNorm) || deptNorm.includes(d);
+        })
+        .map(e => String(e.empNo).trim())
+    );
+    const scopedRecords = {};
+    Object.entries(records).forEach(([k, v]) => {
+      if (deptEmpNos.has(k)) scopedRecords[k] = v;
+    });
+    return res.json({ success: true, records: scopedRecords });
+  }
+
+  // Evaluator role: scoped to evaluation section
+  if (user.role === 'EVALUATOR') {
+    const evalSecNorm = normalizeSectionNameServer(user.section || user.category || '');
+    const evalEmpNos = new Set(
+      employees
+        .filter(e => {
+          const s = normalizeSectionNameServer(e.section);
+          return s.includes(evalSecNorm) || evalSecNorm.includes(s);
+        })
+        .map(e => String(e.empNo).trim())
+    );
+    const scopedRecords = {};
+    Object.entries(records).forEach(([k, v]) => {
+      if (evalEmpNos.has(k)) scopedRecords[k] = v;
+    });
+    return res.json({ success: true, records: scopedRecords });
   }
 
   return res.status(403).json({ success: false, message: 'Forbidden' });
@@ -1803,31 +1930,95 @@ app.post('/api/employees', requireAdminAuth, async (req, res) => {
 // OJT EVALUATIONS API (Scoped)
 // ---------------------------------------------------------------------
 
-// GET /api/ojt-evaluations: Scoped
+// GET /api/ojt-evaluations: Scoped (Superadmin/Admin see all; Sections/Dept scoped; Employee sees only own)
 app.get('/api/ojt-evaluations', requireAnyAuth, async (req, res) => {
   const ojtObj = await getAuthoritativeOjtEvaluations();
   const user = req.authUser;
 
-  if (user.role === 'SUPERADMIN') {
+  if (['SUPERADMIN', 'ADMIN'].includes(user.role)) {
     return res.json({ success: true, evaluations: ojtObj });
   }
 
+  const employees = await getAuthoritativeEmployees();
+
   // Employee: own evaluation only
-  const ownOjt = ojtObj[String(user.empNo).trim()] || null;
-  return res.json({
-    success: true,
-    evaluations: ownOjt ? { [String(user.empNo).trim()]: ownOjt } : {}
-  });
+  if (user.role === 'emp') {
+    const userEmpNo = String(user.empNo).trim();
+    const ownOjt = ojtObj[userEmpNo] || null;
+    return res.json({
+      success: true,
+      evaluations: ownOjt ? { [userEmpNo]: ownOjt } : {}
+    });
+  }
+
+  // Section Head: evaluations for employees in section
+  if (user.role === 'SECTION_HEAD') {
+    const secNorm = normalizeSectionNameServer(user.section);
+    const sectionEmpNos = new Set(
+      employees
+        .filter(e => normalizeSectionNameServer(e.section) === secNorm)
+        .map(e => String(e.empNo).trim())
+    );
+    const scopedOjt = {};
+    Object.entries(ojtObj).forEach(([k, v]) => {
+      if (sectionEmpNos.has(k)) scopedOjt[k] = v;
+    });
+    return res.json({ success: true, evaluations: scopedOjt });
+  }
+
+  // Department Head: evaluations for employees in department
+  if (user.role === 'DEPT_HEAD') {
+    const deptNorm = String(user.department || '').trim().toLowerCase();
+    const deptEmpNos = new Set(
+      employees
+        .filter(e => {
+          const d = String(e.dept || '').trim().toLowerCase();
+          return deptNorm === 'all' || d === deptNorm || d.includes(deptNorm) || deptNorm.includes(d);
+        })
+        .map(e => String(e.empNo).trim())
+    );
+    const scopedOjt = {};
+    Object.entries(ojtObj).forEach(([k, v]) => {
+      if (deptEmpNos.has(k)) scopedOjt[k] = v;
+    });
+    return res.json({ success: true, evaluations: scopedOjt });
+  }
+
+  // Evaluator: evaluations for employees in assigned section
+  if (user.role === 'EVALUATOR') {
+    const evalSecNorm = normalizeSectionNameServer(user.section || user.category || '');
+    const evalEmpNos = new Set(
+      employees
+        .filter(e => {
+          const s = normalizeSectionNameServer(e.section);
+          return s.includes(evalSecNorm) || evalSecNorm.includes(s);
+        })
+        .map(e => String(e.empNo).trim())
+    );
+    const scopedOjt = {};
+    Object.entries(ojtObj).forEach(([k, v]) => {
+      if (evalEmpNos.has(k)) scopedOjt[k] = v;
+    });
+    return res.json({ success: true, evaluations: scopedOjt });
+  }
+
+  return res.status(403).json({ success: false, message: 'Forbidden' });
 });
 
-// POST /api/ojt-evaluations: Superadmin only
-app.post('/api/ojt-evaluations', requireAdminAuth, async (req, res) => {
+// POST /api/ojt-evaluations: Evaluator, Admin, Superadmin (Scoped by section/employee)
+app.post('/api/ojt-evaluations', requireEvaluatorAuth, async (req, res) => {
   const { empNo, ojtData } = req.body;
   if (!empNo || !ojtData) {
     return res.status(400).json({ success: false, message: 'empNo and ojtData required' });
   }
 
   const strEmpNo = String(empNo).trim();
+  const user = req.authUser;
+  const canAccess = await canAccessEmployeeData(user, strEmpNo);
+  if (!canAccess) {
+    return res.status(403).json({ success: false, message: 'Forbidden: You do not have permission to evaluate this employee' });
+  }
+
   await saveAuthoritativeOjtEvaluation(strEmpNo, ojtData);
 
   try {
@@ -2133,8 +2324,13 @@ app.get('/api/employee-docx/:empNo', async (req, res) => {
   const empNo = String(req.params.empNo).trim();
   const user = await getAuthUser(req);
 
-  if (user && user.role === 'emp' && String(user.empNo).trim() !== empNo) {
-    return res.status(403).json({ success: false, message: 'Forbidden: You can only generate your own report' });
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Unauthorized: Authentication required' });
+  }
+
+  const allowed = await canAccessEmployeeData(user, empNo);
+  if (!allowed) {
+    return res.status(403).json({ success: false, message: 'Forbidden: You do not have permission to generate this report' });
   }
 
   try {
@@ -2155,8 +2351,13 @@ app.get('/api/ojt-docx/:empNo', async (req, res) => {
   const empNo = String(req.params.empNo).trim();
   const user = await getAuthUser(req);
 
-  if (user && user.role === 'emp' && String(user.empNo).trim() !== empNo) {
-    return res.status(403).json({ success: false, message: 'Forbidden: You can only generate your own report' });
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Unauthorized: Authentication required' });
+  }
+
+  const allowed = await canAccessEmployeeData(user, empNo);
+  if (!allowed) {
+    return res.status(403).json({ success: false, message: 'Forbidden: You do not have permission to generate this report' });
   }
 
   try {
@@ -2209,8 +2410,13 @@ app.post('/api/generate-docx', async (req, res) => {
   const strEmpNo = String(empNo).trim();
   const user = await getAuthUser(req);
 
-  if (user && user.role === 'emp' && String(user.empNo).trim() !== strEmpNo) {
-    return res.status(403).json({ success: false, message: 'Forbidden: You can only generate your own report' });
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Unauthorized: Authentication required' });
+  }
+
+  const allowed = await canAccessEmployeeData(user, strEmpNo);
+  if (!allowed) {
+    return res.status(403).json({ success: false, message: 'Forbidden: You do not have permission to generate this report' });
   }
 
   try {
@@ -2232,8 +2438,13 @@ app.get('/api/generate-pdf/:empNo', async (req, res) => {
   const empNo = String(req.params.empNo).trim();
   const user = await getAuthUser(req);
 
-  if (user && user.role === 'emp' && String(user.empNo).trim() !== empNo) {
-    return res.status(403).json({ success: false, message: 'Forbidden: You can only generate your own report' });
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Unauthorized: Authentication required' });
+  }
+
+  const allowed = await canAccessEmployeeData(user, empNo);
+  if (!allowed) {
+    return res.status(403).json({ success: false, message: 'Forbidden: You do not have permission to generate this report' });
   }
 
   const employees = await getAuthoritativeEmployees();
@@ -2264,8 +2475,13 @@ app.post('/api/generate-pdf', async (req, res) => {
   const strEmpNo = String(empNo).trim();
   const user = await getAuthUser(req);
 
-  if (user && user.role === 'emp' && String(user.empNo).trim() !== strEmpNo) {
-    return res.status(403).json({ success: false, message: 'Forbidden: You can only generate your own report' });
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Unauthorized: Authentication required' });
+  }
+
+  const allowed = await canAccessEmployeeData(user, strEmpNo);
+  if (!allowed) {
+    return res.status(403).json({ success: false, message: 'Forbidden: You do not have permission to generate this report' });
   }
 
   const employees = await getAuthoritativeEmployees();
@@ -2292,8 +2508,13 @@ app.get('/api/employee-report-html/:empNo', async (req, res) => {
   const empNo = String(req.params.empNo).trim();
   const user = await getAuthUser(req);
 
-  if (user && user.role === 'emp' && String(user.empNo).trim() !== empNo) {
-    return res.status(403).send('<h3>Forbidden: You can only view your own report</h3>');
+  if (!user) {
+    return res.status(401).send('<h3>Unauthorized: Authentication required</h3>');
+  }
+
+  const allowed = await canAccessEmployeeData(user, empNo);
+  if (!allowed) {
+    return res.status(403).send('<h3>Forbidden: You do not have permission to view this report</h3>');
   }
 
   try {
@@ -2355,7 +2576,7 @@ app.use((err, req, res, next) => {
 // Fallback route to index.html for Client-Side SPA Routing
 app.use((req, res) => {
   if (req.path.startsWith('/api/') || req.path.match(/\.(png|jpg|jpeg|gif|svg|ico|css|js|json|map|docx|xlsx|pdf|txt|woff2?|ttf|eot)$/i)) {
-    return res.status(404).json({ success: false, error: 'Not Found', path: req.path });
+    return res.status(404).json({ success: false, error: 'Not Found' });
   }
   res.sendFile(path.join(__dirname, 'index.html'));
 });

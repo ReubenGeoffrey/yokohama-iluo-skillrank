@@ -79,7 +79,7 @@ test('Unauthenticated callers cannot invoke destructive endpoints', async () => 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ confirmPhrase: 'RESET-ALL-EXAMS' })
   });
-  assert.strictEqual(res.status, 403);
+  assert.strictEqual(res.status, 401);
 });
 
 test('GET /api/admin/audit-logs returns recorded security audit events', async () => {
