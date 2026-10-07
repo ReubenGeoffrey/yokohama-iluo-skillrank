@@ -170,12 +170,12 @@
               <form id="adminLoginForm" onsubmit="handleAdminLogin(event)">
                 <div class="form-group">
                   <label for="adminUsernameInput">Admin Username or Email</label>
-                  <input type="text" id="adminUsernameInput" class="form-control" placeholder="admin or authorized email" required autofocus style="font-weight: 600;" value="admin">
+                  <input type="text" id="adminUsernameInput" class="form-control" placeholder="admin or authorized email" required autofocus style="font-weight: 600;" value="" autocomplete="username">
                 </div>
 
                 <div class="form-group">
                   <label for="adminPasswordInput">Password</label>
-                  <input type="password" id="adminPasswordInput" class="form-control" placeholder="Enter admin password" required style="font-weight: 600;" value="admin123">
+                  <input type="password" id="adminPasswordInput" class="form-control" placeholder="Enter admin password" required style="font-weight: 600;" value="" autocomplete="current-password">
                 </div>
 
                 <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #0F172A 0%, #003D6B 100%); font-weight: 700; width: 100%; padding: 12px; margin-top: 8px;">
@@ -561,7 +561,7 @@
               </div>
               <div class="form-group">
                 <label for="secPasswordInput">Section Password</label>
-                <input type="password" id="secPasswordInput" class="form-control" placeholder="Enter password (default: section123)" value="section123" required>
+                <input type="password" id="secPasswordInput" class="form-control" placeholder="Enter section password" value="" autocomplete="current-password" required>
               </div>
               <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #0284C7 0%, #003D6B 100%); width: 100%; padding: 12px; font-weight: 700;">
                 Access Section Dashboard
@@ -694,7 +694,7 @@
               </div>
               <div class="form-group">
                 <label for="deptPasswordInput">HOD Password</label>
-                <input type="password" id="deptPasswordInput" class="form-control" placeholder="Enter password (default: hod123)" value="hod123" required>
+                <input type="password" id="deptPasswordInput" class="form-control" placeholder="Enter department password" value="" autocomplete="current-password" required>
               </div>
               <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #6D28D9 0%, #003D6B 100%); width: 100%; padding: 12px; font-weight: 700;">
                 Access Department HOD Dashboard
@@ -865,9 +865,6 @@
               <button type="submit" class="btn-primary" id="btnSubmitOjtLogin" style="background: linear-gradient(135deg, #059669 0%, #003D6B 100%); width: 100%; padding: 12px; font-weight: 700;">
                 Sign In to Safety Skill Assessment Center
               </button>
-              <div style="font-size: 0.78rem; color: #64748B; margin-top: 10px; text-align: center;">
-                Evaluator Passwords: <code>safety123</code> &bull; <code>ci123</code> &bull; <code>quality123</code> &bull; <code>tech123</code> &bull; <code>hr123</code>
-              </div>
             </form>
             <div style="text-align: center; margin-top: 16px;">
               <a href="javascript:void(0)" onclick="navigateTo('/')" style="color: #059669; font-weight: 600; font-size: 0.88rem; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">

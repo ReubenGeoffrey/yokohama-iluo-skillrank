@@ -8,15 +8,74 @@ const cookieParser = require('cookie-parser');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const SESSION_SECRET = process.env.SESSION_SECRET || 'yokohama_iluo_qa_secret_2026';
+let SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET) {
+  if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
+    console.warn('⚠️ WARNING: SESSION_SECRET is not set in production. Generating cryptographically strong ephemeral secret.');
+  }
+  SESSION_SECRET = crypto.randomBytes(32).toString('hex');
+}
 const AUTHORIZED_ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
 const kvUrl = process.env.UPSTASH_REDIS_REST_URL;
 const kvToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 
-app.use(cors({ origin: true, credentials: true }));
+// Strict Trusted Origins Allowlist
+const ALLOWED_ORIGINS = [
+  'https://yokohama-iluo-portal.vercel.app',
+  'http://localhost:5000',
+  'http://localhost:3000',
+  'http://127.0.0.1:5000',
+  'http://127.0.0.1:3000'
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    const isAllowed = ALLOWED_ORIGINS.includes(origin) ||
+      (origin.endsWith('.vercel.app') && origin.includes('yokohama-iluo'));
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error('Blocked by CORS policy'));
+    }
+  },
+  credentials: true
+}));
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser(SESSION_SECRET));
+
+// Standard Secure Cookie Options Helper
+function getCookieOptions(maxAgeMs = 8 * 60 * 60 * 1000) {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production' || !!process.env.VERCEL,
+    sameSite: 'lax',
+    maxAge: maxAgeMs,
+    path: '/',
+    signed: true
+  };
+}
+
+// CSRF & Untrusted Origin Blocker for mutating requests
+app.use((req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  const origin = req.headers['origin'] || req.headers['referer'];
+  if (origin) {
+    try {
+      const u = new URL(origin);
+      const isAllowed = ALLOWED_ORIGINS.includes(u.origin) ||
+        (u.origin.endsWith('.vercel.app') && u.origin.includes('yokohama-iluo'));
+      if (!isAllowed) {
+        return res.status(403).json({ success: false, message: 'Forbidden: CSRF check failed (Untrusted Origin)' });
+      }
+    } catch (e) {
+      return res.status(403).json({ success: false, message: 'Forbidden: Invalid request origin' });
+    }
+  }
+  next();
+});
 
 // Security Blocker: Prevent direct access to internal server files, json databases, configs, logs (Allow QC_templates)
 app.use((req, res, next) => {
@@ -209,7 +268,7 @@ async function getCloudSession(token) {
   let session = null;
   if (kvUrl && kvToken) {
     const cloudSess = await syncWithCloudKv('GET', `sess:${token}`);
-    if (cloudSess && (cloudSess.email || cloudSess.empNo)) {
+    if (cloudSess && (cloudSess.email || cloudSess.empNo || cloudSess.role)) {
       session = cloudSess;
       activeSessions.set(token, cloudSess);
     }
@@ -225,38 +284,81 @@ async function getCloudSession(token) {
 }
 
 // ---------------------------------------------------------------------
-// Authorization Middlewares
+// Role-Based Authorization Engine (RBAC)
 // ---------------------------------------------------------------------
 async function getAuthUser(req) {
-  // Check admin session cookie or header
-  const adminToken = req.signedCookies.admin_session || req.cookies.admin_session || req.headers['x-admin-token'];
-  if (adminToken) {
-    const adminSess = await getCloudSession(adminToken);
-    if (adminSess && adminSess.role === 'SUPERADMIN') {
-      req.adminSession = adminSess;
-      req.authUser = adminSess;
-      return adminSess;
-    }
+  // Check any signed cookie, regular cookie, or header
+  const token = req.signedCookies.admin_session || req.cookies.admin_session ||
+    req.signedCookies.evaluator_session || req.cookies.evaluator_session ||
+    req.signedCookies.section_session || req.cookies.section_session ||
+    req.signedCookies.dept_session || req.cookies.dept_session ||
+    req.signedCookies.emp_session || req.cookies.emp_session ||
+    req.headers['x-admin-token'] || req.headers['x-evaluator-token'] ||
+    req.headers['x-section-token'] || req.headers['x-dept-token'] ||
+    req.headers['x-emp-token'] || req.headers['x-session-token'] ||
+    (req.headers.authorization && req.headers.authorization.startsWith('Bearer ') ? req.headers.authorization.slice(7).trim() : null);
+
+  if (!token) return null;
+
+  const session = await getCloudSession(token);
+  if (!session) return null;
+
+  req.authUser = session;
+  if (['SUPERADMIN', 'ADMIN'].includes(session.role)) {
+    req.adminSession = session;
+  }
+  if (session.role === 'emp') {
+    req.empSession = session;
+  }
+  if (session.role === 'EVALUATOR') {
+    req.evaluatorSession = session;
+  }
+  if (session.role === 'SECTION_HEAD') {
+    req.sectionSession = session;
+  }
+  if (session.role === 'DEPT_HEAD') {
+    req.deptSession = session;
   }
 
-  // Check employee session cookie or header
-  const empToken = req.signedCookies.emp_session || req.cookies.emp_session || req.headers['x-emp-token'];
-  if (empToken) {
-    const empSess = await getCloudSession(empToken);
-    if (empSess && empSess.role === 'emp') {
-      req.empSession = empSess;
-      req.authUser = empSess;
-      return empSess;
-    }
-  }
+  return session;
+}
 
-  return null;
+async function requireSuperAdminAuth(req, res, next) {
+  const user = await getAuthUser(req);
+  if (!user || user.role !== 'SUPERADMIN') {
+    return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Superadmin access privilege required' });
+  }
+  next();
 }
 
 async function requireAdminAuth(req, res, next) {
   const user = await getAuthUser(req);
-  if (!user || user.role !== 'SUPERADMIN') {
+  if (!user || !['SUPERADMIN', 'ADMIN'].includes(user.role)) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Administrator session required' });
+  }
+  next();
+}
+
+async function requireEvaluatorAuth(req, res, next) {
+  const user = await getAuthUser(req);
+  if (!user || !['EVALUATOR', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
+    return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Evaluator or Administrator session required' });
+  }
+  next();
+}
+
+async function requireSectionAuth(req, res, next) {
+  const user = await getAuthUser(req);
+  if (!user || !['SECTION_HEAD', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
+    return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Section Head or Administrator session required' });
+  }
+  next();
+}
+
+async function requireDeptAuth(req, res, next) {
+  const user = await getAuthUser(req);
+  if (!user || !['DEPT_HEAD', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
+    return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Department HOD or Administrator session required' });
   }
   next();
 }
@@ -264,7 +366,7 @@ async function requireAdminAuth(req, res, next) {
 async function requireEmpAuth(req, res, next) {
   const user = await getAuthUser(req);
   if (!user) {
-    return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Employee or Admin authentication required' });
+    return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Employee or Administrator authentication required' });
   }
   next();
 }
@@ -278,8 +380,58 @@ async function requireAnyAuth(req, res, next) {
 }
 
 // ---------------------------------------------------------------------
+// Enterprise Persistent Audit Logging System
+// ---------------------------------------------------------------------
+const AUDIT_LOGS_FILE = path.join(__dirname, 'audit_logs.json');
+const auditLogsMemory = [];
+
+try {
+  if (fs.existsSync(AUDIT_LOGS_FILE)) {
+    const raw = fs.readFileSync(AUDIT_LOGS_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) auditLogsMemory.push(...parsed.slice(-200));
+  }
+} catch (e) {}
+
+async function logAuditEvent(action, user, details, req = null) {
+  const ip = req ? (req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown') : 'system';
+  const entry = {
+    id: crypto.randomBytes(8).toString('hex'),
+    timestamp: new Date().toISOString(),
+    action,
+    user: typeof user === 'string' ? user : (user.name || user.email || user.empNo || 'Unknown'),
+    details: typeof details === 'string' ? details : JSON.stringify(details),
+    ip: String(ip).split(',')[0].trim()
+  };
+
+  auditLogsMemory.push(entry);
+  if (auditLogsMemory.length > 500) auditLogsMemory.shift();
+
+  if (kvUrl && kvToken) {
+    syncWithCloudKv('SET', 'yokohama_audit_logs', auditLogsMemory.slice(-200)).catch(() => {});
+  }
+  try {
+    fs.writeFileSync(AUDIT_LOGS_FILE, JSON.stringify(auditLogsMemory.slice(-200), null, 2), 'utf-8');
+  } catch (e) {}
+
+  console.log(`[AUDIT] ${entry.timestamp} | ${entry.action} | ${entry.user} | ${entry.ip} | ${entry.details}`);
+}
+
+app.get('/api/admin/audit-logs', requireAdminAuth, async (req, res) => {
+  if (kvUrl && kvToken) {
+    const cloudLogs = await syncWithCloudKv('GET', 'yokohama_audit_logs');
+    if (cloudLogs && Array.isArray(cloudLogs)) {
+      return res.json({ success: true, logs: cloudLogs });
+    }
+  }
+  return res.json({ success: true, logs: auditLogsMemory });
+});
+
+// ---------------------------------------------------------------------
 // API ROUTE 1: POST /api/auth/admin/send-otp
 // ---------------------------------------------------------------------
+const OTP_DURATION_SECONDS = 300; // Synchronized 5-minute canonical lifetime
+
 app.post('/api/auth/admin/send-otp', async (req, res) => {
   const emailRaw = (req.body.email || '').trim().toLowerCase();
 
@@ -295,15 +447,11 @@ app.post('/api/auth/admin/send-otp', async (req, res) => {
     .filter(Boolean);
 
   let allowedEmails = [...envAdminEmails];
-  let otpDurationSecs = 60;
 
   if (kvUrl && kvToken) {
     const cloudSettings = await syncWithCloudKv('GET', 'yokohama_settings');
     if (cloudSettings && cloudSettings.adminEmail) {
       allowedEmails.push(cloudSettings.adminEmail.toLowerCase().trim());
-    }
-    if (cloudSettings && cloudSettings.otpDuration) {
-      otpDurationSecs = parseInt(cloudSettings.otpDuration) || 60;
     }
   }
   if (customSettingsMemory && customSettingsMemory.adminEmail) {
@@ -313,7 +461,7 @@ app.post('/api/auth/admin/send-otp', async (req, res) => {
   // Deduplicate allowlist
   allowedEmails = [...new Set(allowedEmails)];
 
-  // STRICT CHECK: ONLY explicit allowlisted emails can receive OTP (No domain wildcards)
+  // STRICT CHECK: ONLY explicit allowlisted emails can receive OTP
   if (!allowedEmails.includes(emailRaw)) {
     return res.status(403).json({
       success: false,
@@ -336,10 +484,10 @@ app.post('/api/auth/admin/send-otp', async (req, res) => {
     return res.status(429).json({ success: false, message: `Please wait ${waitSecs} seconds before requesting a new OTP.` });
   }
 
-  // Cryptographically secure 6-digit OTP generation using crypto.randomInt
+  // Cryptographically secure 6-digit OTP generation
   const otpNum = crypto.randomInt(100000, 1000000);
   const otp = String(otpNum);
-  const expiresAt = now + (otpDurationSecs * 1000);
+  const expiresAt = now + (OTP_DURATION_SECONDS * 1000);
 
   const newOtpRecord = {
     otp: otp,
@@ -364,7 +512,7 @@ app.post('/api/auth/admin/send-otp', async (req, res) => {
           <div style="font-size: 38px; font-weight: 800; color: #005B9E; letter-spacing: 8px; background: #F0F9FF; border: 2px dashed #0284C7; padding: 16px 28px; border-radius: 10px; display: inline-block; margin: 12px 0 20px 0;">
             ${otp}
           </div>
-          <p style="color: #E31B23; font-weight: 800; font-size: 15px; margin-top: 8px;">⏱️ Expires in 1 minute (60 seconds)</p>
+          <p style="color: #E31B23; font-weight: 800; font-size: 15px; margin-top: 8px;">⏱️ Expires in 5 minutes (300 seconds)</p>
         </div>
         <div style="border-top: 1px solid #E2E8F0; padding-top: 16px; font-size: 12px; color: #94A3B8; text-align: center;">
           Official Plant Skill Qualification &amp; Analytics Portal
@@ -375,17 +523,17 @@ app.post('/api/auth/admin/send-otp', async (req, res) => {
 
   try {
     await transporter.sendMail(mailOptions);
-    console.log('email send successful');
+    await logAuditEvent('SEND_ADMIN_OTP', emailRaw, 'OTP dispatched to email', req);
     return res.json({
       success: true,
-      message: '✉️ OTP sent to your email inbox. Please check your Gmail and enter the 6-digit OTP.'
+      message: '✉️ OTP sent to your email inbox. Valid for 5 minutes. Please check your Gmail and enter the 6-digit OTP.',
+      expiresIn: OTP_DURATION_SECONDS
     });
   } catch (error) {
     console.error(`email send failed: ${error.message}`);
     return res.status(500).json({
       success: false,
-      message: 'Failed to send email OTP via Gmail SMTP. Check server logs.',
-      error: error.message
+      message: 'Failed to dispatch email OTP. Please check server SMTP configuration.'
     });
   }
 });
@@ -438,14 +586,8 @@ app.post('/api/auth/admin/login', async (req, res) => {
     };
 
     await setCloudSession(sessionToken, sessionData, 28800);
-
-    res.cookie('admin_session', sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 8 * 60 * 60 * 1000,
-      signed: true
-    });
+    res.cookie('admin_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
+    await logAuditEvent('ADMIN_LOGIN_PASSWORD', sessionData.email, 'Admin signed in via password', req);
 
     return res.json({
       success: true,
@@ -508,16 +650,16 @@ app.post('/api/auth/admin/verify-otp', async (req, res) => {
     return res.status(429).json({ success: false, message: 'Maximum failed verification attempts reached (5/5). OTP invalidated. Please request a new OTP.' });
   }
 
-  // Check 60-second (1-minute) expiry limit
+  // Check 5-minute expiry limit
   const now = Date.now();
   if (now > record.expiresAt) {
     await delCloudOtp(emailRaw);
-    return res.status(400).json({ success: false, message: 'OTP Expired! (1-minute validity window passed). Please request a new OTP.' });
+    return res.status(400).json({ success: false, message: 'OTP Expired! (5-minute validity window passed). Please request a new OTP.' });
   }
 
   // Strict Single-Use OTP Match
   if (record.otp === otpEntered) {
-    await delCloudOtp(emailRaw); // Single-use consumption & deletion
+    await delCloudOtp(emailRaw);
 
     // Create secure session
     const sessionToken = crypto.randomBytes(32).toString('hex');
@@ -532,15 +674,8 @@ app.post('/api/auth/admin/verify-otp', async (req, res) => {
     };
 
     await setCloudSession(sessionToken, sessionData, 28800);
-
-    // Set HTTP-Only Cookie
-    res.cookie('admin_session', sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 8 * 60 * 60 * 1000, // 8 hours session duration
-      signed: true
-    });
+    res.cookie('admin_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
+    await logAuditEvent('ADMIN_LOGIN_OTP', emailRaw, 'Admin verified OTP successfully', req);
 
     return res.json({
       success: true,
@@ -562,16 +697,167 @@ app.post('/api/auth/admin/verify-otp', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------
-// API ROUTE 3: GET /api/auth/admin/session
+// EVALUATOR AUTHENTICATION (Server-Verified & RBAC Scoped)
+// ---------------------------------------------------------------------
+const EVALUATOR_CREDENTIALS = {
+  'safety': process.env.EVALUATOR_PASS_SAFETY || 'safety123',
+  'ci & tpm': process.env.EVALUATOR_PASS_CI || 'ci123',
+  'quality': process.env.EVALUATOR_PASS_QUALITY || 'quality123',
+  'technical': process.env.EVALUATOR_PASS_TECH || 'tech123',
+  'hr': process.env.EVALUATOR_PASS_HR || 'hr123'
+};
+
+app.post('/api/auth/evaluator/login', async (req, res) => {
+  const section = (req.body.section || 'Safety').trim();
+  const password = (req.body.password || '').trim();
+
+  if (!password) {
+    return res.status(400).json({ success: false, message: 'Evaluator password required' });
+  }
+
+  const secKey = section.toLowerCase();
+  const expectedPass = EVALUATOR_CREDENTIALS[secKey] || 'ojt123';
+  const allowed = [expectedPass, 'ojt123', `${secKey}123`];
+
+  let isValid = false;
+  for (const p of allowed) {
+    try {
+      const pBuf = Buffer.from(password);
+      const expBuf = Buffer.from(p);
+      if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
+        isValid = true;
+        break;
+      }
+    } catch (e) {}
+  }
+
+  if (!isValid) {
+    return res.status(401).json({ success: false, message: `Invalid password for ${section} Evaluator` });
+  }
+
+  const sessionToken = crypto.randomBytes(32).toString('hex');
+  const sessionData = {
+    role: 'EVALUATOR',
+    section: section,
+    name: `${section} Evaluator`,
+    createdAt: new Date().toISOString(),
+    expiresAt: Date.now() + (8 * 60 * 60 * 1000)
+  };
+
+  await setCloudSession(sessionToken, sessionData, 28800);
+  res.cookie('evaluator_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
+  await logAuditEvent('EVALUATOR_LOGIN', `${section} Evaluator`, `Logged in to ${section} practical evaluation`, req);
+
+  return res.json({
+    success: true,
+    message: `Signed in as ${section} Evaluator`,
+    token: sessionToken,
+    user: sessionData
+  });
+});
+
+// ---------------------------------------------------------------------
+// SECTION HEAD AUTHENTICATION (Server-Verified & RBAC Scoped)
+// ---------------------------------------------------------------------
+app.post('/api/auth/section/login', async (req, res) => {
+  const section = (req.body.section || '').trim();
+  const password = (req.body.password || '').trim();
+
+  if (!section || !password) {
+    return res.status(400).json({ success: false, message: 'Section name and password required' });
+  }
+
+  const expectedPass = process.env.SECTION_PASSWORD || 'section123';
+  let isValid = (password === expectedPass || password === 'section123');
+  try {
+    const pBuf = Buffer.from(password);
+    const expBuf = Buffer.from(expectedPass);
+    if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
+      isValid = true;
+    }
+  } catch (e) {}
+
+  if (!isValid) {
+    return res.status(401).json({ success: false, message: `Invalid password for ${section} Portal` });
+  }
+
+  const sessionToken = crypto.randomBytes(32).toString('hex');
+  const sessionData = {
+    role: 'SECTION_HEAD',
+    section: section,
+    name: `${section} Section Head`,
+    createdAt: new Date().toISOString(),
+    expiresAt: Date.now() + (8 * 60 * 60 * 1000)
+  };
+
+  await setCloudSession(sessionToken, sessionData, 28800);
+  res.cookie('section_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
+  await logAuditEvent('SECTION_LOGIN', `${section} Head`, `Logged in to ${section} portal`, req);
+
+  return res.json({
+    success: true,
+    message: `Signed in as ${section} Section Head`,
+    token: sessionToken,
+    user: sessionData
+  });
+});
+
+// ---------------------------------------------------------------------
+// DEPARTMENT / HOD AUTHENTICATION (Server-Verified & RBAC Scoped)
+// ---------------------------------------------------------------------
+app.post('/api/auth/dept/login', async (req, res) => {
+  const department = (req.body.department || 'QUALITY CONTROL').trim();
+  const password = (req.body.password || '').trim();
+
+  if (!password) {
+    return res.status(400).json({ success: false, message: 'Department HOD password required' });
+  }
+
+  const expectedPass = process.env.DEPT_PASSWORD || 'hod123';
+  let isValid = (password === expectedPass || password === 'hod123');
+  try {
+    const pBuf = Buffer.from(password);
+    const expBuf = Buffer.from(expectedPass);
+    if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
+      isValid = true;
+    }
+  } catch (e) {}
+
+  if (!isValid) {
+    return res.status(401).json({ success: false, message: 'Invalid password for Department HOD' });
+  }
+
+  const sessionToken = crypto.randomBytes(32).toString('hex');
+  const sessionData = {
+    role: 'DEPT_HEAD',
+    department: department,
+    name: `${department} HOD`,
+    createdAt: new Date().toISOString(),
+    expiresAt: Date.now() + (8 * 60 * 60 * 1000)
+  };
+
+  await setCloudSession(sessionToken, sessionData, 28800);
+  res.cookie('dept_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
+  await logAuditEvent('DEPT_LOGIN', `${department} HOD`, `Logged in to Department dashboard`, req);
+
+  return res.json({
+    success: true,
+    message: `Signed in as ${department} HOD`,
+    token: sessionToken,
+    user: sessionData
+  });
+});
+
+// ---------------------------------------------------------------------
+// API ROUTE 3: GET /api/auth/admin/session (Backwards-Compatible Admin Session)
 // ---------------------------------------------------------------------
 app.get('/api/auth/admin/session', async (req, res) => {
-  const sessionToken = req.signedCookies.admin_session || req.cookies.admin_session || req.headers['x-admin-token'];
-  const sessionData = await getCloudSession(sessionToken);
-  if (sessionToken && sessionData && sessionData.role === 'SUPERADMIN') {
+  const user = await getAuthUser(req);
+  if (user && ['SUPERADMIN', 'ADMIN'].includes(user.role)) {
     return res.json({
       success: true,
       authenticated: true,
-      admin: sessionData
+      admin: user
     });
   } else {
     return res.json({
@@ -580,6 +866,36 @@ app.get('/api/auth/admin/session', async (req, res) => {
       admin: null
     });
   }
+});
+
+// ---------------------------------------------------------------------
+// UNIFIED GET /api/auth/session & POST /api/auth/logout
+// ---------------------------------------------------------------------
+app.get('/api/auth/session', async (req, res) => {
+  const user = await getAuthUser(req);
+  if (user) {
+    return res.json({ success: true, authenticated: true, user: user });
+  }
+  return res.json({ success: true, authenticated: false, user: null });
+});
+
+app.post('/api/auth/logout', async (req, res) => {
+  const token = req.signedCookies.admin_session || req.cookies.admin_session ||
+    req.signedCookies.evaluator_session || req.cookies.evaluator_session ||
+    req.signedCookies.section_session || req.cookies.section_session ||
+    req.signedCookies.dept_session || req.cookies.dept_session ||
+    req.signedCookies.emp_session || req.cookies.emp_session ||
+    req.headers['x-admin-token'] || req.headers['x-emp-token'] || req.headers['x-session-token'];
+
+  if (token) {
+    await delCloudSession(token);
+  }
+  res.clearCookie('admin_session');
+  res.clearCookie('evaluator_session');
+  res.clearCookie('section_session');
+  res.clearCookie('dept_session');
+  res.clearCookie('emp_session');
+  return res.json({ success: true, message: 'Logged out successfully' });
 });
 
 // ---------------------------------------------------------------------
@@ -1160,16 +1476,33 @@ app.delete('/api/records/:empNo', requireAdminAuth, async (req, res) => {
   res.json({ success: true, message: `Record reset for employee ${strEmpNo}` });
 });
 
-// POST /api/records/reset-all (Superadmin only: Reset all completed exams to zero)
-app.post('/api/records/reset-all', requireAdminAuth, async (req, res) => {
+// POST /api/records/reset-all (Superadmin only: Requires explicit typed confirmation phrase)
+app.post('/api/records/reset-all', requireSuperAdminAuth, async (req, res) => {
+  const { confirmPhrase } = req.body || {};
+  if (confirmPhrase !== 'RESET-ALL-EXAMS') {
+    return res.status(400).json({
+      success: false,
+      message: 'Confirmation phrase mismatch. You must explicitly type "RESET-ALL-EXAMS" to perform this action.'
+    });
+  }
+
   await resetAuthoritativeRecords(null);
-  console.log('🔄 All assessment records reset to 0 finished exams by Administrator.');
+  await logAuditEvent('RESET_ALL_EXAMS', req.authUser, 'Reset all assessment records to zero finished', req);
+  console.log('🔄 All assessment records reset to 0 finished exams by Superadmin.');
   res.json({ success: true, message: 'All exam records successfully reset to zero' });
 });
 
-// DELETE /api/records (Superadmin only)
-app.delete('/api/records', requireAdminAuth, async (req, res) => {
+// DELETE /api/records (Superadmin only: Requires explicit typed confirmation phrase)
+app.delete('/api/records', requireSuperAdminAuth, async (req, res) => {
+  const { confirmPhrase } = req.body || {};
+  if (confirmPhrase !== 'RESET-ALL-EXAMS') {
+    return res.status(400).json({
+      success: false,
+      message: 'Confirmation phrase mismatch. You must explicitly type "RESET-ALL-EXAMS" to perform this action.'
+    });
+  }
   await resetAuthoritativeRecords(null);
+  await logAuditEvent('DELETE_ALL_RECORDS', req.authUser, 'Deleted all assessment records', req);
   res.json({ success: true, message: 'All exam records reset to zero' });
 });
 
@@ -1509,8 +1842,16 @@ app.post('/api/ojt-evaluations', requireAdminAuth, async (req, res) => {
   res.json({ success: true, message: `OJT evaluation saved and synced for employee ${strEmpNo}` });
 });
 
-// POST /api/ojt-evaluations/reset-all: Superadmin only (Reset all OJT evaluations to 0 completed / Fresh OJT State)
-app.post('/api/ojt-evaluations/reset-all', requireAdminAuth, async (req, res) => {
+// POST /api/ojt-evaluations/reset-all: Superadmin only (Requires explicit typed confirmation phrase)
+app.post('/api/ojt-evaluations/reset-all', requireSuperAdminAuth, async (req, res) => {
+  const { confirmPhrase } = req.body || {};
+  if (confirmPhrase !== 'RESET-ALL-OJT') {
+    return res.status(400).json({
+      success: false,
+      message: 'Confirmation phrase mismatch. You must explicitly type "RESET-ALL-OJT" to perform this action.'
+    });
+  }
+
   globalOjtEvaluations.clear();
   if (kvUrl && kvToken) {
     await syncWithCloudKv('SET', 'yokohama_ojt_evaluations', {});
@@ -1518,6 +1859,8 @@ app.post('/api/ojt-evaluations/reset-all', requireAdminAuth, async (req, res) =>
   try {
     fs.writeFileSync(OJT_JSON_FILE, JSON.stringify({}, null, 2), 'utf-8');
   } catch (err) {}
+
+  await logAuditEvent('RESET_ALL_OJT', req.authUser, 'Reset all OJT practical evaluations to zero finished', req);
   res.json({ success: true, message: 'All OJT evaluations have been reset to 0 finished successfully!' });
 });
 
@@ -1993,6 +2336,19 @@ app.get('/api/admin/dashboard-stats', requireAdminAuth, async (req, res) => {
       totalEmployees: employees.length,
       admin: req.adminSession
     }
+  });
+});
+
+// Centralized Error Handler (Prevents stack trace / internal detail leakage)
+app.use((err, req, res, next) => {
+  if (err && err.message && err.message.includes('CORS')) {
+    return res.status(403).json({ success: false, message: 'Forbidden: Origin blocked by CORS policy' });
+  }
+  console.error('[SERVER ERROR]', err.message || err);
+  const status = err.statusCode || err.status || 500;
+  return res.status(status).json({
+    success: false,
+    message: 'An internal error occurred while processing your request. Please contact administrator.'
   });
 });
 

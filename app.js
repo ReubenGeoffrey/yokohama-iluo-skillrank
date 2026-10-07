@@ -848,34 +848,40 @@ let adminOtpState = {
   secondsLeft: 60
 };
 
-function startOtpCountdownTimer() {
+function startOtpCountdownTimer(durationSeconds = 300) {
   if (adminOtpState.timerInterval) clearInterval(adminOtpState.timerInterval);
-  adminOtpState.secondsLeft = 60;
-  adminOtpState.expiresAt = Date.now() + 60000; // 60 seconds (1 minute) limit
+  adminOtpState.secondsLeft = durationSeconds;
+  adminOtpState.expiresAt = Date.now() + (durationSeconds * 1000);
 
   const timerEl = document.getElementById('otpTimerDisplay');
   const resendBtn = document.getElementById('btnResendOtp');
 
+  const formatSecs = (s) => {
+    const mins = Math.floor(s / 60);
+    const rem = s % 60;
+    return mins > 0 ? `${mins}m ${rem}s` : `${rem}s`;
+  };
+
   if (resendBtn) {
     resendBtn.disabled = true;
- resendBtn.innerText = `Resend OTP in 60s`;
+    resendBtn.innerText = `Resend in ${formatSecs(adminOtpState.secondsLeft)}`;
   }
- if (timerEl) timerEl.innerText = `60s`;
+  if (timerEl) timerEl.innerText = formatSecs(adminOtpState.secondsLeft);
 
   adminOtpState.timerInterval = setInterval(() => {
     adminOtpState.secondsLeft--;
 
     if (adminOtpState.secondsLeft > 0) {
- if (timerEl) timerEl.innerText = `${adminOtpState.secondsLeft}s`;
- if (resendBtn) resendBtn.innerText = `Resend OTP in ${adminOtpState.secondsLeft}s`;
+      if (timerEl) timerEl.innerText = formatSecs(adminOtpState.secondsLeft);
+      if (resendBtn) resendBtn.innerText = `Resend in ${formatSecs(adminOtpState.secondsLeft)}`;
     } else {
       clearInterval(adminOtpState.timerInterval);
- if (timerEl) timerEl.innerText = `Expired`;
+      if (timerEl) timerEl.innerText = 'Expired';
       if (resendBtn) {
         resendBtn.disabled = false;
- resendBtn.innerText = 'Resend New OTP';
+        resendBtn.innerText = 'Resend New OTP';
       }
- showToast('OTP Code Expired (1-minute validity limit)! Click Resend OTP.');
+      showToast('OTP Code Expired (5-minute validity limit)! Click Resend OTP.');
     }
   }, 1000);
 }
@@ -974,7 +980,7 @@ async function handleSendAdminOTP(e) {
       document.getElementById('adminOtpInput').value = '';
       document.getElementById('adminOtpInput').focus();
 
-      startOtpCountdownTimer();
+      startOtpCountdownTimer(data.expiresIn || 300);
 
  showToast(data.message || 'OTP sent to your email inbox. Please check your Gmail and enter the 6-digit OTP.');
     } else {
@@ -5139,57 +5145,77 @@ function getStoredOjtRecords() {
 }
 
 async function makeZeroFinishExam() {
-  const total = typeof EMPLOYEES !== 'undefined' ? EMPLOYEES.length : 283;
-  if (confirm(`Are you sure you want to RESET ALL EXAMS to 0 Finished (Fresh Assessment Mode)?\n\nAll ${total} employees will be set to "Not Started" so they can take their assessments from scratch.`)) {
-    // 1. Reset client LocalStorage
-    localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify({}));
-    localStorage.removeItem('iluo_preserve_local');
+  const total = typeof EMPLOYEES !== 'undefined' ? EMPLOYEES.length : 1462;
+  const typed = prompt(`⚠️ CRITICAL DESTRUCTIVE ACTION ⚠️\n\nResetting all assessment records will clear all finished exams for all ${total} employees.\n\nTo confirm, type exactly: RESET-ALL-EXAMS`);
+  if (!typed || typed.trim() !== 'RESET-ALL-EXAMS') {
+    showToast('Reset cancelled: Confirmation phrase did not match.');
+    return;
+  }
 
-    // 2. Call server reset API
-    try {
-      await fetch('/api/records/reset-all', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        credentials: 'include'
-      });
-    } catch (e) {}
+  try {
+    const res = await fetch('/api/records/reset-all', {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ confirmPhrase: 'RESET-ALL-EXAMS' })
+    });
+    const data = await res.json();
+    if (data.success) {
+      // 1. Reset client LocalStorage
+      localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify({}));
+      localStorage.removeItem('iluo_preserve_local');
 
-    showToast(`All ${total} exams reset to 0 finished! Fresh assessment mode active.`);
+      showToast(`All ${total} exams reset to 0 finished! Fresh assessment mode active.`);
 
-    // 3. Re-render UI
-    if (document.getElementById('adminTableBody')) {
-      const searchInput = document.getElementById('adminSearchInput');
-      renderAdminTable(searchInput ? searchInput.value : '');
+      // 2. Re-render UI
+      if (document.getElementById('adminTableBody')) {
+        const searchInput = document.getElementById('adminSearchInput');
+        renderAdminTable(searchInput ? searchInput.value : '');
+      }
+      if (document.getElementById('secEmpTableBody')) filterSectionTable();
+      if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
+      if (currentUser) {
+        handleRoute();
+      }
+    } else {
+      showToast(data.message || 'Server rejected reset request.');
     }
-    if (document.getElementById('secEmpTableBody')) filterSectionTable();
-    if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
-    if (currentUser) {
-      handleRoute();
-    }
+  } catch (e) {
+    showToast('Failed to reset exams on server.');
   }
 }
 
 async function resetAllOjtEvaluations() {
-  const total = typeof EMPLOYEES !== 'undefined' ? EMPLOYEES.length : 283;
-  if (confirm(`Are you sure you want to RESET ALL OJT EVALUATIONS to 0 Finished (Fresh OJT Practical Mode)?\n\nAll ${total} employees will be set to "Pending" practical evaluation.`)) {
-    // 1. Reset client LocalStorage
-    localStorage.setItem(STORAGE_KEY_OJT, JSON.stringify({}));
+  const total = typeof EMPLOYEES !== 'undefined' ? EMPLOYEES.length : 1462;
+  const typed = prompt(`⚠️ CRITICAL DESTRUCTIVE ACTION ⚠️\n\nResetting all OJT evaluations will clear practical evaluations for all ${total} employees.\n\nTo confirm, type exactly: RESET-ALL-OJT`);
+  if (!typed || typed.trim() !== 'RESET-ALL-OJT') {
+    showToast('Reset cancelled: Confirmation phrase did not match.');
+    return;
+  }
 
-    // 2. Call server reset API
-    try {
-      await fetch('/api/ojt-evaluations/reset-all', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        credentials: 'include'
-      });
-    } catch (e) {}
+  try {
+    const res = await fetch('/api/ojt-evaluations/reset-all', {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ confirmPhrase: 'RESET-ALL-OJT' })
+    });
+    const data = await res.json();
+    if (data.success) {
+      // 1. Reset client LocalStorage
+      localStorage.setItem(STORAGE_KEY_OJT, JSON.stringify({}));
 
-    showToast(`All ${total} OJT evaluations reset to 0 finished! Fresh OJT mode active.`);
+      showToast(`All ${total} OJT evaluations reset to 0 finished! Fresh OJT mode active.`);
 
-    // 3. Re-render OJT Dashboard
-    if (typeof renderOjtDashboard === 'function') {
-      renderOjtDashboard();
+      // 2. Re-render OJT Dashboard
+      if (typeof renderOjtDashboard === 'function') {
+        renderOjtDashboard();
+      }
+    } else {
+      showToast(data.message || 'Server rejected OJT reset request.');
     }
+  } catch (e) {
+    showToast('Failed to reset OJT evaluations on server.');
   }
 }
 window.makeZeroFinishExam = makeZeroFinishExam;
@@ -6621,12 +6647,12 @@ function selectOjtLoginSection(secName) {
   }
 }
 
-function handleOjtSectionLogin(e) {
+async function handleOjtSectionLogin(e) {
   if (e) e.preventDefault();
   const secInput = document.getElementById('ojtSelectedSectionInput');
   const section = secInput ? secInput.value : 'Safety';
   const pwdInput = document.getElementById('ojtSectionPassword');
-  const pwd = pwdInput ? pwdInput.value.trim().toLowerCase() : '';
+  const pwd = pwdInput ? pwdInput.value.trim() : '';
 
   if (!pwd) {
     showToast(`Please enter the password for ${section} Evaluator.`);
@@ -6634,33 +6660,37 @@ function handleOjtSectionLogin(e) {
     return;
   }
 
-  const validPasswords = {
-    'Safety': ['safety123', 'ojt123'],
-    'CI & TPM': ['ci123', 'cpm123', 'citpm123', 'ojt123'],
-    'Quality': ['quality123', 'ojt123'],
-    'Technical': ['tech123', 'technical123', 'ojt123'],
-    'HR': ['hr123', 'ojt123']
-  };
+  try {
+    const res = await fetch('/api/auth/evaluator/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ section, password: pwd })
+    });
+    const data = await res.json();
+    if (data.success) {
+      sessionStorage.setItem('iluo_ojt_session', section);
+      if (data.token) {
+        sessionStorage.setItem('iluo_evaluator_token', data.token);
+      }
+      const loginWrapper = document.getElementById('ojtLoginWrapper');
+      const dashWrapper = document.getElementById('ojtDashboardWrapper');
+      if (loginWrapper) loginWrapper.style.display = 'none';
+      if (dashWrapper) dashWrapper.style.display = 'block';
 
-  const allowed = validPasswords[section] || ['ojt123'];
-  if (!allowed.includes(pwd)) {
-    showToast(`Invalid password for ${section} Evaluator. Please try again.`);
-    if (pwdInput) {
-      pwdInput.value = '';
-      pwdInput.focus();
+      renderOjtDashboard(section);
+      showToast(`Signed in as ${section} Evaluator`);
+      if (pwdInput) pwdInput.value = '';
+    } else {
+      showToast(data.message || `Invalid password for ${section} Evaluator.`);
+      if (pwdInput) {
+        pwdInput.value = '';
+        pwdInput.focus();
+      }
     }
-    return;
+  } catch (err) {
+    showToast('Network error verifying evaluator credentials. Please check connection.');
   }
-
-  sessionStorage.setItem('iluo_ojt_session', section);
-
-  const loginWrapper = document.getElementById('ojtLoginWrapper');
-  const dashWrapper = document.getElementById('ojtDashboardWrapper');
-  if (loginWrapper) loginWrapper.style.display = 'none';
-  if (dashWrapper) dashWrapper.style.display = 'block';
-
-  renderOjtDashboard(section);
-  showToast(`Signed in as ${section} Evaluator`);
 }
 
 function quickEnterOjtSection(secName) {
@@ -6839,20 +6869,51 @@ function renderOjtDashboardTable() {
 }
 
 // Section Portal Logic
-function handleSectionLogin(e) {
+async function handleSectionLogin(e) {
   if (e) e.preventDefault();
   const select = document.getElementById('secSelectInput');
   const secName = select ? select.value : 'Tire building QA';
-  currentActiveSection = secName;
-  sessionStorage.setItem('iluo_section_session', secName);
-  
-  const loginWrapper = document.getElementById('sectionLoginWrapper');
-  const dashWrapper = document.getElementById('sectionDashboardWrapper');
-  if (loginWrapper) loginWrapper.style.display = 'none';
-  if (dashWrapper) dashWrapper.style.display = 'block';
+  const pwdInput = document.getElementById('secPasswordInput');
+  const pwd = pwdInput ? pwdInput.value.trim() : '';
 
-  renderSectionDashboard(secName);
-  showToast(`Welcome to ${secName} Portal`);
+  if (!pwd) {
+    showToast(`Please enter the password for ${secName}`);
+    if (pwdInput) pwdInput.focus();
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/auth/section/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ section: secName, password: pwd })
+    });
+    const data = await res.json();
+    if (data.success) {
+      currentActiveSection = secName;
+      sessionStorage.setItem('iluo_section_session', secName);
+      if (data.token) {
+        sessionStorage.setItem('iluo_section_token', data.token);
+      }
+      const loginWrapper = document.getElementById('sectionLoginWrapper');
+      const dashWrapper = document.getElementById('sectionDashboardWrapper');
+      if (loginWrapper) loginWrapper.style.display = 'none';
+      if (dashWrapper) dashWrapper.style.display = 'block';
+
+      renderSectionDashboard(secName);
+      showToast(`Welcome to ${secName} Portal`);
+      if (pwdInput) pwdInput.value = '';
+    } else {
+      showToast(data.message || `Invalid password for ${secName}`);
+      if (pwdInput) {
+        pwdInput.value = '';
+        pwdInput.focus();
+      }
+    }
+  } catch (err) {
+    showToast('Network error during section authentication.');
+  }
 }
 
 function switchSectionView(secName) {
@@ -7031,17 +7092,48 @@ function renderSectionTrainingRequirements(emps) {
 }
 
 // Department / HOD Portal Logic
-function handleDeptLogin(e) {
+async function handleDeptLogin(e) {
   if (e) e.preventDefault();
-  sessionStorage.setItem('iluo_dept_session', 'QUALITY CONTROL');
-  
-  const loginWrapper = document.getElementById('deptLoginWrapper');
-  const dashWrapper = document.getElementById('deptDashboardWrapper');
-  if (loginWrapper) loginWrapper.style.display = 'none';
-  if (dashWrapper) dashWrapper.style.display = 'block';
+  const pwdInput = document.getElementById('deptPasswordInput');
+  const pwd = pwdInput ? pwdInput.value.trim() : '';
 
-  renderDepartmentDashboard();
-  showToast('Welcome to Department / HOD Dashboard');
+  if (!pwd) {
+    showToast('Please enter the Department HOD password.');
+    if (pwdInput) pwdInput.focus();
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/auth/dept/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ department: 'QUALITY CONTROL', password: pwd })
+    });
+    const data = await res.json();
+    if (data.success) {
+      sessionStorage.setItem('iluo_dept_session', 'QUALITY CONTROL');
+      if (data.token) {
+        sessionStorage.setItem('iluo_dept_token', data.token);
+      }
+      const loginWrapper = document.getElementById('deptLoginWrapper');
+      const dashWrapper = document.getElementById('deptDashboardWrapper');
+      if (loginWrapper) loginWrapper.style.display = 'none';
+      if (dashWrapper) dashWrapper.style.display = 'block';
+
+      renderDepartmentDashboard();
+      showToast('Welcome to Department / HOD Dashboard');
+      if (pwdInput) pwdInput.value = '';
+    } else {
+      showToast(data.message || 'Invalid Department HOD password.');
+      if (pwdInput) {
+        pwdInput.value = '';
+        pwdInput.focus();
+      }
+    }
+  } catch (err) {
+    showToast('Network error during department authentication.');
+  }
 }
 
 function logoutDept() {

@@ -2159,3 +2159,39 @@ body {
   font-weight: 800;
   box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
 }
+
+/* Enhanced Viewport Hardening for 360px - 480px screens */
+@media (max-width: 480px) {
+  .app-container {
+    padding: 10px !important;
+  }
+  .login-card {
+    margin: 8px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
+  }
+  .login-header, .login-body {
+    padding: 16px 14px !important;
+  }
+  .info-grid, .stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .data-table-container, .table-responsive {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+  }
+  .brand-logo {
+    font-size: 1rem;
+  }
+  .brand-app-logo {
+    width: 32px;
+    height: 32px;
+  }
+  .btn-primary, .btn-secondary {
+    padding: 10px 14px;
+    font-size: 0.9rem;
+  }
+}
+
