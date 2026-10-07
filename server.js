@@ -16,8 +16,8 @@ if (!SESSION_SECRET) {
   SESSION_SECRET = 'dev_ephemeral_session_secret_for_local_testing_only';
 }
 const AUTHORIZED_ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
-const kvUrl = process.env.UPSTASH_REDIS_REST_URL;
-const kvToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+const kvUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+const kvToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 
 // Strict Trusted Origins Allowlist
 const ALLOWED_ORIGINS = [
@@ -206,7 +206,7 @@ if (user && pass) {
     auth: { user, pass }
   });
 
-  if (!process.env.VERCEL) {
+  if (!process.env.VERCEL && process.env.NODE_ENV !== 'test') {
     transporter.verify((error) => {
       if (error) console.error(`SMTP connection failed: ${error.message}`);
       else console.log('SMTP connection successful');
@@ -1112,6 +1112,14 @@ try {
     const raw = fs.readFileSync(RECORDS_JSON_FILE, 'utf-8');
     const parsed = JSON.parse(raw);
     Object.entries(parsed).forEach(([k, v]) => globalAssessmentRecords.set(String(k), v));
+  } else {
+    const seedPath = path.join(__dirname, 'seed_data.js');
+    if (fs.existsSync(seedPath)) {
+      require(seedPath);
+      if (global.SEED_RECORDS && typeof global.SEED_RECORDS === 'object') {
+        Object.entries(global.SEED_RECORDS).forEach(([k, v]) => globalAssessmentRecords.set(String(k), v));
+      }
+    }
   }
 } catch (e) {}
 
@@ -1134,6 +1142,14 @@ try {
     const raw = fs.readFileSync(OJT_JSON_FILE, 'utf-8');
     const parsed = JSON.parse(raw);
     Object.entries(parsed).forEach(([k, v]) => globalOjtEvaluations.set(String(k), v));
+  } else {
+    const seedOjtPath = path.join(__dirname, 'seed_ojt.js');
+    if (fs.existsSync(seedOjtPath)) {
+      const seedOjt = require(seedOjtPath);
+      if (seedOjt && typeof seedOjt === 'object') {
+        Object.entries(seedOjt).forEach(([k, v]) => globalOjtEvaluations.set(String(k), v));
+      }
+    }
   }
 } catch (e) {}
 
@@ -1258,11 +1274,30 @@ async function saveAuthoritativeQuestions(qb) {
 async function getAuthoritativeRecords() {
   if (kvUrl && kvToken) {
     const cloudRecords = await syncWithCloudKv('GET', 'yokohama_records');
-    if (cloudRecords && typeof cloudRecords === 'object' && !cloudRecords.error) {
+    if (cloudRecords && typeof cloudRecords === 'object' && !cloudRecords.error && Object.keys(cloudRecords).length > 0) {
       // Cloud is authoritative: update local cache
       globalAssessmentRecords.clear();
       Object.entries(cloudRecords).forEach(([k, v]) => globalAssessmentRecords.set(String(k), v));
       return cloudRecords;
+    }
+  }
+  if (globalAssessmentRecords.size === 0) {
+    if (fs.existsSync(RECORDS_JSON_FILE)) {
+      try {
+        const raw = fs.readFileSync(RECORDS_JSON_FILE, 'utf-8');
+        const parsed = JSON.parse(raw);
+        Object.entries(parsed).forEach(([k, v]) => globalAssessmentRecords.set(String(k), v));
+      } catch (e) {}
+    } else {
+      try {
+        const seedPath = path.join(__dirname, 'seed_data.js');
+        if (fs.existsSync(seedPath)) {
+          require(seedPath);
+          if (global.SEED_RECORDS && typeof global.SEED_RECORDS === 'object') {
+            Object.entries(global.SEED_RECORDS).forEach(([k, v]) => globalAssessmentRecords.set(String(k), v));
+          }
+        }
+      } catch (e) {}
     }
   }
   return Object.fromEntries(globalAssessmentRecords);
@@ -1339,10 +1374,29 @@ async function resetAuthoritativeRecords(filterFn = null) {
 async function getAuthoritativeOjtEvaluations() {
   if (kvUrl && kvToken) {
     const cloudOjt = await syncWithCloudKv('GET', 'yokohama_ojt_evaluations');
-    if (cloudOjt && typeof cloudOjt === 'object' && !cloudOjt.error) {
+    if (cloudOjt && typeof cloudOjt === 'object' && !cloudOjt.error && Object.keys(cloudOjt).length > 0) {
       globalOjtEvaluations.clear();
       Object.entries(cloudOjt).forEach(([k, v]) => globalOjtEvaluations.set(String(k), v));
       return cloudOjt;
+    }
+  }
+  if (globalOjtEvaluations.size === 0) {
+    if (fs.existsSync(OJT_JSON_FILE)) {
+      try {
+        const raw = fs.readFileSync(OJT_JSON_FILE, 'utf-8');
+        const parsed = JSON.parse(raw);
+        Object.entries(parsed).forEach(([k, v]) => globalOjtEvaluations.set(String(k), v));
+      } catch (e) {}
+    } else {
+      try {
+        const seedOjtPath = path.join(__dirname, 'seed_ojt.js');
+        if (fs.existsSync(seedOjtPath)) {
+          const seedOjt = require(seedOjtPath);
+          if (seedOjt && typeof seedOjt === 'object') {
+            Object.entries(seedOjt).forEach(([k, v]) => globalOjtEvaluations.set(String(k), v));
+          }
+        }
+      } catch (e) {}
     }
   }
   return Object.fromEntries(globalOjtEvaluations);
