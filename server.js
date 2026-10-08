@@ -156,12 +156,23 @@ app.get(['/favicon.ico', '/favicon.png'], (req, res) => {
 
 // Explicit handler for official Master Production + QA Assessment Excel workbook
 app.get(['/api/download-master-excel', '/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx', encodeURI('/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx')], (req, res) => {
+  res.setHeader('Content-Disposition', 'attachment; filename="1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx"');
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
   const xlsxPath = path.join(__dirname, '1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx');
   if (fs.existsSync(xlsxPath)) {
-    res.setHeader('Content-Disposition', 'attachment; filename="1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx"');
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     return res.sendFile(xlsxPath);
   }
+
+  try {
+    const b64 = require('./master_excel_b64.js');
+    if (b64) {
+      const buf = Buffer.from(b64, 'base64');
+      res.setHeader('Content-Length', buf.length);
+      return res.end(buf);
+    }
+  } catch (e) {}
+
   return res.status(404).json({ success: false, message: 'Master Excel file not found on server' });
 });
 

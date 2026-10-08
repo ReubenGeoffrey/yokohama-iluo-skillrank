@@ -26,6 +26,7 @@
             "docx-preview.min.js",
             "xlsx.full.min.js",
             "seed_ojt.js",
+            "master_excel_b64.js",
             "1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx",
             "QC_templates/**",
             "assets/**"
