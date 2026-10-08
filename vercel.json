@@ -25,6 +25,8 @@
             "mammoth.browser.min.js",
             "docx-preview.min.js",
             "xlsx.full.min.js",
+            "seed_ojt.js",
+            "1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx",
             "QC_templates/**",
             "assets/**"
           ]
