@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const http = require('http');
 const fs = require('fs');
+process.env.NODE_ENV = 'test';
 const app = require('../server.js');
 
 let server;

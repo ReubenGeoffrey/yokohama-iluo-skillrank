@@ -643,6 +643,15 @@ app.post('/api/auth/admin/send-otp', async (req, res) => {
     `
   };
 
+  if (process.env.NODE_ENV === 'test') {
+    await logAuditEvent('SEND_ADMIN_OTP', emailRaw, 'OTP dispatched (test environment)', req);
+    return res.json({
+      success: true,
+      message: '✉️ OTP sent to your email inbox. Valid for 5 minutes. Please check your Gmail and enter the 6-digit OTP.',
+      expiresIn: OTP_DURATION_SECONDS
+    });
+  }
+
   try {
     await transporter.sendMail(mailOptions);
     await logAuditEvent('SEND_ADMIN_OTP', emailRaw, 'OTP dispatched to email', req);
