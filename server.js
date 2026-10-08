@@ -16,8 +16,17 @@ if (!SESSION_SECRET) {
   SESSION_SECRET = 'dev_ephemeral_session_secret_for_local_testing_only';
 }
 const AUTHORIZED_ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
-const kvUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-const kvToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+let rawKvUrl = (process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || '').trim();
+if (rawKvUrl.includes('http')) {
+  rawKvUrl = rawKvUrl.substring(rawKvUrl.indexOf('http')).trim();
+}
+const kvUrl = rawKvUrl.replace(/[\r\n\t]/g, '');
+
+let rawKvToken = (process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || '').trim();
+if (rawKvToken.includes('\t')) {
+  rawKvToken = rawKvToken.split('\t').pop().trim();
+}
+const kvToken = rawKvToken.replace(/^(?:REST_)?TOKEN[\s\t]+/, '').replace(/[\r\n\t\s]/g, '');
 
 // Strict Trusted Origins Allowlist
 const ALLOWED_ORIGINS = [
