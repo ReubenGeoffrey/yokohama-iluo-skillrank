@@ -97,7 +97,9 @@ const ALLOWED_STATIC_FILES = new Set([
   '/assets/atg_logo.png',
   '/yokohama_logo.png',
   '/favicon.ico',
-  '/favicon.png'
+  '/favicon.png',
+  '/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx',
+  encodeURI('/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx')
 ]);
 
 // Static Security Middleware: Allowlist Only (Blocks /server.js, .env, .json, test files, configs)
@@ -116,7 +118,8 @@ app.use((req, res, next) => {
     return next();
   }
 
-  if (ALLOWED_STATIC_FILES.has(req.path)) {
+  const decodedPath = decodeURIComponent(req.path);
+  if (ALLOWED_STATIC_FILES.has(req.path) || ALLOWED_STATIC_FILES.has(decodedPath)) {
     return next();
   }
 
@@ -149,6 +152,17 @@ app.get(['/favicon.ico', '/favicon.png'], (req, res) => {
     ? path.join(__dirname, 'atg_logo.png')
     : path.join(__dirname, 'yokohama_logo.png');
   res.sendFile(p);
+});
+
+// Explicit handler for official Master Production + QA Assessment Excel workbook
+app.get(['/api/download-master-excel', '/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx', encodeURI('/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx')], (req, res) => {
+  const xlsxPath = path.join(__dirname, '1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx');
+  if (fs.existsSync(xlsxPath)) {
+    res.setHeader('Content-Disposition', 'attachment; filename="1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx"');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    return res.sendFile(xlsxPath);
+  }
+  return res.status(404).json({ success: false, message: 'Master Excel file not found on server' });
 });
 
 // Explicit OJT Official Templates script handler

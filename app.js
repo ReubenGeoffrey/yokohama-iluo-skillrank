@@ -3473,18 +3473,45 @@ function generateProductionFormatWorkbook(filterSecKey) {
 }
 
 // Download Master Combined Excel (Production + QA Data with exact formatting and formulas)
-function downloadCombinedProductionAndQAExcel() {
+async function downloadCombinedProductionAndQAExcel() {
+  showToast('Preparing Master Excel download...');
   try {
-    const a = document.createElement('a');
-    a.href = '1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx';
-    a.download = '1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    showToast('Combined Master Excel (Production + QA Data) downloaded successfully!');
+    // 1. First attempt to fetch the official pre-generated master workbook from server
+    const res = await fetch('/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx');
+    if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const blob = await res.blob();
+        if (blob.size > 2000) {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = '1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => window.URL.revokeObjectURL(url), 10000);
+          showToast('Combined Master Excel (.xlsx) downloaded successfully!');
+          return;
+        }
+      }
+    }
   } catch (err) {
-    console.error('Download combined Excel failed:', err);
-    exportAdminExcel();
+    console.warn('Direct fetch failed, falling back to client generator:', err);
+  }
+
+  // 2. Client-side SheetJS generation fallback (Always succeeds, even if offline or server file not reachable)
+  try {
+    if (typeof XLSX !== 'undefined') {
+      const workbook = generateProductionFormatWorkbook();
+      XLSX.writeFile(workbook, '1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx');
+      showToast('Master Excel report (.xlsx) generated and downloaded successfully!');
+    } else {
+      exportAdminExcel();
+    }
+  } catch (genErr) {
+    console.error('Master Excel generation failed:', genErr);
+    exportAdminCSV();
   }
 }
 

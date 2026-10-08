@@ -20,6 +20,7 @@ QC question/
 extracted_ppt_images/
 *.pptx
 *.xlsx
+!1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx
 *.bat
 !batch_convert_all_to_pdf.bat
 dump_*.txt
