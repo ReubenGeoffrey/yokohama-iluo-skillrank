@@ -164,6 +164,34 @@ app.get(['/favicon.ico', '/favicon.png'], (req, res) => {
   res.sendFile(p);
 });
 
+app.get('/manifest.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/manifest+json');
+  res.json({
+    name: "Yokohama ILUO Skill Assessment",
+    short_name: "Yokohama ILUO",
+    description: "Official Plant Skill Qualification & Analytics Portal for Yokohama ATC Tires",
+    start_url: "/",
+    display: "standalone",
+    background_color: "#0B1120",
+    theme_color: "#005B9E",
+    orientation: "portrait-primary",
+    icons: [
+      {
+        src: "atg_logo.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "any maskable"
+      },
+      {
+        src: "atg_logo.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any maskable"
+      }
+    ]
+  });
+});
+
 // Explicit handler for official Master Production + QA Assessment Excel workbook
 app.get(['/api/download-master-excel', '/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx', encodeURI('/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx')], (req, res) => {
   res.setHeader('Content-Disposition', 'attachment; filename="1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx"');

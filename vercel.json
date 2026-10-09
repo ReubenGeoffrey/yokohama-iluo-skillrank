@@ -12,6 +12,7 @@
             "styles.css",
             "ojt_templates_data.js",
             "seed_data.js",
+            "manifest.json",
             "assessment_records.json",
             "ojt_evaluations.json",
             "custom_questions.json",
