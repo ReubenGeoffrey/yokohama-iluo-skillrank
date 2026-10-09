@@ -1,0 +1,22 @@
+{
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/*/**": true,
+    "**/seed_data.js": true,
+    "**/seed_data_backup_236.js": true,
+    "**/master_excel_b64.js": true,
+    "**/*.apk": true,
+    "**/*.xlsx": true,
+    "**/*.pptx": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/seed_data.js": true,
+    "**/seed_data_backup_236.js": true,
+    "**/master_excel_b64.js": true
+  },
+  "files.exclude": {
+    "**/.git": true
+  }
+}

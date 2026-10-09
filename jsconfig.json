@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "checkJs": false
+  },
+  "exclude": [
+    "node_modules",
+    "seed_data.js",
+    "seed_data_backup_236.js",
+    "master_excel_b64.js"
+  ]
+}
