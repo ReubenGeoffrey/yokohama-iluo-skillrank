@@ -107,6 +107,7 @@ const ALLOWED_STATIC_FILES = new Set([
   '/yokohama_logo.png',
   '/favicon.ico',
   '/favicon.png',
+  '/manifest.json',
   '/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx',
   encodeURI('/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx')
 ]);
