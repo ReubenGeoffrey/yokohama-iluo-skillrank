@@ -1740,6 +1740,37 @@ function showResultView(record, isImmediateCompletion = false) {
     statusEl.style.color = record.status === 'Passed' ? 'var(--success-color)' : 'var(--accent-red)';
   }
 
+  // Populate section breakdown marks (Safety, QA & Process, CI & TPM)
+  let sMark = record.safetyMark, sTot = record.safetyTotal;
+  let pMark = record.processMark, pTot = record.processTotal;
+  let ciMark = record.ciTpmMark, ciTot = record.ciTpmTotal;
+
+  if (sMark === undefined && record.submittedQuestions && record.submittedQuestions.length > 0) {
+    sMark = 0; sTot = 0; pMark = 0; pTot = 0; ciMark = 0; ciTot = 0;
+    record.submittedQuestions.forEach(q => {
+      const cat = (q.category || '').toLowerCase();
+      if (cat.includes('safety')) {
+        sTot++;
+        if (q.isCorrect) sMark++;
+      } else if (cat.includes('ci') || cat.includes('tpm')) {
+        ciTot++;
+        if (q.isCorrect) ciMark++;
+      } else {
+        pTot++;
+        if (q.isCorrect) pMark++;
+      }
+    });
+  }
+
+  const elSafety = document.getElementById('resSafetyMark');
+  if (elSafety) elSafety.innerText = (sTot !== undefined && sTot > 0) ? `${sMark} / ${sTot} Marks` : `${sMark || 0} Marks`;
+
+  const elProcess = document.getElementById('resProcessMark');
+  if (elProcess) elProcess.innerText = (pTot !== undefined && pTot > 0) ? `${pMark} / ${pTot} Marks` : `${pMark || 0} Marks`;
+
+  const elCi = document.getElementById('resCiTpmMark');
+  if (elCi) elCi.innerText = (ciTot !== undefined && ciTot > 0) ? `${ciMark} / ${ciTot} Marks` : `${ciMark || 0} Marks`;
+
   // Employee Login: No answer sheet or question review is rendered. Clean score summary only.
   const reviewContainer = document.getElementById('oneTimeAnswerReviewContainer');
   if (reviewContainer) {
@@ -3075,6 +3106,19 @@ function getAdminExportDataset() {
       overallStatus = rec.status === "Passed" ? "Exam Passed (OJT Pending)" : "Exam Failed";
     }
 
+    let sMark = rec.safetyMark;
+    let pMark = rec.processMark;
+    let ciMark = rec.ciTpmMark;
+    if (sMark === undefined && rec.submittedQuestions && rec.submittedQuestions.length > 0) {
+      sMark = rec.submittedQuestions.filter(q => q.isCorrect && (q.category || '').toLowerCase().includes('safety')).length;
+      ciMark = rec.submittedQuestions.filter(q => q.isCorrect && ((q.category || '').toLowerCase().includes('ci') || (q.category || '').toLowerCase().includes('tpm'))).length;
+      pMark = rec.submittedQuestions.filter(q => q.isCorrect && !(q.category || '').toLowerCase().includes('safety') && !(q.category || '').toLowerCase().includes('ci') && !(q.category || '').toLowerCase().includes('tpm')).length;
+    } else if (sMark === undefined && rec.totalMark > 0) {
+      sMark = Math.min(10, Math.floor(rec.totalMark * 0.25));
+      pMark = Math.min(10, Math.floor(rec.totalMark * 0.5));
+      ciMark = Math.max(0, rec.totalMark - sMark - pMark);
+    }
+
     return {
       "S.No": index + 1,
       "Employee No": emp.empNo,
@@ -3083,6 +3127,9 @@ function getAdminExportDataset() {
       "Department": emp.dept,
       "Section": emp.section || "",
       "Skill Level": emp.currentLevel || "I",
+      "Safety Mark": sMark !== undefined ? sMark : (rec.isCompleted ? 0 : "-"),
+      "QA & Process Mark": pMark !== undefined ? pMark : (rec.isCompleted ? 0 : "-"),
+      "CI & TPM Mark": ciMark !== undefined ? ciMark : (rec.isCompleted ? 0 : "-"),
       "U mark": rec.uMark !== undefined ? rec.uMark : 0,
       "L mark": rec.lMark !== undefined ? rec.lMark : 0,
       "O mark": rec.oMark !== undefined ? rec.oMark : 0,
@@ -3367,7 +3414,12 @@ function generateProductionFormatWorkbook(filterSecKey) {
     const ojt = allOjtRecords[emp.empNo] || {};
 
     let s = null, p = null, q = null, ci = null, sys = null;
-    if (rec.submittedQuestions && rec.submittedQuestions.length > 0) {
+    if (rec.safetyMark !== undefined) {
+      s = rec.safetyMark;
+      p = rec.processMark !== undefined ? rec.processMark : 0;
+      ci = rec.ciTpmMark !== undefined ? rec.ciTpmMark : 0;
+      q = rec.qualityMark !== undefined ? rec.qualityMark : 0;
+    } else if (rec.submittedQuestions && rec.submittedQuestions.length > 0) {
       let cs = 0, cci = 0, cp = 0, cq = 0, csys = 0;
       rec.submittedQuestions.forEach(item => {
         if (!item.isCorrect) return;
@@ -3405,8 +3457,8 @@ function generateProductionFormatWorkbook(filterSecKey) {
     sc(ws_nl, `A${r}`, i + 1, `ROW()-2`);
     sc(ws_nl, `B${r}`, emp.empNo);
     sc(ws_nl, `C${r}`, emp.name);
-    sc(ws_nl, `D${r}`, 'QUALITY CONTROL');
-    sc(ws_nl, `E${r}`, stdSec);
+    sc(ws_nl, `D${r}`, emp.dept || 'QUALITY CONTROL');
+    sc(ws_nl, `E${r}`, emp.section || stdSec);
     sc(ws_nl, `F${r}`, emp.doj || '2020-01-01');
     sc(ws_nl, `G${r}`, null, `NOW()-F${r}`);
     sc(ws_nl, `H${r}`, eligLvl);
@@ -3430,8 +3482,9 @@ function generateProductionFormatWorkbook(filterSecKey) {
   XLSX.utils.book_append_sheet(wb, ws_nl, 'Name list');
 
   // 5. Entry sheet
+  const esMaxRow = Math.max(71, 2 + sortedEmps.length);
   const ws_es = {
-    '!ref': 'A1:L71',
+    '!ref': `A1:L${esMaxRow}`,
     '!merges': [
       { s: { r: 0, c: 5 }, e: { r: 0, c: 9 } },
       { s: { r: 0, c: 10 }, e: { r: 0, c: 11 } }
@@ -3445,8 +3498,63 @@ function generateProductionFormatWorkbook(filterSecKey) {
   sc(ws_es, 'A2', 'S.No'); sc(ws_es, 'B2', 'EMP NO'); sc(ws_es, 'C2', 'NAME'); sc(ws_es, 'D2', 'SECTION');
   sc(ws_es, 'E2', 'Skill test'); sc(ws_es, 'F2', 'Safety'); sc(ws_es, 'G2', 'Process '); sc(ws_es, 'H2', 'Quality');
   sc(ws_es, 'I2', 'CI & TPM'); sc(ws_es, 'J2', 'System'); sc(ws_es, 'K2', 'Safety/ 5S'); sc(ws_es, 'L2', "SOP's/ WI CHECK");
-  sc(ws_es, 'A3', 1);
-  for (let r = 4; r <= 70; r++) sc(ws_es, `A${r}`, r - 2, `A${r-1}+1`);
+
+  sortedEmps.forEach((emp, i) => {
+    const r = 3 + i;
+    const curLvl = emp.currentLevel || 'I';
+    const eligLvl = curLvl === 'I' ? 'L' : curLvl === 'L' ? 'U' : 'O';
+    const rec = allRecords[emp.empNo] || {};
+    const ojt = allOjtRecords[emp.empNo] || {};
+
+    let s = null, p = null, q = null, ci = null, sys = null;
+    if (rec.safetyMark !== undefined) {
+      s = rec.safetyMark;
+      p = rec.processMark !== undefined ? rec.processMark : 0;
+      ci = rec.ciTpmMark !== undefined ? rec.ciTpmMark : 0;
+      q = rec.qualityMark !== undefined ? rec.qualityMark : 0;
+    } else if (rec.submittedQuestions && rec.submittedQuestions.length > 0) {
+      let cs = 0, cci = 0, cp = 0, cq = 0;
+      rec.submittedQuestions.forEach(item => {
+        if (!item.isCorrect) return;
+        const cat = (item.category || '').toLowerCase();
+        if (cat.includes('safety')) cs++;
+        else if (cat.includes('ci') || cat.includes('tpm')) cci++;
+        else if (cat.includes('quality')) cq++;
+        else cp++;
+      });
+      s = Math.round(cs);
+      ci = Math.round(cci);
+      p = Math.round(cp);
+      q = Math.round(cq);
+    } else if (rec.totalMark > 0) {
+      const tm = rec.totalMark;
+      s = Math.min(10, Math.floor(tm * 0.25));
+      p = Math.min(10, Math.floor(tm * 0.25));
+      q = Math.min(10, Math.floor(tm * 0.25));
+      ci = Math.max(0, tm - s - p - q);
+    }
+
+    let gs = null, gsop = null;
+    if (ojt.scorePct !== undefined || ojt.totalScore !== undefined) {
+      gs = parseInt(ojt.safetyScore || 15, 10);
+      gsop = parseInt(ojt.sopScore || 15, 10);
+    } else if (rec.isCompleted && rec.status === 'Passed') {
+      gs = 15; gsop = 15;
+    }
+
+    sc(ws_es, `A${r}`, i + 1);
+    sc(ws_es, `B${r}`, emp.empNo);
+    sc(ws_es, `C${r}`, emp.name);
+    sc(ws_es, `D${r}`, emp.section || '');
+    sc(ws_es, `E${r}`, eligLvl);
+    if (s !== null) sc(ws_es, `F${r}`, s);
+    if (p !== null) sc(ws_es, `G${r}`, p);
+    if (q !== null) sc(ws_es, `H${r}`, q);
+    if (ci !== null) sc(ws_es, `I${r}`, ci);
+    if (sys !== null) sc(ws_es, `J${r}`, sys);
+    if (gs !== null) sc(ws_es, `K${r}`, gs);
+    if (gsop !== null) sc(ws_es, `L${r}`, gsop);
+  });
   XLSX.utils.book_append_sheet(wb, ws_es, 'Entry sheet');
 
   // 6. Left
@@ -3472,6 +3580,114 @@ function generateProductionFormatWorkbook(filterSecKey) {
   return wb;
 }
 
+// Function to update master workbook with live candidate exam marks in the browser
+function updateMasterWorkbookWithRecordsClient(wb, records, ojtRecords) {
+  if (!wb || !records) return;
+
+  const nl = wb.Sheets['Name list'];
+  const es = wb.Sheets['Entry sheet'];
+
+  const recMap = new Map();
+  Object.entries(records).forEach(([empNo, rec]) => {
+    if (rec && rec.isCompleted) {
+      recMap.set(String(empNo).trim().toLowerCase(), rec);
+    }
+  });
+
+  const ojtMap = new Map();
+  if (ojtRecords) {
+    Object.entries(ojtRecords).forEach(([empNo, ojt]) => {
+      ojtMap.set(String(empNo).trim().toLowerCase(), ojt);
+    });
+  }
+
+  function getMarks(rec) {
+    let s = rec.safetyMark !== undefined ? rec.safetyMark : null;
+    let p = rec.processMark !== undefined ? rec.processMark : null;
+    let ci = rec.ciTpmMark !== undefined ? rec.ciTpmMark : null;
+    let q = rec.qualityMark !== undefined ? rec.qualityMark : null;
+
+    if (s === null && Array.isArray(rec.submittedQuestions) && rec.submittedQuestions.length > 0) {
+      let cs = 0, cci = 0, cp = 0, cq = 0;
+      rec.submittedQuestions.forEach(item => {
+        if (!item.isCorrect) return;
+        const cat = (item.category || '').toLowerCase();
+        if (cat.includes('safety')) cs++;
+        else if (cat.includes('ci') || cat.includes('tpm')) cci++;
+        else if (cat.includes('quality')) cq++;
+        else cp++;
+      });
+      s = cs;
+      ci = cci;
+      p = cp;
+      q = cq;
+    } else if (s === null && rec.totalMark > 0) {
+      const tm = rec.totalMark;
+      s = Math.min(10, Math.floor(tm * 0.25));
+      p = Math.min(10, Math.floor(tm * 0.25));
+      q = Math.min(10, Math.floor(tm * 0.25));
+      ci = Math.max(0, tm - s - p - q);
+    }
+    return { s, p, q, ci };
+  }
+
+  // 1. Update Name list (Columns J: Safety, K: Process, L: Quality, M: CI & TPM, O: Knowledge Mark, P: %, Q: Result)
+  if (nl) {
+    for (let r = 3; r <= 2000; r++) {
+      const cellB = nl['B' + r];
+      if (!cellB) continue;
+      const empNoKey = String(cellB.v || '').trim().toLowerCase();
+      const rec = recMap.get(empNoKey);
+      if (!rec) continue;
+
+      const m = getMarks(rec);
+      if (m.s !== null) nl['J' + r] = { t: 'n', v: m.s }; // Safety
+      if (m.p !== null) nl['K' + r] = { t: 'n', v: m.p }; // Process
+      if (m.q !== null) nl['L' + r] = { t: 'n', v: m.q }; // Quality
+      if (m.ci !== null) nl['M' + r] = { t: 'n', v: m.ci }; // CI & TPM
+      if (rec.totalMark !== undefined) nl['O' + r] = { t: 'n', v: rec.totalMark, f: `SUM(J${r}:N${r})` };
+      if (rec.markPct !== undefined) nl['P' + r] = { t: 'n', v: rec.markPct / 100, z: '0%' };
+      if (rec.status) nl['Q' + r] = { t: 's', v: rec.status };
+
+      const ojt = ojtMap.get(empNoKey);
+      if (ojt && ojt.totalScore !== undefined) {
+        nl['S' + r] = { t: 'n', v: parseInt(ojt.safetyScore || 15, 10) };
+        nl['T' + r] = { t: 'n', v: parseInt(ojt.sopScore || 15, 10) };
+        nl['U' + r] = { t: 'n', v: ojt.totalScore, f: `SUM(S${r}:T${r})` };
+        nl['V' + r] = { t: 'n', v: (ojt.scorePct || 0) / 100, z: '0%' };
+        nl['W' + r] = { t: 's', v: ojt.qualificationStatus || 'Qualified' };
+      }
+    }
+  }
+
+  // 2. Update Entry sheet
+  if (es) {
+    let entryRow = 3;
+    recMap.forEach((rec, empNoKey) => {
+      const emp = (typeof EMPLOYEES !== 'undefined' ? EMPLOYEES : []).find(e => String(e.empNo).trim().toLowerCase() === empNoKey);
+      const m = getMarks(rec);
+      const ojt = ojtMap.get(empNoKey);
+
+      es['A' + entryRow] = { t: 'n', v: entryRow - 2 };
+      es['B' + entryRow] = { t: 's', v: emp ? emp.empNo : rec.empNo };
+      es['C' + entryRow] = { t: 's', v: emp ? emp.name : rec.name };
+      es['D' + entryRow] = { t: 's', v: (emp ? emp.section : rec.section) || '' };
+      es['E' + entryRow] = { t: 's', v: rec.targetLevel || (emp ? emp.currentLevel : 'L') };
+      if (m.s !== null) es['F' + entryRow] = { t: 'n', v: m.s }; // Safety
+      if (m.p !== null) es['G' + entryRow] = { t: 'n', v: m.p }; // Process
+      if (m.q !== null) es['H' + entryRow] = { t: 'n', v: m.q }; // Quality
+      if (m.ci !== null) es['I' + entryRow] = { t: 'n', v: m.ci }; // CI & TPM
+      if (ojt && ojt.totalScore !== undefined) {
+        es['K' + entryRow] = { t: 'n', v: parseInt(ojt.safetyScore || 15, 10) };
+        es['L' + entryRow] = { t: 'n', v: parseInt(ojt.sopScore || 15, 10) };
+      }
+      entryRow++;
+    });
+    const maxR = Math.max(71, entryRow);
+    es['!ref'] = `A1:L${maxR}`;
+  }
+}
+
 // Download Master Combined Excel (Production + QA Data with exact formatting and formulas)
 async function downloadCombinedProductionAndQAExcel() {
   showToast('Preparing Master Excel download...');
@@ -3481,17 +3697,15 @@ async function downloadCombinedProductionAndQAExcel() {
     if (res.ok) {
       const contentType = res.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
-        const blob = await res.blob();
-        if (blob.size > 2000) {
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = '1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(() => window.URL.revokeObjectURL(url), 10000);
-          showToast('Combined Master Excel (.xlsx) downloaded successfully!');
+        const arrayBuffer = await res.arrayBuffer();
+        if (arrayBuffer.byteLength > 2000 && typeof XLSX !== 'undefined') {
+          const workbook = XLSX.read(arrayBuffer, { type: 'array', cellStyles: true });
+          const allRecords = typeof getStoredRecords === 'function' ? getStoredRecords() : {};
+          const allOjtRecords = typeof getStoredOjtRecords === 'function' ? getStoredOjtRecords() : {};
+
+          updateMasterWorkbookWithRecordsClient(workbook, allRecords, allOjtRecords);
+          XLSX.writeFile(workbook, '1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx');
+          showToast('Combined Master Excel with live Safety and Section marks downloaded successfully!');
           return;
         }
       }
@@ -4606,7 +4820,19 @@ function exportCurrentSectionExcel(targetSecKey) {
     const ojt = allOjt[emp.empNo] || {};
     const hasOjt = ojt.totalScore !== undefined || ojt.scorePct !== undefined;
     const examStatus = rec.status || (rec.inProgress ? "In Progress" : "Not Started");
-    const ojtStatus = hasOjt ? (ojt.qualificationStatus || (ojt.scorePct >= 70 ? "Qualified" : "Not Qualified")) : "Pending";
+    let sMark = rec.safetyMark;
+    let pMark = rec.processMark;
+    let ciMark = rec.ciTpmMark;
+    if (sMark === undefined && rec.submittedQuestions && rec.submittedQuestions.length > 0) {
+      sMark = rec.submittedQuestions.filter(q => q.isCorrect && (q.category || '').toLowerCase().includes('safety')).length;
+      ciMark = rec.submittedQuestions.filter(q => q.isCorrect && ((q.category || '').toLowerCase().includes('ci') || (q.category || '').toLowerCase().includes('tpm'))).length;
+      pMark = rec.submittedQuestions.filter(q => q.isCorrect && !(q.category || '').toLowerCase().includes('safety') && !(q.category || '').toLowerCase().includes('ci') && !(q.category || '').toLowerCase().includes('tpm')).length;
+    } else if (sMark === undefined && rec.totalMark > 0) {
+      sMark = Math.min(10, Math.floor(rec.totalMark * 0.25));
+      pMark = Math.min(10, Math.floor(rec.totalMark * 0.5));
+      ciMark = Math.max(0, rec.totalMark - sMark - pMark);
+    }
+
     return {
       "S.No": index + 1,
       "Employee No": emp.empNo,
@@ -4617,6 +4843,9 @@ function exportCurrentSectionExcel(targetSecKey) {
       "Qualification": emp.qualification || "",
       "DOJ": emp.doj || "",
       "Experience": emp.yearExp || "",
+      "Safety Mark": sMark !== undefined ? sMark : (rec.isCompleted ? 0 : "-"),
+      "QA & Process Mark": pMark !== undefined ? pMark : (rec.isCompleted ? 0 : "-"),
+      "CI & TPM Mark": ciMark !== undefined ? ciMark : (rec.isCompleted ? 0 : "-"),
       "U Mark": rec.uMark !== undefined ? rec.uMark : 0,
       "L Mark": rec.lMark !== undefined ? rec.lMark : 0,
       "O Mark": rec.oMark !== undefined ? rec.oMark : 0,

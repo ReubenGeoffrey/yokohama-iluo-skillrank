@@ -86,6 +86,8 @@ test('POST /api/exam/submit evaluates score authoritatively on server', async ()
   assert.strictEqual(data.record.empNo, 'LN0039');
   assert.ok(typeof data.record.totalMark === 'number');
   assert.ok(typeof data.record.markPct === 'number');
+  assert.ok(typeof data.record.safetyMark === 'number');
+  assert.ok(typeof data.record.safetyTotal === 'number');
   assert.ok(['Passed', 'Failed'].includes(data.record.status));
 });
 

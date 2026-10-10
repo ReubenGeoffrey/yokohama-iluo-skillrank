@@ -192,14 +192,138 @@ app.get('/manifest.json', (req, res) => {
   });
 });
 
+// Function to update Master Excel workbook with live candidate exam marks & OJT records
+function updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees) {
+  if (!wb || !records) return;
+
+  const nl = wb.Sheets['Name list'];
+  const es = wb.Sheets['Entry sheet'];
+
+  const recMap = new Map();
+  Object.entries(records).forEach(([empNo, rec]) => {
+    if (rec && rec.isCompleted) {
+      recMap.set(String(empNo).trim().toLowerCase(), rec);
+    }
+  });
+
+  const ojtMap = new Map();
+  if (ojtRecords) {
+    Object.entries(ojtRecords).forEach(([empNo, ojt]) => {
+      ojtMap.set(String(empNo).trim().toLowerCase(), ojt);
+    });
+  }
+
+  function getCategoryMarks(rec) {
+    let s = rec.safetyMark !== undefined ? rec.safetyMark : null;
+    let p = rec.processMark !== undefined ? rec.processMark : null;
+    let ci = rec.ciTpmMark !== undefined ? rec.ciTpmMark : null;
+    let q = rec.qualityMark !== undefined ? rec.qualityMark : null;
+
+    if (s === null && Array.isArray(rec.submittedQuestions) && rec.submittedQuestions.length > 0) {
+      let cs = 0, cci = 0, cp = 0, cq = 0;
+      rec.submittedQuestions.forEach(item => {
+        if (!item.isCorrect) return;
+        const cat = (item.category || '').toLowerCase();
+        if (cat.includes('safety')) cs++;
+        else if (cat.includes('ci') || cat.includes('tpm')) cci++;
+        else if (cat.includes('quality')) cq++;
+        else cp++;
+      });
+      s = cs;
+      ci = cci;
+      p = cp;
+      q = cq;
+    } else if (s === null && rec.totalMark > 0) {
+      const tm = rec.totalMark;
+      s = Math.min(10, Math.floor(tm * 0.25));
+      p = Math.min(10, Math.floor(tm * 0.25));
+      q = Math.min(10, Math.floor(tm * 0.25));
+      ci = Math.max(0, tm - s - p - q);
+    }
+    return { s, p, q, ci };
+  }
+
+  // 1. Update Name list (Columns J: Safety, K: Process, L: Quality, M: CI & TPM, O: Knowledge Mark, P: %, Q: Result)
+  if (nl) {
+    for (let r = 3; r <= 2000; r++) {
+      const cellB = nl['B' + r];
+      if (!cellB) continue;
+      const empNoKey = String(cellB.v || '').trim().toLowerCase();
+      const rec = recMap.get(empNoKey);
+      if (!rec) continue;
+
+      const marks = getCategoryMarks(rec);
+      if (marks.s !== null) nl['J' + r] = { t: 'n', v: marks.s };
+      if (marks.p !== null) nl['K' + r] = { t: 'n', v: marks.p };
+      if (marks.q !== null) nl['L' + r] = { t: 'n', v: marks.q };
+      if (marks.ci !== null) nl['M' + r] = { t: 'n', v: marks.ci };
+      if (rec.totalMark !== undefined) nl['O' + r] = { t: 'n', v: rec.totalMark, f: `SUM(J${r}:N${r})` };
+      if (rec.markPct !== undefined) nl['P' + r] = { t: 'n', v: rec.markPct / 100, z: '0%' };
+      if (rec.status) nl['Q' + r] = { t: 's', v: rec.status };
+
+      const ojt = ojtMap.get(empNoKey);
+      if (ojt && ojt.totalScore !== undefined) {
+        nl['S' + r] = { t: 'n', v: parseInt(ojt.safetyScore || 15, 10) };
+        nl['T' + r] = { t: 'n', v: parseInt(ojt.sopScore || 15, 10) };
+        nl['U' + r] = { t: 'n', v: ojt.totalScore, f: `SUM(S${r}:T${r})` };
+        nl['V' + r] = { t: 'n', v: (ojt.scorePct || 0) / 100, z: '0%' };
+        nl['W' + r] = { t: 's', v: ojt.qualificationStatus || 'Qualified' };
+      }
+    }
+  }
+
+  // 2. Update Entry sheet (Column F: Safety, G: Process, H: Quality, I: CI & TPM, K: Gemba Safety/5S, L: Gemba SOP)
+  if (es) {
+    let entryRow = 3;
+    recMap.forEach((rec, empNoKey) => {
+      const emp = (employees || []).find(e => String(e.empNo).trim().toLowerCase() === empNoKey);
+      const marks = getCategoryMarks(rec);
+      const ojt = ojtMap.get(empNoKey);
+
+      es['A' + entryRow] = { t: 'n', v: entryRow - 2 };
+      es['B' + entryRow] = { t: 's', v: emp ? emp.empNo : rec.empNo };
+      es['C' + entryRow] = { t: 's', v: emp ? emp.name : rec.name };
+      es['D' + entryRow] = { t: 's', v: (emp ? emp.section : rec.section) || '' };
+      es['E' + entryRow] = { t: 's', v: rec.targetLevel || (emp ? emp.currentLevel : 'L') };
+      if (marks.s !== null) es['F' + entryRow] = { t: 'n', v: marks.s };
+      if (marks.p !== null) es['G' + entryRow] = { t: 'n', v: marks.p };
+      if (marks.q !== null) es['H' + entryRow] = { t: 'n', v: marks.q };
+      if (marks.ci !== null) es['I' + entryRow] = { t: 'n', v: marks.ci };
+      if (ojt && ojt.totalScore !== undefined) {
+        es['K' + entryRow] = { t: 'n', v: parseInt(ojt.safetyScore || 15, 10) };
+        es['L' + entryRow] = { t: 'n', v: parseInt(ojt.sopScore || 15, 10) };
+      }
+      entryRow++;
+    });
+    const maxR = Math.max(71, entryRow);
+    es['!ref'] = `A1:L${maxR}`;
+  }
+}
+
 // Explicit handler for official Master Production + QA Assessment Excel workbook
-app.get(['/api/download-master-excel', '/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx', encodeURI('/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx')], (req, res) => {
+app.get(['/api/download-master-excel', '/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx', encodeURI('/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx')], async (req, res) => {
   res.setHeader('Content-Disposition', 'attachment; filename="1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx"');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
   const xlsxPath = path.join(__dirname, '1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx');
   if (fs.existsSync(xlsxPath)) {
-    return res.sendFile(xlsxPath);
+    try {
+      const XLSX = require('./xlsx.full.min.js');
+      const buf = fs.readFileSync(xlsxPath);
+      const wb = XLSX.read(buf, { type: 'buffer', cellStyles: true });
+      const records = await getAuthoritativeRecords();
+      const ojtRecords = await getAuthoritativeOjtRecords();
+      const employees = await getAuthoritativeEmployees();
+
+      updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees);
+
+      const outBuf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      res.setHeader('Content-Length', outBuf.length);
+      return res.end(outBuf);
+    } catch (err) {
+      console.warn('Error dynamically injecting records into master Excel, streaming base file:', err.message);
+      return res.sendFile(xlsxPath);
+    }
   }
 
   try {
@@ -1556,12 +1680,28 @@ async function scoreAssessmentServerSide(empNo, targetLevel, responses, section)
   const questions = getQuestionsForSectionServer(allLevelQuestions, targetLevel, empSection);
 
   let correctCount = 0;
+  let safetyMark = 0, safetyTotal = 0;
+  let processMark = 0, processTotal = 0;
+  let ciTpmMark = 0, ciTpmTotal = 0;
+
   const submittedQuestions = questions.map((q, idx) => {
     const selKey = (responses && responses[q.id]) || 'Not Answered';
     const selOpt = q.options ? q.options.find(o => o.key === selKey) : null;
     const corrOpt = q.options ? q.options.find(o => o.key === q.correctAnswer) : null;
     const isCorrect = (selKey === q.correctAnswer);
     if (isCorrect) correctCount++;
+
+    const cat = (q.category || '').toLowerCase();
+    if (cat.includes('safety')) {
+      safetyTotal++;
+      if (isCorrect) safetyMark++;
+    } else if (cat.includes('ci') || cat.includes('tpm')) {
+      ciTpmTotal++;
+      if (isCorrect) ciTpmMark++;
+    } else {
+      processTotal++;
+      if (isCorrect) processMark++;
+    }
 
     return {
       index: idx + 1,
@@ -1611,6 +1751,12 @@ async function scoreAssessmentServerSide(empNo, targetLevel, responses, section)
     oMark,
     totalMark: correctCount,
     markPct,
+    safetyMark,
+    safetyTotal,
+    processMark,
+    processTotal,
+    ciTpmMark,
+    ciTpmTotal,
     status: pass ? 'Passed' : 'Failed',
     attemptDate: new Date().toLocaleDateString('en-GB')
   };
