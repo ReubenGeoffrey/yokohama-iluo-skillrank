@@ -686,13 +686,17 @@
           <div class="login-header" style="background: linear-gradient(135deg, #6D28D9 0%, #003D6B 100%);">
             <img src="atg_logo.png" alt="App Logo" style="width: 58px; height: 58px; border-radius: 12px; margin-bottom: 10px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
             <h2>Department / HOD Sign In</h2>
-            <p>Quality Assurance Department &bull; Executive ILUO Overview</p>
+            <p>Production &amp; Quality Control &bull; Executive ILUO Overview</p>
           </div>
           <div class="login-body">
             <form onsubmit="handleDeptLogin(event)">
               <div class="form-group">
-                <label for="deptSelectInput">Department</label>
-                <input type="text" id="deptSelectInput" class="form-control" value="QUALITY CONTROL" readonly style="font-weight: 700; background: #F8FAFC;">
+                <label for="deptSelectInput">Select Department</label>
+                <select id="deptSelectInput" class="form-control" style="font-weight: 700; background: #FFFFFF; font-size: 0.95rem; padding: 10px 14px; border: 1.5px solid #CBD5E1; border-radius: 8px;">
+                  <option value="PRODUCTION" selected>🏭 PRODUCTION (1,179 Associates &bull; 25 Sections)</option>
+                  <option value="QUALITY CONTROL">🔬 QUALITY CONTROL (283 Associates &bull; 10 Sections)</option>
+                  <option value="ALL">🏢 ALL DEPARTMENTS (1,462 Associates &bull; 35 Sections)</option>
+                </select>
               </div>
               <div class="form-group">
                 <label for="deptPasswordInput">HOD Password</label>
@@ -719,12 +723,22 @@
             <div style="display: flex; align-items: center; gap: 10px;">
               <span style="font-size: 1.8rem;">🏛️</span>
               <div>
-                <h2 style="margin: 0; color: var(--primary-dark); font-size: 1.4rem;">Quality Control Department - HOD Executive Dashboard</h2>
-                <div style="font-size: 0.85rem; color: var(--text-muted);">ATC Tires &bull; Overall ILUO Skill Matrices &amp; Section Analytics</div>
+                <h2 id="deptDashboardTitle" style="margin: 0; color: var(--primary-dark); font-size: 1.4rem;">Department HOD Executive Dashboard</h2>
+                <div id="deptDashboardSubtitle" style="font-size: 0.85rem; color: var(--text-muted);">ATC Tires &bull; Overall ILUO Skill Matrices &amp; Section Analytics</div>
               </div>
             </div>
           </div>
-          <button class="btn-secondary" onclick="logoutDept()" style="font-size: 0.85rem; padding: 8px 14px;">Sign Out HOD</button>
+          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <label for="deptQuickSwitch" style="font-size: 0.85rem; font-weight: 700; color: #475569;">Active Dept:</label>
+              <select id="deptQuickSwitch" onchange="changeActiveDepartment(this.value)" style="padding: 7px 12px; border-radius: 6px; border: 1.5px solid #CBD5E1; font-weight: 700; font-size: 0.85rem; background: #F8FAFC; color: #0F172A; cursor: pointer;">
+                <option value="PRODUCTION">🏭 Production (1,179 Staff)</option>
+                <option value="QUALITY CONTROL">🔬 Quality Control (283 Staff)</option>
+                <option value="ALL">🏢 All Departments (1,462 Staff)</option>
+              </select>
+            </div>
+            <button class="btn-secondary" onclick="logoutDept()" style="font-size: 0.85rem; padding: 8px 14px;">Sign Out HOD</button>
+          </div>
         </div>
 
         <!-- Department Total ILUO Metrics -->
@@ -733,7 +747,7 @@
             <div class="iluo-metric-icon" style="background: #003D6B;">👥</div>
             <div>
               <div class="iluo-metric-val" id="deptTotalStaff">0</div>
-              <div class="iluo-metric-label">Total QA Headcount</div>
+              <div class="iluo-metric-label" id="deptStaffLabel">Total Department Headcount</div>
             </div>
           </div>
           <div class="iluo-metric-card">
@@ -775,7 +789,7 @@
             <table class="data-table" style="width: 100%; min-width: 980px; border-collapse: separate; border-spacing: 0;">
               <thead>
                 <tr style="background: #F8FAFC;">
-                  <th style="padding: 14px 18px; min-width: 180px; font-size: 0.78rem; text-transform: uppercase;">QA Section Name</th>
+                  <th style="padding: 14px 18px; min-width: 180px; font-size: 0.78rem; text-transform: uppercase;">Section Name</th>
                   <th style="padding: 14px 14px; text-align: center; min-width: 90px; font-size: 0.78rem; text-transform: uppercase;">Total Staff</th>
                   <th style="padding: 14px 12px; text-align: center; min-width: 80px; font-size: 0.78rem; text-transform: uppercase;">Level I</th>
                   <th style="padding: 14px 12px; text-align: center; min-width: 80px; font-size: 0.78rem; text-transform: uppercase;">Level L</th>
@@ -1487,7 +1501,8 @@
                   <div class="form-group" style="margin-bottom: 12px;">
                     <label style="font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px; display: block;">Select Department:</label>
                     <select id="adminResetDeptSelect" class="form-control" style="font-size: 0.88rem;" onchange="updateAdminResetDeptInfo()">
-                      <option value="QUALITY CONTROL">QUALITY CONTROL (QA)</option>
+                      <option value="PRODUCTION" selected>PRODUCTION (1,179 Associates &bull; 25 Sections)</option>
+                      <option value="QUALITY CONTROL">QUALITY CONTROL (283 Associates &bull; 10 Sections)</option>
                       <option value="SAFETY">SAFETY</option>
                       <option value="CI & TPM">CI &amp; TPM</option>
                       <option value="TECHNICAL">TECHNICAL</option>

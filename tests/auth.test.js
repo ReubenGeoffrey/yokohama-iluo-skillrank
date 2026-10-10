@@ -73,7 +73,7 @@ test('POST /api/auth/section/login succeeds with valid credentials', async () =>
   assert.strictEqual(data.user.section, 'Tire building QA');
 });
 
-test('POST /api/auth/dept/login succeeds with valid credentials', async () => {
+test('POST /api/auth/dept/login succeeds with valid credentials for QUALITY CONTROL', async () => {
   const res = await fetch(`${baseUrl}/api/auth/dept/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -83,6 +83,20 @@ test('POST /api/auth/dept/login succeeds with valid credentials', async () => {
   const data = await res.json();
   assert.strictEqual(data.success, true);
   assert.strictEqual(data.user.role, 'DEPT_HEAD');
+  assert.strictEqual(data.user.department, 'QUALITY CONTROL');
+});
+
+test('POST /api/auth/dept/login succeeds with valid credentials for PRODUCTION', async () => {
+  const res = await fetch(`${baseUrl}/api/auth/dept/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ department: 'PRODUCTION', password: 'hod123' })
+  });
+  assert.strictEqual(res.status, 200);
+  const data = await res.json();
+  assert.strictEqual(data.success, true);
+  assert.strictEqual(data.user.role, 'DEPT_HEAD');
+  assert.strictEqual(data.user.department, 'PRODUCTION');
 });
 
 test('POST /api/auth/employee/login succeeds for valid employee and rejects invalid', async () => {

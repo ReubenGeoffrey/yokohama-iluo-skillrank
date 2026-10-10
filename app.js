@@ -7121,6 +7121,8 @@ function renderSectionTrainingRequirements(emps) {
 // Department / HOD Portal Logic
 async function handleDeptLogin(e) {
   if (e) e.preventDefault();
+  const deptSelect = document.getElementById('deptSelectInput');
+  const selectedDept = deptSelect ? deptSelect.value.trim() : 'PRODUCTION';
   const pwdInput = document.getElementById('deptPasswordInput');
   const pwd = pwdInput ? pwdInput.value.trim() : '';
 
@@ -7135,11 +7137,11 @@ async function handleDeptLogin(e) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ department: 'QUALITY CONTROL', password: pwd })
+      body: JSON.stringify({ department: selectedDept, password: pwd })
     });
     const data = await res.json();
     if (data.success) {
-      sessionStorage.setItem('iluo_dept_session', 'QUALITY CONTROL');
+      sessionStorage.setItem('iluo_dept_session', selectedDept);
       if (data.token) {
         sessionStorage.setItem('iluo_dept_token', data.token);
       }
@@ -7148,8 +7150,8 @@ async function handleDeptLogin(e) {
       if (loginWrapper) loginWrapper.style.display = 'none';
       if (dashWrapper) dashWrapper.style.display = 'block';
 
-      renderDepartmentDashboard();
-      showToast('Welcome to Department / HOD Dashboard');
+      renderDepartmentDashboard(selectedDept);
+      showToast(`Welcome to ${selectedDept === 'ALL' ? 'Plant-Wide' : selectedDept} HOD Dashboard`);
       if (pwdInput) pwdInput.value = '';
     } else {
       showToast(data.message || 'Invalid Department HOD password.');
@@ -7165,28 +7167,89 @@ async function handleDeptLogin(e) {
 
 function logoutDept() {
   sessionStorage.removeItem('iluo_dept_session');
+  sessionStorage.removeItem('iluo_dept_token');
   const loginWrapper = document.getElementById('deptLoginWrapper');
   const dashWrapper = document.getElementById('deptDashboardWrapper');
   if (loginWrapper) loginWrapper.style.display = 'block';
   if (dashWrapper) dashWrapper.style.display = 'none';
 }
 
-function renderDepartmentDashboard() {
-  const sectionsList = [
-    'Tire building QA',
-    'Final Finish QA',
-    'Final Finish RRO & ALT QA',
-    'Tire curing QA',
-    'Solid tire QA',
-    'Preparatory QA',
-    'Warehouse QA',
-    'FID inspector QA'
-  ];
+function changeActiveDepartment(newDept) {
+  if (!newDept) return;
+  sessionStorage.setItem('iluo_dept_session', newDept);
+  renderDepartmentDashboard(newDept);
+  showToast(`Switched view to ${newDept === 'ALL' ? 'All Departments' : newDept}`);
+}
+
+function renderDepartmentDashboard(deptOverride) {
+  const activeDept = (deptOverride || sessionStorage.getItem('iluo_dept_session') || 'PRODUCTION').toUpperCase().trim();
+
+  // Sync quick switcher dropdown if present
+  const quickSwitch = document.getElementById('deptQuickSwitch');
+  if (quickSwitch && quickSwitch.value !== activeDept) {
+    quickSwitch.value = activeDept;
+  }
+
+  // Filter department employees
+  const allEmployees = (typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES)) ? EMPLOYEES : [];
+  let deptEmps = [];
+  if (activeDept === 'ALL') {
+    deptEmps = allEmployees;
+  } else if (activeDept === 'QUALITY CONTROL' || activeDept === 'QUALITY') {
+    deptEmps = allEmployees.filter(e => {
+      const d = (e.dept || '').toUpperCase().trim();
+      return d === 'QUALITY CONTROL' || d.includes('QUALITY');
+    });
+  } else if (activeDept === 'PRODUCTION') {
+    deptEmps = allEmployees.filter(e => {
+      const d = (e.dept || '').toUpperCase().trim();
+      return d === 'PRODUCTION' || d.includes('PRODUCTION');
+    });
+  } else {
+    deptEmps = allEmployees.filter(e => {
+      const d = (e.dept || '').toUpperCase().trim();
+      return d === activeDept || d.includes(activeDept) || activeDept.includes(d);
+    });
+  }
+
+  // Extract distinct sections for this department
+  const sectionsList = [...new Set(deptEmps.map(e => (e.section || '').trim()).filter(Boolean))].sort();
+
+  // Update Dashboard titles and labels
+  const titleEl = document.getElementById('deptDashboardTitle');
+  if (titleEl) {
+    if (activeDept === 'PRODUCTION') {
+      titleEl.innerText = 'Production Department - HOD Executive Dashboard';
+    } else if (activeDept === 'QUALITY CONTROL' || activeDept === 'QUALITY') {
+      titleEl.innerText = 'Quality Control Department - HOD Executive Dashboard';
+    } else if (activeDept === 'ALL') {
+      titleEl.innerText = 'All Plant Departments - HOD Executive Dashboard';
+    } else {
+      titleEl.innerText = `${activeDept} Department - HOD Executive Dashboard`;
+    }
+  }
+
+  const subTitleEl = document.getElementById('deptDashboardSubtitle');
+  if (subTitleEl) {
+    const deptDisplayName = activeDept === 'ALL' ? 'Plant-Wide' : (activeDept === 'PRODUCTION' ? 'Production' : 'Quality Control');
+    subTitleEl.innerHTML = `ATC Tires &bull; ${deptDisplayName} (${deptEmps.length} Associates &bull; ${sectionsList.length} Sections) &bull; ILUO Skill Matrices &amp; Section Analytics`;
+  }
+
+  const staffLabelEl = document.getElementById('deptStaffLabel');
+  if (staffLabelEl) {
+    if (activeDept === 'PRODUCTION') {
+      staffLabelEl.innerText = 'Total Production Headcount';
+    } else if (activeDept === 'QUALITY CONTROL' || activeDept === 'QUALITY') {
+      staffLabelEl.innerText = 'Total QA Headcount';
+    } else {
+      staffLabelEl.innerText = 'Total Plant Headcount';
+    }
+  }
 
   // Calculate department totals
-  let totalStaff = EMPLOYEES.length;
+  let totalStaff = deptEmps.length;
   let countI = 0, countL = 0, countU = 0, countO = 0;
-  EMPLOYEES.forEach(e => {
+  deptEmps.forEach(e => {
     const lvl = (e.currentLevel || 'L').toUpperCase();
     if (lvl === 'I') countI++;
     else if (lvl === 'L') countL++;
@@ -7207,71 +7270,74 @@ function renderDepartmentDashboard() {
 
   // Render Section-Wise Summary Table
   const tbody = document.getElementById('deptSectionTableBody');
-  if (!tbody) return;
+  if (tbody) {
+    const records = (typeof getStoredRecords === 'function') ? getStoredRecords() : {};
+    const ojtRecords = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
 
-  const records = getStoredRecords();
-  const ojtRecords = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
+    let rowsHtml = '';
+    sectionsList.forEach(sec => {
+      const secNorm = sec.toLowerCase().trim();
+      const secEmps = deptEmps.filter(e => {
+        const s = (e.section || '').toLowerCase().trim();
+        return s === secNorm;
+      });
 
-  let rowsHtml = '';
-  sectionsList.forEach(sec => {
-    const secNorm = sec.toLowerCase().replace(/\s+/g, ' ').trim();
-    const secEmps = EMPLOYEES.filter(e => {
-      const s = (e.section || '').toLowerCase().replace(/\s+/g, ' ').trim();
-      return s.includes(secNorm) || secNorm.includes(s);
+      let sI = 0, sL = 0, sU = 0, sO = 0;
+      let sKnowDone = 0, sOjtDone = 0, sTrainNeeded = 0;
+
+      secEmps.forEach(e => {
+        const lvl = (e.currentLevel || 'L').toUpperCase();
+        if (lvl === 'I') sI++;
+        else if (lvl === 'L') sL++;
+        else if (lvl === 'U') sU++;
+        else if (lvl === 'O') sO++;
+
+        const rec = records[e.empNo];
+        const ojt = ojtRecords[e.empNo];
+
+        if (rec && rec.isCompleted) sKnowDone++;
+        if (ojt && ojt.isCompleted) sOjtDone++;
+        if (!rec || !rec.isCompleted || (rec.totalMark !== undefined && rec.totalMark < 14) || !ojt || !ojt.isCompleted) {
+          sTrainNeeded++;
+        }
+      });
+
+      const safeSec = sec.replace(/'/g, "\\'");
+      rowsHtml += `
+        <tr>
+          <td><strong style="color: var(--primary-dark);">${sec}</strong></td>
+          <td><strong>${secEmps.length}</strong></td>
+          <td><span class="iluo-badge iluo-badge-i" style="width: 22px; height: 22px; font-size: 0.72rem;">${sI}</span></td>
+          <td><span class="iluo-badge iluo-badge-l" style="width: 22px; height: 22px; font-size: 0.72rem;">${sL}</span></td>
+          <td><span class="iluo-badge iluo-badge-u" style="width: 22px; height: 22px; font-size: 0.72rem;">${sU}</span></td>
+          <td><span class="iluo-badge iluo-badge-o" style="width: 22px; height: 22px; font-size: 0.72rem;">${sO}</span></td>
+          <td><span style="color: #059669; font-weight: 700;">${sKnowDone} / ${secEmps.length}</span></td>
+          <td><span style="color: #0284C7; font-weight: 700;">${sOjtDone} / ${secEmps.length}</span></td>
+          <td><span style="color: ${sTrainNeeded > 0 ? '#DC2626' : '#059669'}; font-weight: 700;">${sTrainNeeded}</span></td>
+          <td>
+            <button class="btn-sm" style="background: #005B9E; color: white; border: none; padding: 4px 10px; border-radius: 4px; font-weight: 600; font-size: 0.75rem; cursor: pointer;" onclick="jumpToSectionView('${safeSec}')">
+              View &raquo;
+            </button>
+          </td>
+        </tr>
+      `;
     });
 
-    let sI = 0, sL = 0, sU = 0, sO = 0;
-    let sKnowDone = 0, sOjtDone = 0, sTrainNeeded = 0;
-
-    secEmps.forEach(e => {
-      const lvl = (e.currentLevel || 'L').toUpperCase();
-      if (lvl === 'I') sI++;
-      else if (lvl === 'L') sL++;
-      else if (lvl === 'U') sU++;
-      else if (lvl === 'O') sO++;
-
-      const rec = records[e.empNo];
-      const ojt = ojtRecords[e.empNo];
-
-      if (rec && rec.isCompleted) sKnowDone++;
-      if (ojt && ojt.isCompleted) sOjtDone++;
-      if (!rec || !rec.isCompleted || (rec.totalMark !== undefined && rec.totalMark < 14) || !ojt || !ojt.isCompleted) {
-        sTrainNeeded++;
-      }
-    });
-
-    rowsHtml += `
-      <tr>
-        <td><strong style="color: var(--primary-dark);">${sec}</strong></td>
-        <td><strong>${secEmps.length}</strong></td>
-        <td><span class="iluo-badge iluo-badge-i" style="width: 22px; height: 22px; font-size: 0.72rem;">${sI}</span></td>
-        <td><span class="iluo-badge iluo-badge-l" style="width: 22px; height: 22px; font-size: 0.72rem;">${sL}</span></td>
-        <td><span class="iluo-badge iluo-badge-u" style="width: 22px; height: 22px; font-size: 0.72rem;">${sU}</span></td>
-        <td><span class="iluo-badge iluo-badge-o" style="width: 22px; height: 22px; font-size: 0.72rem;">${sO}</span></td>
-        <td><span style="color: #059669; font-weight: 700;">${sKnowDone} / ${secEmps.length}</span></td>
-        <td><span style="color: #0284C7; font-weight: 700;">${sOjtDone} / ${secEmps.length}</span></td>
-        <td><span style="color: ${sTrainNeeded > 0 ? '#DC2626' : '#059669'}; font-weight: 700;">${sTrainNeeded}</span></td>
-        <td>
-          <button class="btn-sm" style="background: #005B9E; color: white; border: none; padding: 4px 10px; border-radius: 4px; font-weight: 600; font-size: 0.75rem; cursor: pointer;" onclick="jumpToSectionView('${sec}')">
-            View &raquo;
-          </button>
-        </td>
-      </tr>
-    `;
-  });
-
-  tbody.innerHTML = rowsHtml;
+    tbody.innerHTML = rowsHtml;
+  }
 
   // Department Training Plan / Skill Gap summary
   const planContainer = document.getElementById('deptTrainingPlanContainer');
   if (planContainer) {
+    const deptLabel = activeDept === 'PRODUCTION' ? 'Production' : (activeDept === 'QUALITY CONTROL' ? 'Quality Control' : 'Plant-Wide');
+    const scopeDesc = activeDept === 'PRODUCTION' ? 'manufacturing and machine operations' : (activeDept === 'QUALITY CONTROL' ? 'QA inspection and testing' : 'all plant operations');
     planContainer.innerHTML = `
       <div style="font-size: 0.88rem; color: #475569; line-height: 1.6;">
-        <p><strong>Department Training Priorities:</strong></p>
+        <p><strong>${deptLabel} Training Priorities:</strong></p>
         <ul style="padding-left: 20px; margin-top: 6px;">
-          <li><strong>Level I to L Transition:</strong> Focus on ${countI} beginner associates in Tire Building QA &amp; Preparatory QA for induction completion.</li>
-          <li><strong>Level L to U Promotion:</strong> Accelerate practical OJT checkpoints for ${countL} learners across all 8 QA sections.</li>
-          <li><strong>Target ILUO Ratio:</strong> Target distribution is 10% I, 30% L, 40% U, and 20% O across plant operations.</li>
+          <li><strong>Level I to L Transition:</strong> Focus on ${countI} beginner associates across ${sectionsList.length} sections for standard induction completion.</li>
+          <li><strong>Level L to U Promotion:</strong> Accelerate practical OJT checkpoints for ${countL} learners across ${scopeDesc}.</li>
+          <li><strong>Target ILUO Ratio:</strong> Target distribution is 10% I, 30% L, 40% U, and 20% O across ATC Tires.</li>
         </ul>
       </div>
     `;
@@ -7287,6 +7353,12 @@ function jumpToSectionView(secName) {
   if (dashWrapper) dashWrapper.style.display = 'block';
   renderSectionDashboard(secName);
 }
+
+window.handleDeptLogin = handleDeptLogin;
+window.logoutDept = logoutDept;
+window.changeActiveDepartment = changeActiveDepartment;
+window.renderDepartmentDashboard = renderDepartmentDashboard;
+window.jumpToSectionView = jumpToSectionView;
 
 // SOP Modal
 function openSopModal() {
