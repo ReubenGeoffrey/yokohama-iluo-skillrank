@@ -13,6 +13,9 @@ let activeExam = null; // { empNo, targetLevel, questions, currentIndex, respons
 let timerInterval = null;
 let pieChartInstance = null;
 let barChartInstance = null;
+let sectionPieChartInstance = null;
+let categoryBarChartInstance = null;
+let currentCategoryBarMode = 'top-overall';
 let lastTabSwitchTime = 0; // Debounce duplicate events
 let currentActiveSection = 'Tire building QA';
 let currentActiveSectionKey = 'warehouse';
@@ -1852,6 +1855,8 @@ function renderAdminDashboard() {
   renderPieChart(completedCount, inProgressCount, notStartedCount);
   renderBarChart(records);
   renderDashboardSectionMatrix(records, allOjt);
+  renderSectionPieChart();
+  renderCategoryPerformanceBarChart();
 }
 
 function renderDashboardSectionMatrix(records, allOjt) {
@@ -2144,6 +2149,490 @@ function renderBarChart(records) {
   } catch (err) {
     console.warn('Bar chart render notice:', err.message);
   }
+}
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function renderSectionPieChart() {
+  const canvas = document.getElementById('sectionWisePieChart');
+  if (!canvas) return;
+  if (typeof Chart === 'undefined') {
+    setTimeout(renderSectionPieChart, 300);
+    return;
+  }
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  if (sectionPieChartInstance) {
+    try { sectionPieChartInstance.destroy(); } catch (e) {}
+  }
+
+  const deptEl = document.getElementById('sectionPieDeptFilter');
+  const metricEl = document.getElementById('sectionPieMetricFilter');
+  const deptFilter = deptEl ? deptEl.value : 'ALL';
+  const metricFilter = metricEl ? metricEl.value : 'completed';
+
+  const records = getStoredRecords();
+  const sectionCounts = {};
+
+  const targetEmps = EMPLOYEES.filter(emp => {
+    if (deptFilter !== 'ALL' && emp.dept !== deptFilter) return false;
+    return true;
+  });
+
+  targetEmps.forEach(emp => {
+    const secName = emp.section || 'General';
+    if (!sectionCounts[secName]) {
+      sectionCounts[secName] = { total: 0, completed: 0 };
+    }
+    sectionCounts[secName].total++;
+    const rec = records[emp.empNo];
+    if (rec && rec.isCompleted) {
+      sectionCounts[secName].completed++;
+    }
+  });
+
+  let sorted = Object.entries(sectionCounts).map(([name, data]) => ({
+    name,
+    count: metricFilter === 'completed' ? data.completed : data.total
+  })).filter(item => item.count > 0);
+
+  sorted.sort((a, b) => b.count - a.count);
+
+  let labels = [];
+  let dataVals = [];
+  if (sorted.length > 9) {
+    const top = sorted.slice(0, 8);
+    const others = sorted.slice(8);
+    const othersSum = others.reduce((acc, curr) => acc + curr.count, 0);
+
+    labels = top.map(t => t.name);
+    dataVals = top.map(t => t.count);
+
+    if (othersSum > 0) {
+      labels.push(`Other Sections (${others.length})`);
+      dataVals.push(othersSum);
+    }
+  } else {
+    labels = sorted.map(s => s.name);
+    dataVals = sorted.map(s => s.count);
+  }
+
+  const palette = [
+    '#003D6B', '#0284C7', '#10B981', '#F59E0B', '#EF4444',
+    '#8B5CF6', '#EC4899', '#14B8A6', '#6366F1', '#84CC16',
+    '#64748B', '#D97706', '#059669', '#2563EB', '#DC2626'
+  ];
+
+  if (labels.length === 0) {
+    labels = ['No Data'];
+    dataVals = [1];
+  }
+
+  try {
+    sectionPieChartInstance = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: dataVals,
+          backgroundColor: palette.slice(0, labels.length),
+          borderWidth: 2,
+          borderColor: '#FFFFFF'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'right',
+            labels: {
+              boxWidth: 12,
+              font: { size: 10, weight: '600' }
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                const label = context.label || '';
+                const val = context.raw || 0;
+                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                const pct = total > 0 ? Math.round((val / total) * 100) : 0;
+                return ` ${label}: ${val} (${pct}%)`;
+              }
+            }
+          }
+        },
+        cutout: '58%'
+      }
+    });
+  } catch (err) {
+    console.warn('Section pie chart render notice:', err.message);
+  }
+}
+
+function setCategoryBarMode(mode) {
+  currentCategoryBarMode = mode;
+  document.querySelectorAll('.chart-btn-pill').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  const mapBtn = {
+    'top-overall': 'btnPillTopOverall',
+    'top-safety': 'btnPillSafety',
+    'top-citpm': 'btnPillCiTpm',
+    'top-quality': 'btnPillQuality',
+    'section-avg': 'btnPillSecAvg'
+  };
+  const targetId = mapBtn[mode];
+  if (targetId && document.getElementById(targetId)) {
+    document.getElementById(targetId).classList.add('active');
+  }
+  renderCategoryPerformanceBarChart();
+}
+
+function getRecordCategoryMarks(rec) {
+  if (!rec) return { safetyMark: 0, safetyTotal: 0, processMark: 0, processTotal: 0, ciTpmMark: 0, ciTpmTotal: 0, totalMark: 0, percentage: 0 };
+  let sMark = rec.safetyMark, sTot = rec.safetyTotal;
+  let pMark = rec.processMark, pTot = rec.processTotal;
+  let ciMark = rec.ciTpmMark, ciTot = rec.ciTpmTotal;
+
+  if (sMark === undefined && rec.submittedQuestions && rec.submittedQuestions.length > 0) {
+    sMark = 0; sTot = 0; pMark = 0; pTot = 0; ciMark = 0; ciTot = 0;
+    rec.submittedQuestions.forEach(q => {
+      const cat = (q.category || '').toLowerCase();
+      if (cat.includes('safety')) {
+        sTot++;
+        if (q.isCorrect) sMark++;
+      } else if (cat.includes('ci') || cat.includes('tpm')) {
+        ciTot++;
+        if (q.isCorrect) ciMark++;
+      } else {
+        pTot++;
+        if (q.isCorrect) pMark++;
+      }
+    });
+  } else if (sMark === undefined && rec.totalMark > 0) {
+    sMark = Math.min(10, Math.floor(rec.totalMark * 0.25));
+    pMark = Math.min(10, Math.floor(rec.totalMark * 0.5));
+    ciMark = Math.max(0, rec.totalMark - sMark - pMark);
+    sTot = 10; pTot = 10; ciTot = 10;
+  }
+
+  return {
+    safetyMark: sMark !== undefined ? Number(sMark) : 0,
+    safetyTotal: sTot !== undefined ? Number(sTot) : 0,
+    processMark: pMark !== undefined ? Number(pMark) : 0,
+    processTotal: pTot !== undefined ? Number(pTot) : 0,
+    ciTpmMark: ciMark !== undefined ? Number(ciMark) : 0,
+    ciTpmTotal: ciTot !== undefined ? Number(ciTot) : 0,
+    totalMark: Number(rec.totalMark || rec.score || 0),
+    percentage: Number(rec.percentage || 0)
+  };
+}
+
+function renderCategoryPerformanceBarChart() {
+  const canvas = document.getElementById('categoryPerformanceBarChart');
+  if (!canvas) return;
+  if (typeof Chart === 'undefined') {
+    setTimeout(renderCategoryPerformanceBarChart, 300);
+    return;
+  }
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  if (categoryBarChartInstance) {
+    try { categoryBarChartInstance.destroy(); } catch (e) {}
+  }
+
+  const deptEl = document.getElementById('categoryBarDeptFilter');
+  const deptFilter = deptEl ? deptEl.value : 'ALL';
+
+  const records = getStoredRecords();
+  const empMap = {};
+  EMPLOYEES.forEach(e => { empMap[e.empNo] = e; });
+
+  const candidates = [];
+  Object.values(records).forEach(rec => {
+    if (!rec || !rec.isCompleted) return;
+    const emp = empMap[rec.empNo] || {};
+    const empDept = emp.dept || rec.dept || '';
+    if (deptFilter !== 'ALL' && empDept !== deptFilter) return;
+
+    const catMarks = getRecordCategoryMarks(rec);
+    candidates.push({
+      empNo: rec.empNo,
+      name: emp.name || rec.empName || rec.empNo,
+      dept: empDept,
+      section: emp.section || rec.section || 'General',
+      level: emp.currentLevel || rec.skillLevel || 'I',
+      safetyMark: catMarks.safetyMark,
+      safetyTotal: catMarks.safetyTotal,
+      processMark: catMarks.processMark,
+      processTotal: catMarks.processTotal,
+      ciTpmMark: catMarks.ciTpmMark,
+      ciTpmTotal: catMarks.ciTpmTotal,
+      totalMark: catMarks.totalMark,
+      percentage: catMarks.percentage
+    });
+  });
+
+  renderCategoryChampions(candidates);
+
+  let labels = [];
+  let safetyData = [];
+  let ciTpmData = [];
+  let qualityData = [];
+  let extraMeta = [];
+
+  if (currentCategoryBarMode === 'section-avg') {
+    const sectionGroups = {};
+    candidates.forEach(c => {
+      const s = c.section;
+      if (!sectionGroups[s]) {
+        sectionGroups[s] = { count: 0, sSum: 0, ciSum: 0, qSum: 0 };
+      }
+      sectionGroups[s].count++;
+      sectionGroups[s].sSum += c.safetyMark;
+      sectionGroups[s].ciSum += c.ciTpmMark;
+      sectionGroups[s].qSum += c.processMark;
+    });
+
+    const secList = Object.entries(sectionGroups)
+      .map(([sec, g]) => ({
+        sec,
+        count: g.count,
+        avgS: +(g.sSum / g.count).toFixed(1),
+        avgCi: +(g.ciSum / g.count).toFixed(1),
+        avgQ: +(g.qSum / g.count).toFixed(1)
+      }))
+      .sort((a, b) => (b.avgS + b.avgCi + b.avgQ) - (a.avgS + a.avgCi + a.avgQ));
+
+    const topSecs = secList.slice(0, 10);
+    labels = topSecs.map(s => s.sec);
+    safetyData = topSecs.map(s => s.avgS);
+    ciTpmData = topSecs.map(s => s.avgCi);
+    qualityData = topSecs.map(s => s.avgQ);
+    extraMeta = topSecs.map(s => ({ subtitle: `${s.count} Candidates Assessed` }));
+
+  } else {
+    if (currentCategoryBarMode === 'top-safety') {
+      candidates.sort((a, b) => b.safetyMark - a.safetyMark || b.totalMark - a.totalMark);
+    } else if (currentCategoryBarMode === 'top-citpm') {
+      candidates.sort((a, b) => b.ciTpmMark - a.ciTpmMark || b.totalMark - a.totalMark);
+    } else if (currentCategoryBarMode === 'top-quality') {
+      candidates.sort((a, b) => b.processMark - a.processMark || b.totalMark - a.totalMark);
+    } else {
+      candidates.sort((a, b) => b.totalMark - a.totalMark || (b.safetyMark + b.ciTpmMark + b.processMark) - (a.safetyMark + a.ciTpmMark + a.processMark));
+    }
+
+    const topPerformers = candidates.slice(0, 10);
+    labels = topPerformers.map(c => {
+      const shortName = c.name.length > 15 ? c.name.slice(0, 14) + '…' : c.name;
+      const secCode = (c.section || '').slice(0, 10);
+      return `${shortName} [${secCode}]`;
+    });
+    safetyData = topPerformers.map(c => c.safetyMark);
+    ciTpmData = topPerformers.map(c => c.ciTpmMark);
+    qualityData = topPerformers.map(c => c.processMark);
+    extraMeta = topPerformers.map(c => ({
+      fullName: c.name,
+      empNo: c.empNo,
+      section: c.section,
+      totalMark: c.totalMark,
+      percentage: c.percentage
+    }));
+  }
+
+  try {
+    categoryBarChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: '🦺 Safety Mark',
+            data: safetyData,
+            backgroundColor: '#EF4444',
+            borderRadius: 4,
+            borderSkipped: false
+          },
+          {
+            label: '💡 CI & TPM Mark',
+            data: ciTpmData,
+            backgroundColor: '#F59E0B',
+            borderRadius: 4,
+            borderSkipped: false
+          },
+          {
+            label: '⚙️ Quality / QA & Process Mark',
+            data: qualityData,
+            backgroundColor: '#2563EB',
+            borderRadius: 4,
+            borderSkipped: false
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: {
+              boxWidth: 14,
+              font: { weight: 'bold', size: 12 },
+              padding: 14
+            }
+          },
+          tooltip: {
+            callbacks: {
+              afterTitle: function(context) {
+                const idx = context[0].dataIndex;
+                const m = extraMeta[idx];
+                if (!m) return '';
+                if (m.subtitle) return m.subtitle;
+                return `ID: ${m.empNo} | Section: ${m.section}`;
+              },
+              afterBody: function(context) {
+                const idx = context[0].dataIndex;
+                const m = extraMeta[idx];
+                if (!m || m.totalMark === undefined) return '';
+                const pct = m.percentage || Math.round((m.totalMark / 40) * 100);
+                return `Total Exam Score: ${m.totalMark} Marks (${pct}%)`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: {
+              font: { weight: '600', size: 11 },
+              maxRotation: 35,
+              minRotation: 0
+            }
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { stepSize: 2 },
+            title: {
+              display: true,
+              text: currentCategoryBarMode === 'section-avg' ? 'Average Marks Scored' : 'Marks Scored in Category',
+              font: { weight: '700' }
+            }
+          }
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('Category bar chart render notice:', err.message);
+  }
+}
+
+function renderCategoryChampions(candidates) {
+  const container = document.getElementById('categoryChampionsRow');
+  if (!container) return;
+
+  if (!candidates || candidates.length === 0) {
+    container.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 12px; font-size: 0.85rem;">
+        No completed assessment records found for selected filter.
+      </div>
+    `;
+    return;
+  }
+
+  const topOverall = [...candidates].sort((a, b) => b.totalMark - a.totalMark)[0];
+  const topSafety = [...candidates].sort((a, b) => b.safetyMark - a.safetyMark || b.totalMark - a.totalMark)[0];
+  const topCiTpm = [...candidates].sort((a, b) => b.ciTpmMark - a.ciTpmMark || b.totalMark - a.totalMark)[0];
+  const topQuality = [...candidates].sort((a, b) => b.processMark - a.processMark || b.totalMark - a.totalMark)[0];
+
+  container.innerHTML = `
+    <!-- Card 1: Safety Champion -->
+    <div class="champion-card" style="border-left: 4px solid #EF4444;">
+      <div class="champion-icon-wrap" style="background: #FEE2E2; color: #DC2626;">
+        🦺
+      </div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 0.72rem; font-weight: 700; color: #DC2626; text-transform: uppercase; letter-spacing: 0.5px;">Safety Top Performer</div>
+        <div style="font-weight: 800; font-size: 0.95rem; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+          ${escapeHtml(topSafety.name)}
+        </div>
+        <div style="font-size: 0.76rem; color: #64748B;">
+          ${escapeHtml(topSafety.section)} &bull; ${escapeHtml(topSafety.empNo)}
+        </div>
+        <div style="font-size: 0.82rem; font-weight: 800; color: #DC2626; margin-top: 3px;">
+          ${topSafety.safetyMark} Marks in Safety
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 2: CI & TPM Champion -->
+    <div class="champion-card" style="border-left: 4px solid #F59E0B;">
+      <div class="champion-icon-wrap" style="background: #FEF3C7; color: #D97706;">
+        💡
+      </div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 0.72rem; font-weight: 700; color: #D97706; text-transform: uppercase; letter-spacing: 0.5px;">CI &amp; TPM Top Performer</div>
+        <div style="font-weight: 800; font-size: 0.95rem; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+          ${escapeHtml(topCiTpm.name)}
+        </div>
+        <div style="font-size: 0.76rem; color: #64748B;">
+          ${escapeHtml(topCiTpm.section)} &bull; ${escapeHtml(topCiTpm.empNo)}
+        </div>
+        <div style="font-size: 0.82rem; font-weight: 800; color: #D97706; margin-top: 3px;">
+          ${topCiTpm.ciTpmMark} Marks in CI &amp; TPM
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 3: Quality Champion -->
+    <div class="champion-card" style="border-left: 4px solid #2563EB;">
+      <div class="champion-icon-wrap" style="background: #DBEAFE; color: #1D4ED8;">
+        ⚙️
+      </div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 0.72rem; font-weight: 700; color: #1D4ED8; text-transform: uppercase; letter-spacing: 0.5px;">Quality Top Performer</div>
+        <div style="font-weight: 800; font-size: 0.95rem; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+          ${escapeHtml(topQuality.name)}
+        </div>
+        <div style="font-size: 0.76rem; color: #64748B;">
+          ${escapeHtml(topQuality.section)} &bull; ${escapeHtml(topQuality.empNo)}
+        </div>
+        <div style="font-size: 0.82rem; font-weight: 800; color: #1D4ED8; margin-top: 3px;">
+          ${topQuality.processMark} Marks in Quality
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 4: Overall Assessment Top Scorer -->
+    <div class="champion-card" style="border-left: 4px solid #10B981;">
+      <div class="champion-icon-wrap" style="background: #D1FAE5; color: #059669;">
+        🏆
+      </div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 0.72rem; font-weight: 700; color: #059669; text-transform: uppercase; letter-spacing: 0.5px;">Overall Plant Rank 1</div>
+        <div style="font-weight: 800; font-size: 0.95rem; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+          ${escapeHtml(topOverall.name)}
+        </div>
+        <div style="font-size: 0.76rem; color: #64748B;">
+          ${escapeHtml(topOverall.section)} &bull; ${escapeHtml(topOverall.empNo)}
+        </div>
+        <div style="font-size: 0.82rem; font-weight: 800; color: #059669; margin-top: 3px;">
+          ${topOverall.totalMark} Total Marks (${topOverall.percentage || Math.round((topOverall.totalMark / 40) * 100)}%)
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 // Question Bank Manager View & Manual Mapping Engine

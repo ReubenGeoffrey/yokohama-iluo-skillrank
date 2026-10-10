@@ -595,6 +595,72 @@ body {
   height: 260px;
 }
 
+.chart-container-lg {
+  position: relative;
+  height: 350px;
+}
+
+.chart-pill-group {
+  display: inline-flex;
+  background: #F1F5F9;
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+  gap: 2px;
+}
+
+.chart-btn-pill {
+  padding: 5px 12px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  border: none;
+  background: transparent;
+  color: #475569;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.chart-btn-pill:hover {
+  background: #E2E8F0;
+  color: #0F172A;
+}
+
+.chart-btn-pill.active {
+  background: #003D6B;
+  color: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0, 61, 107, 0.2);
+}
+
+.champion-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.champion-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+}
+
+.champion-icon-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+
 /* Data Table Card */
 .table-card {
   background: white;

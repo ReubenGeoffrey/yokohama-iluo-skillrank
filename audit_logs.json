@@ -1,26 +1,26 @@
 [
   {
-    "id": "73fa101df9f6907d",
-    "timestamp": "2026-10-07T07:02:21.786Z",
-    "action": "EVALUATOR_LOGIN",
-    "user": "Safety Evaluator",
-    "details": "Logged in to Safety practical evaluation",
+    "id": "e0ddb0ed80863712",
+    "timestamp": "2026-10-10T07:08:03.547Z",
+    "action": "SEND_ADMIN_OTP",
+    "user": "reubengeoffrey16@gmail.com",
+    "details": "OTP dispatched (test environment)",
     "ip": "127.0.0.1"
   },
   {
-    "id": "a46d3720ba8ac323",
-    "timestamp": "2026-10-07T07:02:22.170Z",
-    "action": "SECTION_LOGIN",
-    "user": "Tire building QA Head",
-    "details": "Logged in to Tire building QA portal",
+    "id": "0fa73fd5a465e3b3",
+    "timestamp": "2026-10-10T07:08:05.594Z",
+    "action": "ADMIN_LOGIN_PASSWORD",
+    "user": "reubengeoffrey16@gmail.com",
+    "details": "Admin signed in via password",
     "ip": "127.0.0.1"
   },
   {
-    "id": "ca7c88c80cd5f83d",
-    "timestamp": "2026-10-07T07:02:22.521Z",
-    "action": "DEPT_LOGIN",
-    "user": "QUALITY CONTROL HOD",
-    "details": "Logged in to Department dashboard",
+    "id": "b3c45dc15e31ac94",
+    "timestamp": "2026-10-10T07:08:07.337Z",
+    "action": "ADMIN_LOGIN_PASSWORD",
+    "user": "reubengeoffrey16@gmail.com",
+    "details": "Admin signed in via password",
     "ip": "127.0.0.1"
   }
 ]

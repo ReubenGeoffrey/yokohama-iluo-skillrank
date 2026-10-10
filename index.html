@@ -1139,13 +1139,101 @@
 
             <div class="charts-row">
               <div class="chart-card">
-                <h3>Assessment Completion Status</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                  <h3 style="margin: 0;">Assessment Completion Status</h3>
+                  <span style="font-size: 0.75rem; font-weight: 700; color: #059669; background: #ECFDF5; padding: 3px 9px; border-radius: 12px; border: 1px solid #A7F3D0;">
+                    Overall Plant
+                  </span>
+                </div>
                 <div class="chart-container">
                   <canvas id="completionPieChart"></canvas>
                 </div>
               </div>
               <div class="chart-card">
-                <h3>Skill Level Distribution</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+                  <div>
+                    <h3 style="margin: 0;">Section-Wise Distribution</h3>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Assessment share across plant sections</div>
+                  </div>
+                  <div style="display: flex; gap: 6px; align-items: center;">
+                    <select id="sectionPieDeptFilter" onchange="renderSectionPieChart()" style="padding: 4px 8px; font-size: 0.78rem; font-weight: 700; border-radius: 6px; border: 1.5px solid #CBD5E1; background: #F8FAFC; color: #0F172A; cursor: pointer;">
+                      <option value="ALL">All Depts</option>
+                      <option value="QUALITY CONTROL">Quality Control</option>
+                      <option value="PRODUCTION">Production</option>
+                    </select>
+                    <select id="sectionPieMetricFilter" onchange="renderSectionPieChart()" style="padding: 4px 8px; font-size: 0.78rem; font-weight: 700; border-radius: 6px; border: 1.5px solid #CBD5E1; background: #F8FAFC; color: #0F172A; cursor: pointer;">
+                      <option value="completed">Completed</option>
+                      <option value="total">Headcount</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="chart-container">
+                  <canvas id="sectionWisePieChart"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <!-- Full-Width Bar Chart: Safety, CI & TPM, and Quality Pillar Performance & Top Performers -->
+            <div class="chart-card" style="margin-bottom: 28px; width: 100%; box-sizing: border-box;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <h3 style="margin: 0; font-size: 1.12rem; font-weight: 800; color: var(--primary-dark);">
+                      Pillar Performance: Safety, CI &amp; TPM, and Quality
+                    </h3>
+                    <span style="font-size: 0.75rem; font-weight: 800; background: #EEF2FF; color: #4338CA; padding: 3px 10px; border-radius: 12px; border: 1px solid #C7D2FE;">
+                      Who Performed Well
+                    </span>
+                  </div>
+                  <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 3px;">
+                    Associate scores breakdown by pillar: 🦺 Safety, 💡 CI &amp; TPM, and ⚙️ Quality / QA &amp; Process
+                  </div>
+                </div>
+
+                <!-- Controls & View Mode Switches -->
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                  <!-- View Mode Pills -->
+                  <div class="chart-pill-group">
+                    <button type="button" class="chart-btn-pill active" id="btnPillTopOverall" onclick="setCategoryBarMode('top-overall')">
+                      🏆 Top Performers
+                    </button>
+                    <button type="button" class="chart-btn-pill" id="btnPillSafety" onclick="setCategoryBarMode('top-safety')">
+                      🦺 Top Safety
+                    </button>
+                    <button type="button" class="chart-btn-pill" id="btnPillCiTpm" onclick="setCategoryBarMode('top-citpm')">
+                      💡 Top CI &amp; TPM
+                    </button>
+                    <button type="button" class="chart-btn-pill" id="btnPillQuality" onclick="setCategoryBarMode('top-quality')">
+                      ⚙️ Top Quality
+                    </button>
+                    <button type="button" class="chart-btn-pill" id="btnPillSecAvg" onclick="setCategoryBarMode('section-avg')">
+                      📊 Section Averages
+                    </button>
+                  </div>
+
+                  <!-- Dept Filter -->
+                  <select id="categoryBarDeptFilter" onchange="renderCategoryPerformanceBarChart()" style="padding: 6px 12px; font-size: 0.8rem; font-weight: 700; border-radius: 6px; border: 1.5px solid #CBD5E1; background: #FFFFFF; color: #0F172A; cursor: pointer;">
+                    <option value="ALL">All Departments</option>
+                    <option value="QUALITY CONTROL">Quality Control</option>
+                    <option value="PRODUCTION">Production</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Bar Chart Canvas -->
+              <div class="chart-container-lg">
+                <canvas id="categoryPerformanceBarChart"></canvas>
+              </div>
+
+              <!-- Top Performer Champions Cards -->
+              <div id="categoryChampionsRow" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-top: 20px; padding-top: 18px; border-top: 1px solid #F1F5F9;">
+                <!-- Populated dynamically: Safety Top, CI&TPM Top, Quality Top, Overall Top -->
+              </div>
+            </div>
+
+            <div class="charts-row">
+              <div class="chart-card">
+                <h3>Skill Level Distribution (I, L, U, O)</h3>
                 <div class="chart-container">
                   <canvas id="levelBarChart"></canvas>
                 </div>
