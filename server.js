@@ -312,7 +312,7 @@ app.get(['/api/download-master-excel', '/1. PRODUCTION SKILL ASSESSMENT DATA 30.
       const buf = fs.readFileSync(xlsxPath);
       const wb = XLSX.read(buf, { type: 'buffer', cellStyles: true });
       const records = await getAuthoritativeRecords();
-      const ojtRecords = await getAuthoritativeOjtRecords();
+      const ojtRecords = await getAuthoritativeOjtEvaluations();
       const employees = await getAuthoritativeEmployees();
 
       updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees);
