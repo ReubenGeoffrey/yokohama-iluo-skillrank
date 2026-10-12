@@ -1743,26 +1743,41 @@ function showResultView(record, isImmediateCompletion = false) {
     statusEl.style.color = record.status === 'Passed' ? 'var(--success-color)' : 'var(--accent-red)';
   }
 
-  // Populate section breakdown marks (Safety, QA & Process, CI & TPM)
+  // Populate section breakdown marks (Safety, Process, Quality, CI & TPM)
   let sMark = record.safetyMark, sTot = record.safetyTotal;
   let pMark = record.processMark, pTot = record.processTotal;
+  let qMark = record.qualityMark, qTot = record.qualityTotal;
   let ciMark = record.ciTpmMark, ciTot = record.ciTpmTotal;
 
   if (sMark === undefined && record.submittedQuestions && record.submittedQuestions.length > 0) {
-    sMark = 0; sTot = 0; pMark = 0; pTot = 0; ciMark = 0; ciTot = 0;
+    sMark = 0; sTot = 0; pMark = 0; pTot = 0; qMark = 0; qTot = 0; ciMark = 0; ciTot = 0;
     record.submittedQuestions.forEach(q => {
       const cat = (q.category || '').toLowerCase();
+      const qText = (q.question || '').toLowerCase();
       if (cat.includes('safety')) {
         sTot++;
         if (q.isCorrect) sMark++;
       } else if (cat.includes('ci') || cat.includes('tpm')) {
         ciTot++;
         if (q.isCorrect) ciMark++;
+      } else if (cat.includes('quality') || qText.includes('quality') || qText.includes('defect') || qText.includes('inspect') || qText.includes('standard') || qText.includes('spec') || qText.includes('tolerance') || qText.includes('scrap') || qText.includes('check') || qText.includes('sample') || qText.includes('audit')) {
+        qTot++;
+        if (q.isCorrect) qMark++;
       } else {
         pTot++;
         if (q.isCorrect) pMark++;
       }
     });
+  } else if (qMark === undefined && pMark !== undefined) {
+    // If recorded previously under combined QA & Process, split evenly
+    const half = Math.floor(pMark / 2);
+    qMark = pMark - half;
+    pMark = half;
+    if (pTot) {
+      const halfTot = Math.floor(pTot / 2);
+      qTot = pTot - halfTot;
+      pTot = halfTot;
+    }
   }
 
   const elSafety = document.getElementById('resSafetyMark');
@@ -1770,6 +1785,9 @@ function showResultView(record, isImmediateCompletion = false) {
 
   const elProcess = document.getElementById('resProcessMark');
   if (elProcess) elProcess.innerText = (pTot !== undefined && pTot > 0) ? `${pMark} / ${pTot} Marks` : `${pMark || 0} Marks`;
+
+  const elQuality = document.getElementById('resQualityMark');
+  if (elQuality) elQuality.innerText = (qTot !== undefined && qTot > 0) ? `${qMark} / ${qTot} Marks` : `${qMark || 0} Marks`;
 
   const elCi = document.getElementById('resCiTpmMark');
   if (elCi) elCi.innerText = (ciTot !== undefined && ciTot > 0) ? `${ciMark} / ${ciTot} Marks` : `${ciMark || 0} Marks`;
@@ -2288,8 +2306,9 @@ function setCategoryBarMode(mode) {
   const mapBtn = {
     'top-overall': 'btnPillTopOverall',
     'top-safety': 'btnPillSafety',
-    'top-citpm': 'btnPillCiTpm',
+    'top-process': 'btnPillProcess',
     'top-quality': 'btnPillQuality',
+    'top-citpm': 'btnPillCiTpm',
     'section-avg': 'btnPillSecAvg'
   };
   const targetId = mapBtn[mode];
@@ -2300,31 +2319,46 @@ function setCategoryBarMode(mode) {
 }
 
 function getRecordCategoryMarks(rec) {
-  if (!rec) return { safetyMark: 0, safetyTotal: 0, processMark: 0, processTotal: 0, ciTpmMark: 0, ciTpmTotal: 0, totalMark: 0, percentage: 0 };
+  if (!rec) return { safetyMark: 0, safetyTotal: 0, processMark: 0, processTotal: 0, qualityMark: 0, qualityTotal: 0, ciTpmMark: 0, ciTpmTotal: 0, totalMark: 0, percentage: 0 };
   let sMark = rec.safetyMark, sTot = rec.safetyTotal;
   let pMark = rec.processMark, pTot = rec.processTotal;
+  let qMark = rec.qualityMark, qTot = rec.qualityTotal;
   let ciMark = rec.ciTpmMark, ciTot = rec.ciTpmTotal;
 
   if (sMark === undefined && rec.submittedQuestions && rec.submittedQuestions.length > 0) {
-    sMark = 0; sTot = 0; pMark = 0; pTot = 0; ciMark = 0; ciTot = 0;
+    sMark = 0; sTot = 0; pMark = 0; pTot = 0; qMark = 0; qTot = 0; ciMark = 0; ciTot = 0;
     rec.submittedQuestions.forEach(q => {
       const cat = (q.category || '').toLowerCase();
+      const qText = (q.question || '').toLowerCase();
       if (cat.includes('safety')) {
         sTot++;
         if (q.isCorrect) sMark++;
       } else if (cat.includes('ci') || cat.includes('tpm')) {
         ciTot++;
         if (q.isCorrect) ciMark++;
+      } else if (cat.includes('quality') || qText.includes('quality') || qText.includes('defect') || qText.includes('inspect') || qText.includes('standard') || qText.includes('spec') || qText.includes('tolerance') || qText.includes('scrap') || qText.includes('check') || qText.includes('sample') || qText.includes('audit')) {
+        qTot++;
+        if (q.isCorrect) qMark++;
       } else {
         pTot++;
         if (q.isCorrect) pMark++;
       }
     });
+  } else if (qMark === undefined && pMark !== undefined) {
+    const half = Math.floor(pMark / 2);
+    qMark = pMark - half;
+    pMark = half;
+    if (pTot) {
+      const halfTot = Math.floor(pTot / 2);
+      qTot = pTot - halfTot;
+      pTot = halfTot;
+    }
   } else if (sMark === undefined && rec.totalMark > 0) {
     sMark = Math.min(10, Math.floor(rec.totalMark * 0.25));
-    pMark = Math.min(10, Math.floor(rec.totalMark * 0.5));
-    ciMark = Math.max(0, rec.totalMark - sMark - pMark);
-    sTot = 10; pTot = 10; ciTot = 10;
+    pMark = Math.min(10, Math.floor(rec.totalMark * 0.25));
+    qMark = Math.min(10, Math.floor(rec.totalMark * 0.25));
+    ciMark = Math.max(0, rec.totalMark - sMark - pMark - qMark);
+    sTot = 10; pTot = 10; qTot = 10; ciTot = 10;
   }
 
   return {
@@ -2332,6 +2366,8 @@ function getRecordCategoryMarks(rec) {
     safetyTotal: sTot !== undefined ? Number(sTot) : 0,
     processMark: pMark !== undefined ? Number(pMark) : 0,
     processTotal: pTot !== undefined ? Number(pTot) : 0,
+    qualityMark: qMark !== undefined ? Number(qMark) : 0,
+    qualityTotal: qTot !== undefined ? Number(qTot) : 0,
     ciTpmMark: ciMark !== undefined ? Number(ciMark) : 0,
     ciTpmTotal: ciTot !== undefined ? Number(ciTot) : 0,
     totalMark: Number(rec.totalMark || rec.score || 0),
@@ -2378,6 +2414,8 @@ function renderCategoryPerformanceBarChart() {
       safetyTotal: catMarks.safetyTotal,
       processMark: catMarks.processMark,
       processTotal: catMarks.processTotal,
+      qualityMark: catMarks.qualityMark,
+      qualityTotal: catMarks.qualityTotal,
       ciTpmMark: catMarks.ciTpmMark,
       ciTpmTotal: catMarks.ciTpmTotal,
       totalMark: catMarks.totalMark,
@@ -2389,8 +2427,9 @@ function renderCategoryPerformanceBarChart() {
 
   let labels = [];
   let safetyData = [];
-  let ciTpmData = [];
+  let processData = [];
   let qualityData = [];
+  let ciTpmData = [];
   let extraMeta = [];
 
   if (currentCategoryBarMode === 'section-avg') {
@@ -2398,12 +2437,13 @@ function renderCategoryPerformanceBarChart() {
     candidates.forEach(c => {
       const s = c.section;
       if (!sectionGroups[s]) {
-        sectionGroups[s] = { count: 0, sSum: 0, ciSum: 0, qSum: 0 };
+        sectionGroups[s] = { count: 0, sSum: 0, pSum: 0, qSum: 0, ciSum: 0 };
       }
       sectionGroups[s].count++;
       sectionGroups[s].sSum += c.safetyMark;
+      sectionGroups[s].pSum += c.processMark;
+      sectionGroups[s].qSum += c.qualityMark;
       sectionGroups[s].ciSum += c.ciTpmMark;
-      sectionGroups[s].qSum += c.processMark;
     });
 
     const secList = Object.entries(sectionGroups)
@@ -2411,27 +2451,31 @@ function renderCategoryPerformanceBarChart() {
         sec,
         count: g.count,
         avgS: +(g.sSum / g.count).toFixed(1),
-        avgCi: +(g.ciSum / g.count).toFixed(1),
-        avgQ: +(g.qSum / g.count).toFixed(1)
+        avgP: +(g.pSum / g.count).toFixed(1),
+        avgQ: +(g.qSum / g.count).toFixed(1),
+        avgCi: +(g.ciSum / g.count).toFixed(1)
       }))
-      .sort((a, b) => (b.avgS + b.avgCi + b.avgQ) - (a.avgS + a.avgCi + a.avgQ));
+      .sort((a, b) => (b.avgS + b.avgP + b.avgQ + b.avgCi) - (a.avgS + a.avgP + a.avgQ + a.avgCi));
 
     const topSecs = secList.slice(0, 10);
     labels = topSecs.map(s => s.sec);
     safetyData = topSecs.map(s => s.avgS);
-    ciTpmData = topSecs.map(s => s.avgCi);
+    processData = topSecs.map(s => s.avgP);
     qualityData = topSecs.map(s => s.avgQ);
+    ciTpmData = topSecs.map(s => s.avgCi);
     extraMeta = topSecs.map(s => ({ subtitle: `${s.count} Candidates Assessed` }));
 
   } else {
     if (currentCategoryBarMode === 'top-safety') {
       candidates.sort((a, b) => b.safetyMark - a.safetyMark || b.totalMark - a.totalMark);
+    } else if (currentCategoryBarMode === 'top-process') {
+      candidates.sort((a, b) => b.processMark - a.processMark || b.totalMark - a.totalMark);
+    } else if (currentCategoryBarMode === 'top-quality') {
+      candidates.sort((a, b) => b.qualityMark - a.qualityMark || b.totalMark - a.totalMark);
     } else if (currentCategoryBarMode === 'top-citpm') {
       candidates.sort((a, b) => b.ciTpmMark - a.ciTpmMark || b.totalMark - a.totalMark);
-    } else if (currentCategoryBarMode === 'top-quality') {
-      candidates.sort((a, b) => b.processMark - a.processMark || b.totalMark - a.totalMark);
     } else {
-      candidates.sort((a, b) => b.totalMark - a.totalMark || (b.safetyMark + b.ciTpmMark + b.processMark) - (a.safetyMark + a.ciTpmMark + a.processMark));
+      candidates.sort((a, b) => b.totalMark - a.totalMark || (b.safetyMark + b.processMark + b.qualityMark + b.ciTpmMark) - (a.safetyMark + a.processMark + a.qualityMark + a.ciTpmMark));
     }
 
     const topPerformers = candidates.slice(0, 10);
@@ -2441,8 +2485,9 @@ function renderCategoryPerformanceBarChart() {
       return `${shortName} [${secCode}]`;
     });
     safetyData = topPerformers.map(c => c.safetyMark);
+    processData = topPerformers.map(c => c.processMark);
+    qualityData = topPerformers.map(c => c.qualityMark);
     ciTpmData = topPerformers.map(c => c.ciTpmMark);
-    qualityData = topPerformers.map(c => c.processMark);
     extraMeta = topPerformers.map(c => ({
       fullName: c.name,
       empNo: c.empNo,
@@ -2459,23 +2504,30 @@ function renderCategoryPerformanceBarChart() {
         labels: labels,
         datasets: [
           {
-            label: '🦺 Safety Mark',
+            label: '🦺 Safety',
             data: safetyData,
             backgroundColor: '#EF4444',
             borderRadius: 4,
             borderSkipped: false
           },
           {
-            label: '💡 CI & TPM Mark',
-            data: ciTpmData,
-            backgroundColor: '#F59E0B',
+            label: '🔄 Process',
+            data: processData,
+            backgroundColor: '#059669',
             borderRadius: 4,
             borderSkipped: false
           },
           {
-            label: '⚙️ Quality / QA & Process Mark',
+            label: '⚙️ Quality',
             data: qualityData,
             backgroundColor: '#2563EB',
+            borderRadius: 4,
+            borderSkipped: false
+          },
+          {
+            label: '💡 CI & TPM',
+            data: ciTpmData,
+            backgroundColor: '#F59E0B',
             borderRadius: 4,
             borderSkipped: false
           }
@@ -2553,8 +2605,9 @@ function renderCategoryChampions(candidates) {
 
   const topOverall = [...candidates].sort((a, b) => b.totalMark - a.totalMark)[0];
   const topSafety = [...candidates].sort((a, b) => b.safetyMark - a.safetyMark || b.totalMark - a.totalMark)[0];
+  const topProcess = [...candidates].sort((a, b) => b.processMark - a.processMark || b.totalMark - a.totalMark)[0];
+  const topQuality = [...candidates].sort((a, b) => b.qualityMark - a.qualityMark || b.totalMark - a.totalMark)[0];
   const topCiTpm = [...candidates].sort((a, b) => b.ciTpmMark - a.ciTpmMark || b.totalMark - a.totalMark)[0];
-  const topQuality = [...candidates].sort((a, b) => b.processMark - a.processMark || b.totalMark - a.totalMark)[0];
 
   container.innerHTML = `
     <!-- Card 1: Safety Champion -->
@@ -2576,21 +2629,21 @@ function renderCategoryChampions(candidates) {
       </div>
     </div>
 
-    <!-- Card 2: CI & TPM Champion -->
-    <div class="champion-card" style="border-left: 4px solid #F59E0B;">
-      <div class="champion-icon-wrap" style="background: #FEF3C7; color: #D97706;">
-        💡
+    <!-- Card 2: Process Champion -->
+    <div class="champion-card" style="border-left: 4px solid #059669;">
+      <div class="champion-icon-wrap" style="background: #D1FAE5; color: #059669;">
+        🔄
       </div>
       <div style="flex: 1; min-width: 0;">
-        <div style="font-size: 0.72rem; font-weight: 700; color: #D97706; text-transform: uppercase; letter-spacing: 0.5px;">CI &amp; TPM Top Performer</div>
+        <div style="font-size: 0.72rem; font-weight: 700; color: #059669; text-transform: uppercase; letter-spacing: 0.5px;">Process Top Performer</div>
         <div style="font-weight: 800; font-size: 0.95rem; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-          ${escapeHtml(topCiTpm.name)}
+          ${escapeHtml(topProcess.name)}
         </div>
         <div style="font-size: 0.76rem; color: #64748B;">
-          ${escapeHtml(topCiTpm.section)} &bull; ${escapeHtml(topCiTpm.empNo)}
+          ${escapeHtml(topProcess.section)} &bull; ${escapeHtml(topProcess.empNo)}
         </div>
-        <div style="font-size: 0.82rem; font-weight: 800; color: #D97706; margin-top: 3px;">
-          ${topCiTpm.ciTpmMark} Marks in CI &amp; TPM
+        <div style="font-size: 0.82rem; font-weight: 800; color: #059669; margin-top: 3px;">
+          ${topProcess.processMark} Marks in Process
         </div>
       </div>
     </div>
@@ -2609,25 +2662,44 @@ function renderCategoryChampions(candidates) {
           ${escapeHtml(topQuality.section)} &bull; ${escapeHtml(topQuality.empNo)}
         </div>
         <div style="font-size: 0.82rem; font-weight: 800; color: #1D4ED8; margin-top: 3px;">
-          ${topQuality.processMark} Marks in Quality
+          ${topQuality.qualityMark} Marks in Quality
         </div>
       </div>
     </div>
 
-    <!-- Card 4: Overall Assessment Top Scorer -->
-    <div class="champion-card" style="border-left: 4px solid #10B981;">
-      <div class="champion-icon-wrap" style="background: #D1FAE5; color: #059669;">
+    <!-- Card 4: CI & TPM Champion -->
+    <div class="champion-card" style="border-left: 4px solid #F59E0B;">
+      <div class="champion-icon-wrap" style="background: #FEF3C7; color: #D97706;">
+        💡
+      </div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 0.72rem; font-weight: 700; color: #D97706; text-transform: uppercase; letter-spacing: 0.5px;">CI &amp; TPM Top Performer</div>
+        <div style="font-weight: 800; font-size: 0.95rem; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+          ${escapeHtml(topCiTpm.name)}
+        </div>
+        <div style="font-size: 0.76rem; color: #64748B;">
+          ${escapeHtml(topCiTpm.section)} &bull; ${escapeHtml(topCiTpm.empNo)}
+        </div>
+        <div style="font-size: 0.82rem; font-weight: 800; color: #D97706; margin-top: 3px;">
+          ${topCiTpm.ciTpmMark} Marks in CI &amp; TPM
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 5: Overall Assessment Top Scorer -->
+    <div class="champion-card" style="border-left: 4px solid #4F46E5;">
+      <div class="champion-icon-wrap" style="background: #EEF2FF; color: #4338CA;">
         🏆
       </div>
       <div style="flex: 1; min-width: 0;">
-        <div style="font-size: 0.72rem; font-weight: 700; color: #059669; text-transform: uppercase; letter-spacing: 0.5px;">Overall Plant Rank 1</div>
+        <div style="font-size: 0.72rem; font-weight: 700; color: #4338CA; text-transform: uppercase; letter-spacing: 0.5px;">Overall Plant Rank 1</div>
         <div style="font-weight: 800; font-size: 0.95rem; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
           ${escapeHtml(topOverall.name)}
         </div>
         <div style="font-size: 0.76rem; color: #64748B;">
           ${escapeHtml(topOverall.section)} &bull; ${escapeHtml(topOverall.empNo)}
         </div>
-        <div style="font-size: 0.82rem; font-weight: 800; color: #059669; margin-top: 3px;">
+        <div style="font-size: 0.82rem; font-weight: 800; color: #4338CA; margin-top: 3px;">
           ${topOverall.totalMark} Total Marks (${topOverall.percentage || Math.round((topOverall.totalMark / 40) * 100)}%)
         </div>
       </div>

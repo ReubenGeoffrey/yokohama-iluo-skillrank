@@ -474,22 +474,27 @@
           </div>
         </div>
 
-        <!-- Section & Category Question Marks Breakdown -->
-        <div id="resSectionMarksGrid" style="max-width: 600px; margin: 0 auto 24px auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+        <!-- Section & Category Question Marks Breakdown (4 Pillars: Safety, Process, Quality, CI & TPM) -->
+        <div id="resSectionMarksGrid" style="max-width: 680px; margin: 0 auto 24px auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px;">
           <div style="background: #FEF2F2; border: 1.5px solid #FCA5A5; border-radius: 8px; padding: 12px; text-align: center;">
-            <div style="font-size: 0.75rem; font-weight: 700; color: #991B1B; text-transform: uppercase;">🦺 Safety Section</div>
-            <div id="resSafetyMark" style="font-size: 1.25rem; font-weight: 800; color: #DC2626; margin-top: 4px;">-</div>
-            <div style="font-size: 0.72rem; color: #7F1D1D;">MCQ Question Mark</div>
+            <div style="font-size: 0.72rem; font-weight: 700; color: #991B1B; text-transform: uppercase;">🦺 Safety</div>
+            <div id="resSafetyMark" style="font-size: 1.2rem; font-weight: 800; color: #DC2626; margin-top: 4px;">-</div>
+            <div style="font-size: 0.7rem; color: #7F1D1D;">Section Mark</div>
+          </div>
+          <div style="background: #ECFDF5; border: 1.5px solid #A7F3D0; border-radius: 8px; padding: 12px; text-align: center;">
+            <div style="font-size: 0.72rem; font-weight: 700; color: #065F46; text-transform: uppercase;">🔄 Process</div>
+            <div id="resProcessMark" style="font-size: 1.2rem; font-weight: 800; color: #059669; margin-top: 4px;">-</div>
+            <div style="font-size: 0.7rem; color: #047857;">Section Mark</div>
           </div>
           <div style="background: #F0F9FF; border: 1.5px solid #BAE6FD; border-radius: 8px; padding: 12px; text-align: center;">
-            <div style="font-size: 0.75rem; font-weight: 700; color: #075985; text-transform: uppercase;">⚙️ QA &amp; Process</div>
-            <div id="resProcessMark" style="font-size: 1.25rem; font-weight: 800; color: #0284C7; margin-top: 4px;">-</div>
-            <div style="font-size: 0.72rem; color: #0369A1;">MCQ Question Mark</div>
+            <div style="font-size: 0.72rem; font-weight: 700; color: #075985; text-transform: uppercase;">⚙️ Quality</div>
+            <div id="resQualityMark" style="font-size: 1.2rem; font-weight: 800; color: #0284C7; margin-top: 4px;">-</div>
+            <div style="font-size: 0.7rem; color: #0369A1;">Section Mark</div>
           </div>
           <div style="background: #FFFBEB; border: 1.5px solid #FDE68A; border-radius: 8px; padding: 12px; text-align: center;">
-            <div style="font-size: 0.75rem; font-weight: 700; color: #92400E; text-transform: uppercase;">💡 CI &amp; TPM</div>
-            <div id="resCiTpmMark" style="font-size: 1.25rem; font-weight: 800; color: #D97706; margin-top: 4px;">-</div>
-            <div style="font-size: 0.72rem; color: #78350F;">MCQ Question Mark</div>
+            <div style="font-size: 0.72rem; font-weight: 700; color: #92400E; text-transform: uppercase;">💡 CI &amp; TPM</div>
+            <div id="resCiTpmMark" style="font-size: 1.2rem; font-weight: 800; color: #D97706; margin-top: 4px;">-</div>
+            <div style="font-size: 0.7rem; color: #78350F;">Section Mark</div>
           </div>
         </div>
 
@@ -1173,20 +1178,20 @@
               </div>
             </div>
 
-            <!-- Full-Width Bar Chart: Safety, CI & TPM, and Quality Pillar Performance & Top Performers -->
+            <!-- Full-Width Bar Chart: Safety, Process, Quality, and CI & TPM Pillar Performance & Top Performers -->
             <div class="chart-card" style="margin-bottom: 28px; width: 100%; box-sizing: border-box;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
                 <div>
                   <div style="display: flex; align-items: center; gap: 8px;">
                     <h3 style="margin: 0; font-size: 1.12rem; font-weight: 800; color: var(--primary-dark);">
-                      Pillar Performance: Safety, CI &amp; TPM, and Quality
+                      Pillar Performance: Safety, Process, Quality, and CI &amp; TPM
                     </h3>
                     <span style="font-size: 0.75rem; font-weight: 800; background: #EEF2FF; color: #4338CA; padding: 3px 10px; border-radius: 12px; border: 1px solid #C7D2FE;">
-                      Who Performed Well
+                      Section Categories
                     </span>
                   </div>
                   <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 3px;">
-                    Associate scores breakdown by pillar: 🦺 Safety, 💡 CI &amp; TPM, and ⚙️ Quality / QA &amp; Process
+                    Associate scores breakdown by section category: 🦺 Safety, 🔄 Process, ⚙️ Quality, and 💡 CI &amp; TPM
                   </div>
                 </div>
 
@@ -1200,11 +1205,14 @@
                     <button type="button" class="chart-btn-pill" id="btnPillSafety" onclick="setCategoryBarMode('top-safety')">
                       🦺 Top Safety
                     </button>
-                    <button type="button" class="chart-btn-pill" id="btnPillCiTpm" onclick="setCategoryBarMode('top-citpm')">
-                      💡 Top CI &amp; TPM
+                    <button type="button" class="chart-btn-pill" id="btnPillProcess" onclick="setCategoryBarMode('top-process')">
+                      🔄 Top Process
                     </button>
                     <button type="button" class="chart-btn-pill" id="btnPillQuality" onclick="setCategoryBarMode('top-quality')">
                       ⚙️ Top Quality
+                    </button>
+                    <button type="button" class="chart-btn-pill" id="btnPillCiTpm" onclick="setCategoryBarMode('top-citpm')">
+                      💡 Top CI &amp; TPM
                     </button>
                     <button type="button" class="chart-btn-pill" id="btnPillSecAvg" onclick="setCategoryBarMode('section-avg')">
                       📊 Section Averages

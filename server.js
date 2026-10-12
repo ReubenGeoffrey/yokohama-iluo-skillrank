@@ -1682,6 +1682,7 @@ async function scoreAssessmentServerSide(empNo, targetLevel, responses, section)
   let correctCount = 0;
   let safetyMark = 0, safetyTotal = 0;
   let processMark = 0, processTotal = 0;
+  let qualityMark = 0, qualityTotal = 0;
   let ciTpmMark = 0, ciTpmTotal = 0;
 
   const submittedQuestions = questions.map((q, idx) => {
@@ -1692,12 +1693,16 @@ async function scoreAssessmentServerSide(empNo, targetLevel, responses, section)
     if (isCorrect) correctCount++;
 
     const cat = (q.category || '').toLowerCase();
+    const qText = (q.question || '').toLowerCase();
     if (cat.includes('safety')) {
       safetyTotal++;
       if (isCorrect) safetyMark++;
     } else if (cat.includes('ci') || cat.includes('tpm')) {
       ciTpmTotal++;
       if (isCorrect) ciTpmMark++;
+    } else if (cat.includes('quality') || qText.includes('quality') || qText.includes('defect') || qText.includes('inspect') || qText.includes('standard') || qText.includes('spec') || qText.includes('tolerance') || qText.includes('scrap') || qText.includes('check') || qText.includes('sample') || qText.includes('audit')) {
+      qualityTotal++;
+      if (isCorrect) qualityMark++;
     } else {
       processTotal++;
       if (isCorrect) processMark++;
@@ -1755,6 +1760,8 @@ async function scoreAssessmentServerSide(empNo, targetLevel, responses, section)
     safetyTotal,
     processMark,
     processTotal,
+    qualityMark,
+    qualityTotal,
     ciTpmMark,
     ciTpmTotal,
     status: pass ? 'Passed' : 'Failed',
