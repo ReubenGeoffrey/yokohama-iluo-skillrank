@@ -37,20 +37,20 @@
     <button class="role-tab-btn" id="tabRoleHome" onclick="navigateTo('/')">
       <span class="tab-icon">🏠</span> <span>Home</span>
     </button>
-    <button class="role-tab-btn" id="tabRoleSection" onclick="switchRolePortal('section')">
-      <span class="tab-icon">🏢</span> <span>Section Portal</span>
-    </button>
-    <button class="role-tab-btn" id="tabRoleAdmin" onclick="switchRolePortal('admin')">
-      <span class="tab-icon">⚙️</span> <span>Admin</span>
-    </button>
     <button class="role-tab-btn" id="tabRoleDept" onclick="switchRolePortal('department')">
       <span class="tab-icon">🏛️</span> <span>Department</span>
     </button>
+    <button class="role-tab-btn" id="tabRoleAdmin" onclick="switchRolePortal('admin')">
+      <span class="tab-icon">⚙️</span> <span>HR Login</span>
+    </button>
+    <button class="role-tab-btn" id="tabRoleSection" onclick="switchRolePortal('section')">
+      <span class="tab-icon">🏢</span> <span>Section Login</span>
+    </button>
     <button class="role-tab-btn" id="tabRoleOjt" onclick="switchRolePortal('ojt')">
-      <span class="tab-icon">📋</span> <span>Skill Assessment</span>
+      <span class="tab-icon">📋</span> <span>Skill assessment Login</span>
     </button>
     <button class="role-tab-btn" id="tabRoleEmp" onclick="switchRolePortal('employee')">
-      <span class="tab-icon">👤</span> <span>Employee</span>
+      <span class="tab-icon">👤</span> <span>Employee Portal</span>
     </button>
   </nav>
 
@@ -66,25 +66,7 @@
       </div>
 
       <div class="vertical-portal-list">
-        <!-- Employee Portal -->
-        <button class="vertical-portal-card emp-card" onclick="switchRolePortal('employee')" type="button">
-          <div class="portal-card-main">
-            <span class="portal-icon">👤</span>
-            <span class="portal-title">Employee Portal</span>
-          </div>
-          <span class="portal-arrow">&rarr;</span>
-        </button>
-
-        <!-- Section Portal -->
-        <button class="vertical-portal-card section-card" onclick="switchRolePortal('section')" type="button">
-          <div class="portal-card-main">
-            <span class="portal-icon">🏢</span>
-            <span class="portal-title">Section Portal</span>
-          </div>
-          <span class="portal-arrow">&rarr;</span>
-        </button>
-
-        <!-- Department -->
+        <!-- 1. Department -->
         <button class="vertical-portal-card dept-card" onclick="switchRolePortal('department')" type="button">
           <div class="portal-card-main">
             <span class="portal-icon">🏛️</span>
@@ -93,20 +75,38 @@
           <span class="portal-arrow">&rarr;</span>
         </button>
 
-        <!-- Admin -->
+        <!-- 2. HR Login -->
         <button class="vertical-portal-card admin-card" onclick="switchRolePortal('admin')" type="button">
           <div class="portal-card-main">
             <span class="portal-icon">⚙️</span>
-            <span class="portal-title">Admin</span>
+            <span class="portal-title">HR Login</span>
           </div>
           <span class="portal-arrow">&rarr;</span>
         </button>
 
-        <!-- Skill Assessment Login -->
+        <!-- 3. Section Login -->
+        <button class="vertical-portal-card section-card" onclick="switchRolePortal('section')" type="button">
+          <div class="portal-card-main">
+            <span class="portal-icon">🏢</span>
+            <span class="portal-title">Section Login</span>
+          </div>
+          <span class="portal-arrow">&rarr;</span>
+        </button>
+
+        <!-- 4. Skill assessment Login -->
         <button class="vertical-portal-card ojt-card" onclick="switchRolePortal('ojt')" type="button">
           <div class="portal-card-main">
             <span class="portal-icon">📋</span>
-            <span class="portal-title">Skill Assessment Login</span>
+            <span class="portal-title">Skill assessment Login</span>
+          </div>
+          <span class="portal-arrow">&rarr;</span>
+        </button>
+
+        <!-- 5. Employee Portal -->
+        <button class="vertical-portal-card emp-card" onclick="switchRolePortal('employee')" type="button">
+          <div class="portal-card-main">
+            <span class="portal-icon">👤</span>
+            <span class="portal-title">Employee Portal</span>
           </div>
           <span class="portal-arrow">&rarr;</span>
         </button>
@@ -145,15 +145,15 @@
       </div>
     </section>
 
-    <!-- VIEW 2: Admin Login (/secure-control) -->
+    <!-- VIEW 2: HR Login (/secure-control) -->
     <section class="view-section" id="viewAdminLogin">
       <div class="login-wrapper">
         <div class="login-card" style="border: 2px solid #0F172A;">
           <div class="login-header" style="background: linear-gradient(135deg, #0F172A 0%, #003D6B 100%);">
             <img src="atg_logo.png" alt="App Logo" style="width: 58px; height: 58px; border-radius: 12px; margin-bottom: 10px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
-            <div style="font-size: 0.75rem; background: var(--accent-red); color: white; display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 700; margin-bottom: 8px;">ADMIN CONTROL CENTER</div>
-            <h2>Admin Sign In</h2>
-            <p>Enter authorized credentials to access Control Center</p>
+            <div style="font-size: 0.75rem; background: var(--accent-red); color: white; display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 700; margin-bottom: 8px;">HR CONTROL CENTER</div>
+            <h2>HR Login</h2>
+            <p>Enter authorized credentials to access HR Control Center</p>
           </div>
 
           <div class="login-body">
@@ -167,31 +167,31 @@
               </button>
             </div>
 
-            <!-- Tab 1: Admin Username & Password Form -->
+            <!-- Tab 1: HR Username & Password Form -->
             <div id="adminPassTabContent">
               <form id="adminLoginForm" onsubmit="handleAdminLogin(event)">
                 <div class="form-group">
-                  <label for="adminUsernameInput">Admin Username or Email</label>
-                  <input type="text" id="adminUsernameInput" class="form-control" placeholder="admin or authorized email" required autofocus style="font-weight: 600;" value="" autocomplete="username">
+                  <label for="adminUsernameInput">HR Username or Email</label>
+                  <input type="text" id="adminUsernameInput" class="form-control" placeholder="HR username or authorized email" required autofocus style="font-weight: 600;" value="" autocomplete="username">
                 </div>
 
                 <div class="form-group">
                   <label for="adminPasswordInput">Password</label>
-                  <input type="password" id="adminPasswordInput" class="form-control" placeholder="Enter admin password" required style="font-weight: 600;" value="" autocomplete="current-password">
+                  <input type="password" id="adminPasswordInput" class="form-control" placeholder="Enter HR password" required style="font-weight: 600;" value="" autocomplete="current-password">
                 </div>
 
                 <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #0F172A 0%, #003D6B 100%); font-weight: 700; width: 100%; padding: 12px; margin-top: 8px;">
-                  Sign In to Admin Control Center
+                  Sign In to HR Control Center
                 </button>
               </form>
             </div>
 
-            <!-- Tab 2: Admin Email OTP Form -->
+            <!-- Tab 2: HR Email OTP Form -->
             <div id="adminOtpTabContent" style="display: none;">
               <!-- Step A: Send OTP Form -->
               <form id="adminEmailForm" onsubmit="handleSendAdminOTP(event)">
                 <div class="form-group">
-                  <label for="adminEmailInput">Authorized Admin Gmail</label>
+                  <label for="adminEmailInput">Authorized HR Gmail</label>
                   <input type="email" id="adminEmailInput" class="form-control" placeholder="reubengeoffrey16@gmail.com" value="reubengeoffrey16@gmail.com" required style="font-weight: 600;">
                   <span style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 4px;">A 6-digit OTP will be sent to your Gmail inbox</span>
                 </div>
@@ -216,7 +216,7 @@
                 </div>
 
                 <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #0F172A 0%, #003D6B 100%); font-weight: 700; width: 100%; padding: 12px; margin-top: 8px;">
-                  Verify & Sign In
+                  Verify &amp; Sign In to HR Control Center
                 </button>
 
                 <div style="display: flex; justify-content: space-between; margin-top: 14px;">

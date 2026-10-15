@@ -919,7 +919,7 @@ async function handleAdminLogin(e) {
   const password = passwordInput ? passwordInput.value.trim() : '';
 
   if (!username || !password) {
-    showToast('Please enter both admin username and password.');
+    showToast('Please enter both HR username and password.');
     return;
   }
 
@@ -957,7 +957,7 @@ async function handleSendAdminOTP(e) {
   const emailInput = document.getElementById('adminEmailInput').value.trim();
 
   if (!emailInput || !emailInput.includes('@')) {
- showToast('Please enter a valid Admin Email ID');
+    showToast('Please enter a valid HR Email ID');
     return;
   }
 
