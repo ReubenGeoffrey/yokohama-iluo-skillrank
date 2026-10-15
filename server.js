@@ -184,7 +184,7 @@ function isEmployeePortalRequest(req) {
 }
 
 // Explicit root and portal routes
-app.get('/', (req, res) => {
+app.get(['/', '/index.html'], (req, res) => {
   if (isEmployeePortalRequest(req)) {
     return res.sendFile(path.join(__dirname, 'employee.html'));
   }

@@ -331,6 +331,14 @@ test('TWO-PORTAL 10: Host and path routing serves Employee Portal vs Management 
   assert.strictEqual(hostMgtRes.status, 200);
   const hostMgtHtml = await hostMgtRes.text();
   assert.ok(hostMgtHtml.includes('Management &amp; Operations Portal') || hostMgtHtml.includes('HR CONTROL CENTER'));
+
+  // 5. Host employee on /index.html serves employee.html
+  const hostEmpIndexRes = await fetch(`${baseUrl}/index.html`, {
+    headers: { 'x-forwarded-host': 'yokohama-iluo-employee.vercel.app' }
+  });
+  assert.strictEqual(hostEmpIndexRes.status, 200);
+  const hostEmpIndexHtml = await hostEmpIndexRes.text();
+  assert.ok(hostEmpIndexHtml.includes('Employee Skill Assessment Portal'));
 });
 
 // TEST 11: Universal default passwords are rejected

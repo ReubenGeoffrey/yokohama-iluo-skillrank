@@ -9,6 +9,15 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#005B9E">
   <link rel="stylesheet" href="styles.css?v=58.0">
+  <script>
+    // Client-side domain router guard: ensure employee portal domain always displays employee portal
+    (function() {
+      var host = (window.location.hostname || '').toLowerCase();
+      if (host.includes('employee')) {
+        window.location.replace('/employee.html' + window.location.search + window.location.hash);
+      }
+    })();
+  </script>
 </head>
 <body>
 
@@ -49,7 +58,7 @@
     <button class="role-tab-btn" id="tabRoleOjt" onclick="switchRolePortal('ojt')">
       <span class="tab-icon">📋</span> <span>Skill assessment Login</span>
     </button>
-    <a class="role-tab-btn" id="tabRoleEmp" href="/employee" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; background: rgba(0, 91, 158, 0.08); border-color: rgba(0, 91, 158, 0.2);">
+    <a class="role-tab-btn" id="tabRoleEmp" href="https://yokohama-iluo-employee.vercel.app/" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; background: rgba(0, 91, 158, 0.08); border-color: rgba(0, 91, 158, 0.2);">
       <span class="tab-icon">👤</span> <span>Employee Portal &rarr;</span>
     </a>
   </nav>
@@ -109,7 +118,7 @@
       <!-- Employee Portal External Redirect Box -->
       <div style="margin-top: 26px; text-align: center; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 12px; padding: 16px 20px; max-width: 440px; margin-left: auto; margin-right: auto;">
         <div style="font-size: 0.88rem; color: #475569; margin-bottom: 6px;">Are you a plant employee taking your skill exam?</div>
-        <a href="/employee" style="color: #005B9E; font-weight: 700; font-size: 0.94rem; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+        <a href="https://yokohama-iluo-employee.vercel.app/" style="color: #005B9E; font-weight: 700; font-size: 0.94rem; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
           Go to Dedicated Employee Portal &rarr;
         </a>
       </div>
