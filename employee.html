@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Yokohama ILUO &bull; Employee Skill Assessment Portal</title>
+  <link rel="icon" type="image/png" href="atg_logo.png">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Employee Portal Specific Enhancements */
+    .emp-portal-banner {
+      background: linear-gradient(135deg, #003D6B 0%, #005B9E 100%);
+      color: white;
+      padding: 18px 24px;
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-md);
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .emp-profile-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px 18px;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,0.18);
+    }
+    .emp-meta-item .meta-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      opacity: 0.8;
+      font-weight: 600;
+    }
+    .emp-meta-item .meta-value {
+      font-size: 0.98rem;
+      font-weight: 700;
+      color: #FFFFFF;
+      margin-top: 2px;
+    }
+    .password-input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .password-input-wrap input {
+      padding-right: 42px;
+    }
+    .btn-toggle-password {
+      position: absolute;
+      right: 10px;
+      background: transparent;
+      border: none;
+      color: #64748B;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      border-radius: 4px;
+    }
+    .btn-toggle-password:hover {
+      color: #0F172A;
+    }
+    .category-breakdown-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-top: 16px;
+    }
+    .category-box {
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 10px;
+      padding: 14px 16px;
+      border-left: 4px solid #005B9E;
+    }
+    .category-box.safety { border-left-color: #E31B23; }
+    .category-box.quality { border-left-color: #005B9E; }
+    .category-box.process { border-left-color: #10B981; }
+    .category-box.citpm { border-left-color: #8B5CF6; }
+    .category-name {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #64748B;
+      letter-spacing: 0.5px;
+    }
+    .category-score {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: #0F172A;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="navbar">
+    <div class="brand-section">
+      <div class="brand-logo">
+        <img src="atg_logo.png" alt="Yokohama ATG Logo" class="brand-app-logo">
+        <span>ATC TIRES</span>
+      </div>
+      <span class="brand-badge">ILUO</span>
+      <span class="system-title">Employee Skill Assessment Portal</span>
+    </div>
+
+    <div class="nav-actions">
+      <div class="user-badge" id="empNavUserBadge" style="display: none;">
+        <span>👤</span>
+        <span id="empNavUserName" style="font-weight: 600;">Employee</span>
+        <span id="empNavEmpNo" style="opacity: 0.75; font-size: 0.8rem;"></span>
+      </div>
+      <button class="btn-nav" id="btnEmpSignOut" style="display: none;" onclick="handleEmployeeLogout()">Sign Out</button>
+    </div>
+  </header>
+
+  <!-- App Main Container -->
+  <main class="app-container" style="max-width: 960px; margin: 0 auto; padding: 24px 16px; width: 100%;">
+
+    <!-- VIEW 1: Employee Login -->
+    <section class="view-section active" id="viewEmpLogin">
+      <div class="login-wrapper" style="max-width: 440px; margin: 40px auto 0;">
+        <div class="login-card" style="background: white; border-radius: 16px; box-shadow: var(--shadow-lg); overflow: hidden; border: 1px solid #E2E8F0;">
+          <div class="login-header" style="background: linear-gradient(135deg, #003D6B 0%, #005B9E 100%); color: white; padding: 28px 24px; text-align: center;">
+            <img src="atg_logo.png" alt="App Logo" style="width: 58px; height: 58px; border-radius: 12px; margin-bottom: 12px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.25);">
+            <div style="font-size: 0.75rem; background: var(--accent-red); color: white; display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 700; margin-bottom: 8px;">EMPLOYEE SIGN IN</div>
+            <h2 style="font-size: 1.4rem; font-weight: 800; margin: 0;">Employee Portal</h2>
+            <p style="font-size: 0.85rem; opacity: 0.9; margin-top: 6px;">Sign in with your Employee ID to access your skill evaluations &amp; exams</p>
+          </div>
+
+          <div class="login-body" style="padding: 24px;">
+            <form id="empLoginForm" onsubmit="handleEmployeeLogin(event)">
+              <div class="form-group" style="margin-bottom: 16px;">
+                <label for="empIdInput" style="font-size: 0.85rem; font-weight: 600; color: #334155; display: block; margin-bottom: 6px;">Employee ID / Candidate No</label>
+                <input type="text" id="empIdInput" class="form-control" placeholder="e.g. LN0039, 900191, 900262" required autofocus style="font-weight: 600;" autocomplete="username">
+              </div>
+
+              <div class="form-group" style="margin-bottom: 20px;">
+                <label for="empPasswordInput" style="font-size: 0.85rem; font-weight: 600; color: #334155; display: block; margin-bottom: 6px;">Password</label>
+                <div class="password-input-wrap">
+                  <input type="password" id="empPasswordInput" class="form-control" placeholder="Enter employee password" required style="font-weight: 600;" autocomplete="current-password">
+                  <button type="button" class="btn-toggle-password" onclick="togglePasswordVisibility('empPasswordInput', this)" title="Toggle password visibility">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                  </button>
+                </div>
+                <span style="font-size: 0.74rem; color: #64748B; display: block; margin-top: 4px;">Default initial password: 1234</span>
+              </div>
+
+              <button type="submit" class="btn-primary" style="width: 100%; padding: 13px; font-weight: 700; font-size: 0.95rem; background: linear-gradient(135deg, #003D6B 0%, #005B9E 100%);">
+                Sign In to Employee Portal
+              </button>
+            </form>
+
+            <div style="margin-top: 20px; padding: 12px; background: #F8FAFC; border-radius: 8px; border: 1px solid #E2E8F0; font-size: 0.8rem; color: #64748B; text-align: center;">
+              🔒 Authorized Plant Personnel Access Only.<br>
+              Forgot your credentials? Contact your Section Head or HR.
+            </div>
+
+            <div style="margin-top: 14px; text-align: center;">
+              <a href="/management" style="color: #64748B; font-size: 0.82rem; text-decoration: none;">
+                Management / HOD Portal &rarr;
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 2: Employee Dashboard -->
+    <section class="view-section" id="viewEmpDashboard" style="display: none;">
+      <!-- Hero Banner & Profile Card -->
+      <div class="emp-portal-banner">
+        <div style="flex: 1; min-width: 260px;">
+          <div style="font-size: 0.78rem; font-weight: 700; opacity: 0.85; letter-spacing: 1px;">YOKOHAMA ATC TIRES &bull; SKILL QUALIFICATION</div>
+          <h2 id="dashEmpName" style="font-size: 1.45rem; font-weight: 800; margin-top: 4px; color: white;">Candidate Name</h2>
+          <div style="display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
+            <span id="dashEmpDesignation" style="background: rgba(255,255,255,0.2); padding: 2px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">QA Inspector</span>
+            <span id="dashEmpDeptSec" style="background: rgba(255,255,255,0.15); padding: 2px 10px; border-radius: 4px; font-size: 0.8rem;">Quality Control</span>
+          </div>
+
+          <div class="emp-profile-meta">
+            <div class="emp-meta-item">
+              <div class="meta-label">Employee ID</div>
+              <div class="meta-value" id="dashEmpNo">-</div>
+            </div>
+            <div class="emp-meta-item">
+              <div class="meta-label">Date of Joining</div>
+              <div class="meta-value" id="dashEmpDoj">-</div>
+            </div>
+            <div class="emp-meta-item">
+              <div class="meta-label">Re-Assessment Due</div>
+              <div class="meta-value" id="dashEmpDueDate">-</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align: center; background: rgba(0,0,0,0.22); padding: 14px 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); min-width: 140px;">
+          <div style="font-size: 0.72rem; letter-spacing: 1px; font-weight: 700; opacity: 0.9;">CURRENT LEVEL</div>
+          <div id="dashLevelBadge" class="iluo-badge iluo-badge-u" style="width: 48px; height: 48px; font-size: 1.4rem; margin: 8px auto; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">U</div>
+          <div id="dashLevelText" style="font-size: 0.82rem; font-weight: 700;">Level U: Executor</div>
+        </div>
+      </div>
+
+      <!-- Assigned Assessment Action Card -->
+      <div style="background: white; border-radius: 14px; border: 2px solid #005B9E; padding: 24px; box-shadow: var(--shadow-sm); margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
+        <div style="flex: 1; min-width: 280px;">
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+            <div style="font-size: 0.78rem; font-weight: 800; color: #005B9E; letter-spacing: 1px;">ASSIGNED ASSESSMENT</div>
+            <span id="dashExamStatusBadge" style="background: #EFF6FF; color: #1D4ED8; font-size: 0.76rem; font-weight: 700; padding: 3px 8px; border-radius: 4px;">Pending</span>
+          </div>
+          <h3 id="dashExamTitle" style="color: var(--primary-dark); font-size: 1.3rem; margin-bottom: 6px;">Knowledge Test Assessment</h3>
+          <p style="font-size: 0.88rem; color: #64748B; margin-bottom: 12px; line-height: 1.5;">
+            Timed 45-minute technical multiple-choice assessment covering Safety, 5S &amp; TPM, and Quality parameters.
+          </p>
+          <div style="display: flex; gap: 16px; flex-wrap: wrap; background: #F8FAFC; border-radius: 8px; padding: 10px 14px; border: 1px solid #E2E8F0;">
+            <div style="font-size: 0.84rem; color: #475569;">Target Skill Level: <strong id="dashTargetLevel" style="color: var(--accent-red); font-weight: 800;">-</strong></div>
+            <div style="font-size: 0.84rem; color: #475569;">Duration: <strong>45 Minutes</strong></div>
+            <div style="font-size: 0.84rem; color: #475569;">Questions: <strong>30 Questions</strong></div>
+          </div>
+        </div>
+
+        <div style="min-width: 220px;">
+          <button id="btnStartExam" class="btn-primary" style="width: 100%; padding: 14px 22px; font-weight: 700; font-size: 0.98rem; background: linear-gradient(135deg, #003D6B 0%, #005B9E 100%);" onclick="startEmployeeExam()">
+            Start Assessment &raquo;
+          </button>
+        </div>
+      </div>
+
+      <!-- ILUO Milestone Progression Card -->
+      <div class="training-plan-card" style="background: white; border-radius: 14px; border: 1px solid #E2E8F0; padding: 22px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
+        <h3 style="font-size: 1.15rem; color: var(--primary-dark); margin-bottom: 4px;">ILUO Skill Qualification Milestone Track</h3>
+        <p style="font-size: 0.82rem; color: #64748B; margin-bottom: 18px;">Progression path across ATC Tires technical skill levels</p>
+
+        <div class="timeline-track" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+          <div class="timeline-step" id="stepI" style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-weight: 700; font-size: 0.88rem;">Level I: Beginner</span>
+              <span class="iluo-badge iluo-badge-i" style="width: 24px; height: 24px; font-size: 0.75rem;">I</span>
+            </div>
+            <div style="font-size: 0.78rem; color: #64748B;">Schedule: Month 1</div>
+            <div style="font-size: 0.78rem; font-weight: 600; color: #15803D;" id="actualI">Completed &check;</div>
+          </div>
+
+          <div class="timeline-step" id="stepL" style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-weight: 700; font-size: 0.88rem;">Level L: Learner</span>
+              <span class="iluo-badge iluo-badge-l" style="width: 24px; height: 24px; font-size: 0.75rem;">L</span>
+            </div>
+            <div style="font-size: 0.78rem; color: #64748B;">Schedule: Month 3</div>
+            <div style="font-size: 0.78rem; font-weight: 600; color: #0284C7;" id="actualL">In Progress</div>
+          </div>
+
+          <div class="timeline-step" id="stepU" style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-weight: 700; font-size: 0.88rem;">Level U: Executor</span>
+              <span class="iluo-badge iluo-badge-u" style="width: 24px; height: 24px; font-size: 0.75rem;">U</span>
+            </div>
+            <div style="font-size: 0.78rem; color: #64748B;">Schedule: Month 6</div>
+            <div style="font-size: 0.78rem; font-weight: 600; color: #64748B;" id="actualU">Target Goal</div>
+          </div>
+
+          <div class="timeline-step" id="stepO" style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-weight: 700; font-size: 0.88rem;">Level O: Expert</span>
+              <span class="iluo-badge iluo-badge-o" style="width: 24px; height: 24px; font-size: 0.75rem;">O</span>
+            </div>
+            <div style="font-size: 0.78rem; color: #64748B;">Schedule: Month 12</div>
+            <div style="font-size: 0.78rem; font-weight: 600; color: #64748B;" id="actualO">Future Goal</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Assessment Result Summary (Rendered if exam completed) -->
+      <div id="dashResultContainer" style="display: none; background: white; border-radius: 14px; border: 1px solid #E2E8F0; padding: 22px; box-shadow: var(--shadow-sm); margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <div style="font-size: 0.78rem; font-weight: 700; color: #64748B; text-transform: uppercase;">LATEST ASSESSMENT SCORE</div>
+            <h3 style="font-size: 1.25rem; color: #0F172A; margin-top: 4px;">Technical Knowledge Evaluation Results</h3>
+          </div>
+          <span id="dashResultStatusBadge" style="padding: 6px 14px; border-radius: 20px; font-weight: 800; font-size: 0.85rem; background: #DCFCE7; color: #166534;">PASSED</span>
+        </div>
+
+        <div class="category-breakdown-grid">
+          <div class="category-box safety">
+            <div class="category-name">Safety Mark</div>
+            <div class="category-score" id="scoreSafety">-</div>
+          </div>
+          <div class="category-box quality">
+            <div class="category-name">Quality Mark</div>
+            <div class="category-score" id="scoreQuality">-</div>
+          </div>
+          <div class="category-box process">
+            <div class="category-name">Process Mark</div>
+            <div class="category-score" id="scoreProcess">-</div>
+          </div>
+          <div class="category-box citpm">
+            <div class="category-name">CI &amp; TPM Mark</div>
+            <div class="category-score" id="scoreCiTpm">-</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 3: Active Assessment Quiz Screen -->
+    <section class="view-section" id="viewQuiz" style="display: none;">
+      <!-- Quiz Navigation & Header Bar -->
+      <div class="quiz-header-bar" style="background: white; border-radius: 12px; padding: 16px 20px; box-shadow: var(--shadow-sm); border: 1px solid #E2E8F0; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+        <div>
+          <div class="quiz-progress-text" id="quizProgressText" style="font-weight: 800; font-size: 1.1rem; color: #0F172A;">Question 1 of 30</div>
+          <div style="font-size: 0.8rem; color: #64748B;" id="quizSubText">MCQ Assessment</div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <!-- Security Tab Warning Indicator -->
+          <div class="security-badge" id="tabWarningBadge" style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem; background: #FEF2F2; color: #991B1B; padding: 6px 12px; border-radius: 8px; border: 1px solid #FECACA;">
+            <span>⚠️ Tab Switches:</span>
+            <strong id="tabSwitchCountDisplay">0 / 3</strong>
+          </div>
+
+          <!-- Countdown Timer -->
+          <div class="timer-badge" style="display: flex; align-items: center; gap: 8px; font-size: 1.1rem; font-weight: 800; color: #E31B23; background: #FFF1F2; padding: 6px 14px; border-radius: 8px; border: 1px solid #FFE4E6;">
+            <span>⏱️</span>
+            <span id="timerDisplay">45:00</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Question Card -->
+      <div class="question-card" id="questionCard" style="background: white; border-radius: 14px; border: 1px solid #E2E8F0; padding: 28px; box-shadow: var(--shadow-sm); margin-bottom: 20px; user-select: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <div class="q-category-tag" id="qCategoryTag" style="display: inline-block; background: #EFF6FF; color: #1D4ED8; font-weight: 700; font-size: 0.78rem; padding: 4px 10px; border-radius: 6px; text-transform: uppercase;">
+            Safety
+          </div>
+          <div style="font-size: 0.8rem; color: #94A3B8;" id="qNumberBadge">Q1</div>
+        </div>
+
+        <h3 class="q-title" id="qTitleText" style="font-size: 1.15rem; color: #0F172A; line-height: 1.5; margin-bottom: 22px;">
+          Loading question text...
+        </h3>
+
+        <!-- MCQ Options List -->
+        <div class="options-list" id="optionsContainer" style="display: flex; flex-direction: column; gap: 12px;">
+          <!-- Rendered dynamically by employee.js -->
+        </div>
+      </div>
+
+      <!-- Navigation & Action Footer -->
+      <div class="quiz-nav-footer" style="background: white; border-radius: 12px; padding: 16px 20px; border: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+        <div style="font-size: 0.82rem; color: #64748B; display: flex; align-items: center; gap: 6px;">
+          <span>🔒 Forward Progression: Once submitted, answers cannot be modified</span>
+        </div>
+
+        <button class="btn-primary" id="btnNextQ" onclick="handleNextQuestion()" disabled style="padding: 12px 24px; font-weight: 700; font-size: 0.95rem;">
+          Next Question &raquo;
+        </button>
+      </div>
+    </section>
+
+    <!-- VIEW 4: Assessment Completed Screen -->
+    <section class="view-section" id="viewResult" style="display: none;">
+      <div style="max-width: 600px; margin: 40px auto 0; background: white; border-radius: 16px; border: 1px solid #E2E8F0; box-shadow: var(--shadow-md); padding: 32px 24px; text-align: center;">
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #DCFCE7; color: #15803D; font-size: 2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+          ✓
+        </div>
+
+        <h2 style="font-size: 1.45rem; color: #0F172A; font-weight: 800; margin-bottom: 6px;">Assessment Submitted Successfully!</h2>
+        <p style="font-size: 0.88rem; color: #64748B; margin-bottom: 24px;">Your responses have been authoritatively evaluated and logged in the system.</p>
+
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+          <div style="font-size: 0.78rem; font-weight: 700; color: #64748B; text-transform: uppercase;">YOUR OVERALL SCORE</div>
+          <div id="resultScoreLarge" style="font-size: 2.4rem; font-weight: 800; color: #005B9E; margin: 6px 0;">0 / 30</div>
+          <div id="resultPassBadge" style="display: inline-block; padding: 4px 14px; border-radius: 20px; font-weight: 700; font-size: 0.85rem; background: #DCFCE7; color: #166534;">
+            PASSED (Threshold: 50%)
+          </div>
+
+          <div class="category-breakdown-grid" style="margin-top: 20px; text-align: left;">
+            <div class="category-box safety">
+              <div class="category-name">Safety Mark</div>
+              <div class="category-score" id="resSafety">-</div>
+            </div>
+            <div class="category-box quality">
+              <div class="category-name">Quality Mark</div>
+              <div class="category-score" id="resQuality">-</div>
+            </div>
+            <div class="category-box process">
+              <div class="category-name">Process Mark</div>
+              <div class="category-score" id="resProcess">-</div>
+            </div>
+            <div class="category-box citpm">
+              <div class="category-name">CI &amp; TPM Mark</div>
+              <div class="category-score" id="resCiTpm">-</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 14px; margin-bottom: 24px; text-align: left; font-size: 0.84rem; color: #1E40AF;">
+          📋 <strong>Next Step &bull; Skill Assessment:</strong><br>
+          Your theoretical MCQ score is submitted. Your practical Skill Assessment evaluation will be conducted and scored on the shop floor by your Section Supervisor.
+        </div>
+
+        <button class="btn-primary" style="padding: 12px 28px; font-weight: 700;" onclick="showEmployeeView('viewEmpDashboard')">
+          Return to My Dashboard &rarr;
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Global Toast Notification Container -->
+  <div id="empToastContainer" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none;"></div>
+
+  <!-- Employee Portal Controller Script -->
+  <script src="employee.js"></script>
+</body>
+</html>

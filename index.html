@@ -49,20 +49,23 @@
     <button class="role-tab-btn" id="tabRoleOjt" onclick="switchRolePortal('ojt')">
       <span class="tab-icon">📋</span> <span>Skill assessment Login</span>
     </button>
-    <button class="role-tab-btn" id="tabRoleEmp" onclick="switchRolePortal('employee')">
-      <span class="tab-icon">👤</span> <span>Employee Portal</span>
-    </button>
+    <a class="role-tab-btn" id="tabRoleEmp" href="/employee" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; background: rgba(0, 91, 158, 0.08); border-color: rgba(0, 91, 158, 0.2);">
+      <span class="tab-icon">👤</span> <span>Employee Portal &rarr;</span>
+    </a>
   </nav>
 
   <!-- App Container -->
   <main class="app-container">
 
-    <!-- VIEW 0: Role-Based Portal Hub Landing (ui.pptx) -->
+    <!-- VIEW 0: Role-Based Portal Hub Landing (Management Portal) -->
     <section class="view-section active" id="viewPublicLanding">
       <div class="landing-hero-simple" style="display: flex; flex-direction: column; align-items: center;">
         <img src="atg_logo.png" alt="App Logo" style="width: 86px; height: 86px; border-radius: 20px; margin-bottom: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); object-fit: contain; background: white; border: 1px solid rgba(0,0,0,0.06);">
-        <div class="landing-eyebrow">ATC TIRES &bull; PLANT OPERATIONS</div>
-        <h1 class="landing-title">Skill Assessment Portal</h1>
+        <div class="landing-eyebrow">ATC TIRES &bull; PLANT OPERATIONS MANAGEMENT</div>
+        <h1 class="landing-title">Management &amp; Operations Portal</h1>
+        <p style="font-size: 0.92rem; color: var(--text-muted); margin-top: 4px; text-align: center; max-width: 520px;">
+          Executive Control Center for Department Heads, HR, Section Supervisors &amp; Skill Evaluators
+        </p>
       </div>
 
       <div class="vertical-portal-list">
@@ -101,43 +104,37 @@
           </div>
           <span class="portal-arrow">&rarr;</span>
         </button>
+      </div>
 
-        <!-- 5. Employee Portal -->
-        <button class="vertical-portal-card emp-card" onclick="switchRolePortal('employee')" type="button">
-          <div class="portal-card-main">
-            <span class="portal-icon">👤</span>
-            <span class="portal-title">Employee Portal</span>
-          </div>
-          <span class="portal-arrow">&rarr;</span>
-        </button>
+      <!-- Employee Portal External Redirect Box -->
+      <div style="margin-top: 26px; text-align: center; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 12px; padding: 16px 20px; max-width: 440px; margin-left: auto; margin-right: auto;">
+        <div style="font-size: 0.88rem; color: #475569; margin-bottom: 6px;">Are you a plant employee taking your skill exam?</div>
+        <a href="/employee" style="color: #005B9E; font-weight: 700; font-size: 0.94rem; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+          Go to Dedicated Employee Portal &rarr;
+        </a>
       </div>
     </section>
 
-    <!-- VIEW 1: Employee Login (/employee-portal or /employee/login) -->
+    <!-- VIEW 1: Employee Login Redirect / Notice -->
     <section class="view-section" id="viewEmpLogin">
       <div class="login-wrapper">
-        <div class="login-card">
+        <div class="login-card" style="border: 2px solid #005B9E;">
           <div class="login-header">
             <img src="atg_logo.png" alt="App Logo" style="width: 58px; height: 58px; border-radius: 12px; margin-bottom: 10px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
-            <h2>Employee Portal Login</h2>
-            <p>Enter your Employee ID &amp; Password to access your assessments and profile</p>
+            <h2>Employee Portal</h2>
+            <p>Employees have a dedicated portal for assessments and skill records</p>
           </div>
-          <div class="login-body">
-            <form onsubmit="handleEmpLogin(event)">
-              <div class="form-group">
-                <label for="empIdInput">Employee ID / No</label>
-                <input type="text" id="empIdInput" class="form-control" placeholder="e.g. LN0770, 900262, 900445" required autofocus>
-              </div>
-              <div class="form-group">
-                <label for="empPasswordInput">Password</label>
-                <input type="password" id="empPasswordInput" class="form-control" placeholder="Enter password" required>
-              </div>
-
-              <button type="submit" class="btn-primary" style="width: 100%; padding: 12px; font-weight: 700; margin-top: 8px;">Sign In to Employee Portal</button>
-            </form>
+          <div class="login-body" style="text-align: center; padding: 24px 20px;">
+            <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 14px; margin-bottom: 20px; font-size: 0.9rem; color: #1E40AF; text-align: left;">
+              ℹ️ <strong>Dedicated Employee Portal Available:</strong><br>
+              Employees can log in, view skill profiles, and take assessments at the dedicated Employee Portal.
+            </div>
+            <a href="/employee" class="btn-primary" style="display: block; text-decoration: none; padding: 12px; font-weight: 700;">
+              Launch Employee Portal &rarr;
+            </a>
             <div style="text-align: center; margin-top: 16px;">
-              <a href="javascript:void(0)" onclick="navigateTo('/')" style="color: #005B9E; font-weight: 600; font-size: 0.88rem; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
-                &larr; Back to Portal Hub / Login Center
+              <a href="javascript:void(0)" onclick="navigateTo('/')" style="color: #64748B; font-weight: 600; font-size: 0.88rem; text-decoration: none;">
+                &larr; Back to Management Home
               </a>
             </div>
           </div>

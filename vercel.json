@@ -7,7 +7,9 @@
       "config": {
           "includeFiles": [
             "index.html",
+            "employee.html",
             "app.js",
+            "employee.js",
             "data.js",
             "styles.css",
             "ojt_templates_data.js",

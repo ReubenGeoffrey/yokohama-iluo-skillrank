@@ -20,120 +20,91 @@
 
 ---
 
-## 🍵 What's the Tea? (Executive Summary)
+## 🍵 Executive Summary
 
-The **Yokohama ILUO Skill Assessment Portal** is an absolute game-changer. We took legacy paper tests, threw them out the window, and built a lightning-fast, proctored, anti-cheating digital assessment hub that automatically turns candidate answers into formatted **Excel reports (`.xlsx`)**.
+The **Yokohama ILUO Skill Assessment Portal** operates as **two independent websites** connected to a unified authoritative backend and shared database:
+
+1. **Management Portal** (`index.html`): Executive control center for HR, Admin, Department/HODs, Section Supervisors, and Skill Evaluators.
+2. **Employee Portal** (`employee.html` & `employee.js`): Independent, distraction-free portal exclusively for plant candidates taking assessments and tracking skill progression.
 
 > [!IMPORTANT]
-> - 🧠 **712+ Verified MCQs**: Pre-loaded directly from 24 official Yokohama QA `.docx` files. Zero fake questions.
-> - 🗿 **Zero Malpractice**: Built-in tab-switch detector that terminates exams on the 3rd strike.
-> - 📊 **Instant Excel Export**: Audit-ready spreadsheet downloads with one click. Period.
+> - 🏢 **Management Portal (`management.yourdomain.in`)**: Role-scoped control center for company analytics, question bank manager, section tracking, practical skill evaluation, and audit Excel downloads.
+> - 👤 **Employee Portal (`employee.yourdomain.in`)**: Dedicated employee app with individual profile, password toggle, 45-min timed MCQ assessment, tab-switch proctoring, and instant category scoring (Safety, Quality, Process, CI & TPM).
+> - 🔒 **Strict Data Security & IDOR Isolation**: Authoritative server-side RBAC ensures employees cannot see other candidates' records or management tools.
+> - 📊 **43 Automated Tests**: 100% test pass rate across GATE 1-14 security checks, auth suites, and multi-portal isolation tests.
 
 ---
 
-## 🚀 Features That Go Hard
-
-### 🎯 1. ILUO Skill Levels (Main Character Progression)
-- 🟢 **I Level (Trainee Era)**: Basic onboarding & safety vibe checks.
-- 🟡 **L Level (Basic Skill)**: 20 Questions – Process & quality verification.
-- 🟠 **U Level (Skilled Operator)**: 30 Questions – Independent operational mastery.
-- 🔴 **O Level (God Tier Expert)**: 40 Questions – Master auditor & defect specialist standard.
-- ⚖️ **Balanced Category Engine**: Automatically balances questions proportionally across **Safety & Environment**, **CI & TPM**, and **QA Technical**.
-- 🔒 **Section Isolation**: Questions mapped strictly to candidate sections:  
-  `Final Finish QA` | `Tire Building QA` | `Tire Curing QA` | `Preparatory QA` | `Solid Tire QA` | `Warehouse QA` | `FID Inspector QA` | `Final Finish RRO & ALT QA`
-
-### 🛡️ 2. Tab-Switch Anti-Cheating System (3 Strikes & You're Out 🚨)
-- 👁️ **Real-Time Focus Monitor**: Tracks window blurs, tab switching, or external screen jumps.
-- ⚠️ **Progressive Security Alerts**: Warning modals pop up on Warning 1 & 2.
-- 🛑 **Automated Auto-Termination**: 3rd tab switch instantly locks answers and sets candidate status to `Terminated (Tab Switch Violations)`. No cap.
-
-### 📁 3. Bulk Word (.docx) Importer (Work Smarter, Not Harder 🧠)
-- 📦 **Drag-and-Drop Parsing**: Upload official Word `.docx` assessment files directly in browser.
-- ⚡ **Auto-Extraction**: Automatically extracts question titles, options (A, B, C, D), section headers, and category tags.
-
-### 📊 4. Real-Time Admin Dashboard (Data Visualization Flex 📈)
-- 📉 **Live Metric Cards**: Track active candidates, overall pass rate %, average score, and security flags.
-- 🎨 **Chart.js Analytics**: Visual histograms for score distribution and department compliance.
-- 🔍 **Instant Search**: Search employee attempt records by Employee ID, Name, or Department.
-
-### 📥 5. Single-Click Excel Report Export 🪄
-- 📄 **Audit-Ready Spreadsheets**: Download formatted `.xlsx` files complete with Employee Name, ID, DOJ, Skill Level, Section, Marks, Percentage, Tab Switch Violations, and Timestamps.
-
-### ✉️ 6. Gmail SMTP OTP (Lock & Key Security 🔐)
-- 🔑 **6-Digit One-Time Password**: Secure email OTP delivered via Gmail STARTTLS for admin actions.
-
-### ⚡ 7. Dual-Sync Cloud Database (Zero Lag Vibe ☁️)
-- ⚡ **Offline-First Speed**: Zero-lag local storage for smooth exam taking.
-- ☁️ **Upstash Cloud Redis**: Permanent cloud sync keeping candidate attempts and custom questions synced everywhere.
-
----
-
-## 🏗️ Architecture (How It Actually Works Fr)
+## 🏗️ Architecture
 
 ```mermaid
 flowchart TD
-    subgraph Client ["Client Side (Candidate & Admin)"]
-        A[Candidate Exam Portal 📝]
-        B[Admin Dashboard 📊]
-        C[Anti-Cheating Proctor 👁️]
+    subgraph Frontends ["Two Independent Frontends"]
+        A["Management Portal 🏛️<br>(management.yourdomain.in / index.html)"]
+        B["Employee Portal 👤<br>(employee.yourdomain.in / employee.html)"]
     end
 
-    subgraph Server ["Express.js Backend (Port 8080) 🚀"]
-        D[Auth & OTP Handler 🔐]
-        E[Exam Scoring Engine 💯]
-        F[DOCX Parser Service 📄]
+    subgraph Server ["Shared Authoritative Backend (server.js) 🚀"]
+        C["Host & Path Router 🌐"]
+        D["Auth & Session Engine (RBAC) 🔐"]
+        E["Server-Side Scoring Engine 💯"]
+        F["Security Audit Logger 🛡️"]
     end
 
-    subgraph Storage ["Database & Cloud ☁️"]
-        G[(Local Browser Storage 💾)]
-        H[(Upstash Redis Cloud ⚡)]
+    subgraph Storage ["Shared Authoritative Storage ☁️"]
+        G[("Local File Stores 💾<br>(custom_employees.json, assessment_records.json)")]
+        H[("Upstash Redis Cloud ⚡<br>(yokohama_records, yokohama_employees)")]
     end
 
-    subgraph Email ["Email Dispatch ✉️"]
-        I[Gmail SMTP Service 🚀]
-    end
-
-    A -->|Live State| G
-    A -->|Submit Exam / Tab Violations| E
-    B -->|Fetch Reports & Analytics| E
-    E <-->|Dual Cloud Sync| H
-    D -->|Send 6-Digit OTP| I
-    F -->|Load Questions| H
+    A -->|HTTPS / API| C
+    B -->|HTTPS / API| C
+    C --> D
+    C --> E
+    D <--> Storage
+    E <--> Storage
+    D --> F
 ```
 
 ---
 
-## 🛠️ The Flex Tech Stack (No Mid Frameworks Here)
+## 🛠️ The Tech Stack
 
-| Layer | Component | Vibe Check |
+| Layer | Component | Description |
 | :--- | :--- | :--- |
-| **Frontend** | HTML5 + Modern Vanilla JS | Ultra fast, zero bloated bundle size |
-| **Styling** | Custom CSS3 (Glassmorphism) | Dark corporate theme with main character aesthetic |
-| **Charts** | [Chart.js](https://www.chartjs.org/) | Clean visual analytics & score distribution graphs |
-| **Excel Export** | [SheetJS (XLSX)](https://sheetjs.com/) | Instant `.xlsx` spreadsheet generator |
-| **Docx Parser** | [Mammoth.js](https://github.com/margvb/mammoth.js) | Native Word document parsing in-browser |
-| **Backend** | Express.js 5.x (Node.js) | High-performance RESTful API |
-| **Email OTP** | Nodemailer (Gmail SMTP) | 6-digit admin authentication codes |
-| **Database** | Upstash Redis Cloud | Serverless key-value cloud database |
+| **Management App** | `index.html` + `app.js` | Full enterprise control center, question bank manager, reports & charts |
+| **Employee App** | `employee.html` + `employee.js` | Dedicated candidate experience, timer, MCQ exam runner & results |
+| **Styling** | `styles.css` | Yokohama corporate theme with glassmorphism & responsive design |
+| **Backend** | Express 5 / Node.js | Multi-site host router, RBAC session engine, PDF/DOCX compiler |
+| **Database** | JSON file stores & Upstash Redis | Synchronized authoritative employee data and assessment scores |
+| **Testing** | Node.js Test Runner (`node:test`) | 43 automated unit, integration, and security tests |
 
 ---
 
-## 📂 File Directory (The Blueprint 🗺️)
+## 📂 File Directory
 
 ```ascii
-ILUO MCQ TO Excel sheet/
-├── index.html                   # Single-Page Application (SPA) Master Layout
-├── app.js                       # Core Portal Router, Exam Logic & Proctoring
-├── data.js                      # 236 Employee Master Directory & Question Dataset
-├── server.js                    # Express Server, Gmail SMTP OTP & Cloud Sync
-├── styles.css                   # Premium Glassmorphism Styling
-├── ILUO SKILL.xlsx              # Official Master Employee ILUO Matrix Spreadsheet
-├── package.json                 # Node.js Dependencies & Scripts
-├── vercel.json                  # Production Vercel Serverless Configuration
-├── .env                         # Environment Variables Configuration
-├── parse_true_qc_master.py      # Python Parser for Official 24 Docx Papers
-├── parsed_true_qc_master.json   # Parsed Master Question Dataset
-└── QC question/                 # Archive of 24 Official Word (.docx) Papers
+yokohama-iluo-portal/
+├── index.html                   # Website A: Management Portal Layout
+├── app.js                       # Website A: Management Portal Controller
+├── employee.html                # Website B: Dedicated Employee Portal Layout
+├── employee.js                  # Website B: Dedicated Employee Portal Controller
+├── server.js                    # Shared Express Backend, Host Router & RBAC
+├── styles.css                   # Yokohama Corporate Design Tokens & Responsive Styles
+├── vercel.json                  # Multi-Portal Vercel Deployment Configuration
+├── DEPLOYMENT.md                # Complete Dual-Portal Vercel Deployment Guide
+├── custom_employees.json        # Authoritative Directory of Plant Employees
+├── custom_questions.json        # Synchronized Canonical Question Bank
+├── master_questions.json        # Master Question Reference Dataset
+├── assessment_records.json      # Live Exam Attempts and Scores
+├── ojt_evaluations.json         # Shop-Floor Practical Skill Evaluations
+├── audit_logs.json              # Security & Access Audit Log Trail
+└── tests/                       # Automated Test Suites (43 passing tests)
+    ├── auth.test.js             # Authentication tests for all roles
+    ├── destructive.test.js      # Reset authorization checks
+    ├── exam.test.js             # Exam lifecycle & anti-cheating tests
+    ├── gate.test.js             # GATE 1 to GATE 14 security checks
+    ├── security.test.js         # CSRF & sanitized payload tests
+    └── two_portals.test.js      # 10 Dual-Portal isolation & routing tests
 ```
 
 ---

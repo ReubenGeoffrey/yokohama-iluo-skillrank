@@ -66,7 +66,9 @@ test('GATE 2: Zero credentials in client-delivered files (HTML, JS, CSS)', () =>
 
   const clientFiles = [
     path.join(__dirname, '..', 'index.html'),
+    path.join(__dirname, '..', 'employee.html'),
     path.join(__dirname, '..', 'app.js'),
+    path.join(__dirname, '..', 'employee.js'),
     path.join(__dirname, '..', 'data.js'),
     path.join(__dirname, '..', 'styles.css')
   ];

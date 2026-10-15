@@ -29,20 +29,44 @@ if (rawKvToken.includes('\t')) {
 const kvToken = rawKvToken.replace(/^(?:REST_)?TOKEN[\s\t]+/, '').replace(/[\r\n\t\s]/g, '');
 
 // Strict Trusted Origins Allowlist
+const CONFIGURED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
 const ALLOWED_ORIGINS = [
   'https://yokohama-iluo-portal.vercel.app',
+  'https://management.yourdomain.in',
+  'https://employee.yourdomain.in',
   'http://localhost:5000',
   'http://localhost:3000',
   'http://127.0.0.1:5000',
-  'http://127.0.0.1:3000'
+  'http://127.0.0.1:3000',
+  ...CONFIGURED_ORIGINS
 ];
+
+if (process.env.MANAGEMENT_PORTAL_URL) ALLOWED_ORIGINS.push(process.env.MANAGEMENT_PORTAL_URL.trim());
+if (process.env.EMPLOYEE_PORTAL_URL) ALLOWED_ORIGINS.push(process.env.EMPLOYEE_PORTAL_URL.trim());
+
+function isOriginAllowed(origin) {
+  if (!origin) return false;
+  try {
+    const u = new URL(origin);
+    const hostOrigin = u.origin;
+    if (ALLOWED_ORIGINS.includes(hostOrigin)) return true;
+    if (hostOrigin.endsWith('.vercel.app') && (hostOrigin.includes('yokohama-iluo') || hostOrigin.includes('iluo-employee') || hostOrigin.includes('iluo-management'))) return true;
+    if (hostOrigin.endsWith('.yourdomain.in')) return true;
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(hostOrigin)) return true;
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
 
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
-    const isAllowed = ALLOWED_ORIGINS.includes(origin) ||
-      (origin.endsWith('.vercel.app') && origin.includes('yokohama-iluo'));
-    if (isAllowed) {
+    if (isOriginAllowed(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Blocked by CORS policy'));
@@ -72,15 +96,8 @@ app.use((req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   const origin = req.headers['origin'] || req.headers['referer'];
   if (origin) {
-    try {
-      const u = new URL(origin);
-      const isAllowed = ALLOWED_ORIGINS.includes(u.origin) ||
-        (u.origin.endsWith('.vercel.app') && u.origin.includes('yokohama-iluo'));
-      if (!isAllowed) {
-        return res.status(403).json({ success: false, message: 'Forbidden: CSRF check failed (Untrusted Origin)' });
-      }
-    } catch (e) {
-      return res.status(403).json({ success: false, message: 'Forbidden: Invalid request origin' });
+    if (!isOriginAllowed(origin)) {
+      return res.status(403).json({ success: false, message: 'Forbidden: CSRF check failed (Untrusted Origin)' });
     }
   }
   next();
@@ -90,6 +107,12 @@ app.use((req, res, next) => {
 const ALLOWED_STATIC_FILES = new Set([
   '/',
   '/index.html',
+  '/employee',
+  '/employee/',
+  '/employee.html',
+  '/employee.js',
+  '/management',
+  '/management/',
   '/app.js',
   '/data.js',
   '/styles.css',
@@ -140,10 +163,41 @@ app.use((req, res, next) => {
   });
 });
 
+// Portal routing resolver: Determines whether to serve Employee Portal vs Management Portal
+function isEmployeePortalRequest(req) {
+  if (process.env.APP_TARGET === 'employee') return true;
+  if (process.env.APP_TARGET === 'management') return false;
+
+  const p = (req.path || '').toLowerCase();
+  if (p === '/employee' || p.startsWith('/employee/')) return true;
+
+  const host = (req.headers['x-forwarded-host'] || req.headers.host || '').toLowerCase();
+  if (host.startsWith('employee.') || host.includes('iluo-employee') || host.includes('employee-portal')) {
+    return true;
+  }
+  return false;
+}
+
+// Explicit root and portal routes
+app.get('/', (req, res) => {
+  if (isEmployeePortalRequest(req)) {
+    return res.sendFile(path.join(__dirname, 'employee.html'));
+  }
+  return res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get(['/employee', '/employee.html'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'employee.html'));
+});
+
+app.get(['/management', '/management.html'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 // Explicit static route for QC_templates Word files & assets
 app.use('/QC_templates', express.static(path.join(__dirname, 'QC_templates')));
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
-app.use(express.static(path.join(__dirname), { dotfiles: 'ignore' }));
+app.use(express.static(path.join(__dirname), { dotfiles: 'ignore', index: false }));
 
 // Explicit logo & favicon handlers
 app.get(['/atg_logo.png', '/assets/atg_logo.png'], (req, res) => {
@@ -1765,6 +1819,16 @@ async function scoreAssessmentServerSide(empNo, targetLevel, responses, section)
     ciTpmMark,
     ciTpmTotal,
     status: pass ? 'Passed' : 'Failed',
+    isPassed: pass,
+    score: correctCount,
+    totalQuestions: totalQs,
+    percentage: markPct,
+    categoryMarks: {
+      safety: safetyMark,
+      quality: qualityMark,
+      process: processMark,
+      ciTpm: ciTpmMark
+    },
     attemptDate: new Date().toLocaleDateString('en-GB')
   };
 }
@@ -2085,7 +2149,8 @@ app.post('/api/exam/start', requireEmpAuth, async (req, res) => {
 app.post('/api/exam/submit', requireEmpAuth, async (req, res) => {
   try {
     const user = req.authUser;
-    const { empNo, responses, targetLevel } = req.body || {};
+    const { empNo, targetLevel } = req.body || {};
+    const responses = (req.body && (req.body.responses || req.body.answers)) || {};
     const strEmpNo = String(empNo || user.empNo).trim();
 
     if (user.role === 'emp' && String(user.empNo).trim() !== strEmpNo) {
@@ -2852,10 +2917,13 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Fallback route to index.html for Client-Side SPA Routing
+// Fallback route for Client-Side SPA Routing (Both portals)
 app.use((req, res) => {
   if (req.path.startsWith('/api/') || req.path.match(/\.(png|jpg|jpeg|gif|svg|ico|css|js|json|map|docx|xlsx|pdf|txt|woff2?|ttf|eot)$/i)) {
     return res.status(404).json({ success: false, error: 'Not Found' });
+  }
+  if (isEmployeePortalRequest(req)) {
+    return res.sendFile(path.join(__dirname, 'employee.html'));
   }
   res.sendFile(path.join(__dirname, 'index.html'));
 });
