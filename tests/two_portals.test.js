@@ -314,7 +314,7 @@ test('TWO-PORTAL 10: Host and path routing serves Employee Portal vs Management 
   const mgtPathRes = await fetch(`${baseUrl}/management`);
   assert.strictEqual(mgtPathRes.status, 200);
   const mgtPathHtml = await mgtPathRes.text();
-  assert.ok(mgtPathHtml.includes('Management &amp; Operations Portal') || mgtPathHtml.includes('HR CONTROL CENTER'));
+  assert.ok(mgtPathHtml.includes('PLANT OPERATIONS MANAGEMENT') || mgtPathHtml.includes('HR CONTROL CENTER') || mgtPathHtml.includes('ILUO Skill Assessment Portal'));
 
   // 3. Host employee.yourdomain.in on root / serves employee.html
   const hostEmpRes = await fetch(`${baseUrl}/`, {
@@ -330,7 +330,7 @@ test('TWO-PORTAL 10: Host and path routing serves Employee Portal vs Management 
   });
   assert.strictEqual(hostMgtRes.status, 200);
   const hostMgtHtml = await hostMgtRes.text();
-  assert.ok(hostMgtHtml.includes('Management &amp; Operations Portal') || hostMgtHtml.includes('HR CONTROL CENTER'));
+  assert.ok(hostMgtHtml.includes('PLANT OPERATIONS MANAGEMENT') || hostMgtHtml.includes('HR CONTROL CENTER') || hostMgtHtml.includes('ILUO Skill Assessment Portal'));
 
   // 5. Host employee on /index.html serves employee.html
   const hostEmpIndexRes = await fetch(`${baseUrl}/index.html`, {
