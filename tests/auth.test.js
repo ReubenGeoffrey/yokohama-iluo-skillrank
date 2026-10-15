@@ -99,12 +99,32 @@ test('POST /api/auth/dept/login succeeds with valid credentials for PRODUCTION',
   assert.strictEqual(data.user.department, 'PRODUCTION');
 });
 
-test('POST /api/auth/employee/login succeeds for valid employee and rejects invalid', async () => {
-  // Valid employee from database
-  const res = await fetch(`${baseUrl}/api/auth/employee/login`, {
+test('POST /api/auth/employee/login rejects default password and succeeds after secure setup', async () => {
+  // 1. Default password '1234' is rejected
+  const defaultRes = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ empNo: 'LN0039', password: '1234' })
+  });
+  assert.strictEqual(defaultRes.status, 401);
+  const defaultData = await defaultRes.json();
+  assert.strictEqual(defaultData.success, false);
+
+  // 2. Setup password with DOJ
+  const setupRes = await fetch(`${baseUrl}/api/auth/employee/setup-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ empNo: 'LN0039', doj: '2023-12-13', newPassword: 'Emp@Secure2026!' })
+  });
+  assert.strictEqual(setupRes.status, 200);
+  const setupData = await setupRes.json();
+  assert.strictEqual(setupData.success, true);
+
+  // 3. Login with newly configured secure password
+  const res = await fetch(`${baseUrl}/api/auth/employee/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ empNo: 'LN0039', password: 'Emp@Secure2026!' })
   });
   assert.strictEqual(res.status, 200);
   const data = await res.json();
@@ -112,11 +132,11 @@ test('POST /api/auth/employee/login succeeds for valid employee and rejects inva
   assert.strictEqual(data.employee.empNo, 'LN0039');
   assert.strictEqual(data.employee.role, 'emp');
 
-  // Invalid employee
+  // 4. Invalid employee
   const resBad = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: 'NONEXISTENT999', password: '1234' })
+    body: JSON.stringify({ empNo: 'NONEXISTENT999', password: 'Emp@Secure2026!' })
   });
   assert.strictEqual(resBad.status, 401);
 });

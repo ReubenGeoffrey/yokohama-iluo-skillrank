@@ -18,11 +18,18 @@ test.before(async () => {
     });
   });
 
+  // Setup password first
+  await fetch(`${baseUrl}/api/auth/employee/setup-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ empNo: 'LN0039', doj: '2023-12-13', newPassword: 'Emp@Secure2026!' })
+  });
+
   // Authenticate as test employee
   const res = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: 'LN0039', password: '1234' })
+    body: JSON.stringify({ empNo: 'LN0039', password: 'Emp@Secure2026!' })
   });
   const data = await res.json();
   empToken = data.token;

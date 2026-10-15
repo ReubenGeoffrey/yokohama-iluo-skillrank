@@ -164,6 +164,12 @@ async function handleEmployeeLogin(e) {
 
     const data = await res.json();
 
+    if (data.requireSetup) {
+      showToast(data.message || 'Please configure your password.', 'info');
+      openPasswordSetupModal('setup', empNo);
+      return;
+    }
+
     if (data.success && data.token) {
       empState.employee = data.employee;
       empState.token = data.token;
@@ -187,6 +193,102 @@ async function handleEmployeeLogin(e) {
   }
 }
 window.handleEmployeeLogin = handleEmployeeLogin;
+
+function openPasswordSetupModal(mode = 'setup', prefillEmpNo = '') {
+  const modal = document.getElementById('passwordSetupModal');
+  const title = document.getElementById('pwdModalTitle');
+  const empInput = document.getElementById('setupEmpNoInput');
+  const feedback = document.getElementById('setupModalFeedback');
+  const pwdInput = document.getElementById('setupNewPasswordInput');
+  const dojInput = document.getElementById('setupDojInput');
+
+  if (!modal) return;
+  modal.dataset.mode = mode;
+  if (title) title.innerText = (mode === 'setup') ? 'Set Up Employee Password' : 'Reset Employee Password';
+  if (empInput) empInput.value = prefillEmpNo || (document.getElementById('empIdInput') ? document.getElementById('empIdInput').value.trim() : '');
+  if (pwdInput) pwdInput.value = '';
+  if (dojInput) dojInput.value = '';
+  if (feedback) {
+    feedback.style.display = 'none';
+    feedback.innerText = '';
+  }
+  modal.style.display = 'flex';
+}
+window.openPasswordSetupModal = openPasswordSetupModal;
+
+function closePasswordSetupModal() {
+  const modal = document.getElementById('passwordSetupModal');
+  if (modal) modal.style.display = 'none';
+}
+window.closePasswordSetupModal = closePasswordSetupModal;
+
+async function handlePasswordSetupSubmit(e) {
+  if (e) e.preventDefault();
+  const modal = document.getElementById('passwordSetupModal');
+  const mode = (modal && modal.dataset.mode) || 'setup';
+  const empNo = document.getElementById('setupEmpNoInput').value.trim();
+  const doj = document.getElementById('setupDojInput').value.trim();
+  const newPassword = document.getElementById('setupNewPasswordInput').value.trim();
+  const feedback = document.getElementById('setupModalFeedback');
+  const submitBtn = document.getElementById('btnSubmitSetupPassword');
+
+  if (!empNo || !doj || !newPassword) {
+    if (feedback) {
+      feedback.style.display = 'block';
+      feedback.style.background = '#FEF2F2';
+      feedback.style.color = '#991B1B';
+      feedback.innerText = 'All fields are required.';
+    }
+    return;
+  }
+
+  if (newPassword.length < 6) {
+    if (feedback) {
+      feedback.style.display = 'block';
+      feedback.style.background = '#FEF2F2';
+      feedback.style.color = '#991B1B';
+      feedback.innerText = 'Password must be at least 6 characters.';
+    }
+    return;
+  }
+
+  if (submitBtn) submitBtn.disabled = true;
+
+  try {
+    const endpoint = (mode === 'setup') ? '/api/auth/employee/setup-password' : '/api/auth/employee/reset-password';
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ empNo, doj, newPassword })
+    });
+    const data = await res.json();
+    if (data.success) {
+      closePasswordSetupModal();
+      showToast(data.message || 'Password saved successfully! Please sign in.', 'success');
+      const passEl = document.getElementById('empPasswordInput');
+      if (passEl) passEl.value = '';
+      const idEl = document.getElementById('empIdInput');
+      if (idEl) idEl.value = empNo;
+    } else {
+      if (feedback) {
+        feedback.style.display = 'block';
+        feedback.style.background = '#FEF2F2';
+        feedback.style.color = '#991B1B';
+        feedback.innerText = data.message || 'Verification failed. Please check your Employee ID and Date of Joining.';
+      }
+    }
+  } catch (err) {
+    if (feedback) {
+      feedback.style.display = 'block';
+      feedback.style.background = '#FEF2F2';
+      feedback.style.color = '#991B1B';
+      feedback.innerText = 'Network error connecting to authentication server.';
+    }
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+window.handlePasswordSetupSubmit = handlePasswordSetupSubmit;
 
 // Handle Employee Logout
 async function handleEmployeeLogout() {

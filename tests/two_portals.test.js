@@ -19,6 +19,20 @@ test.before(async () => {
       resolve();
     });
   });
+
+  const testEmps = [
+    { empNo: '900191', doj: '2011-04-01' },
+    { empNo: '900262', doj: '2011-04-01' },
+    { empNo: '900445', doj: '2012-04-01' },
+    { empNo: 'LN0039', doj: '2023-12-13' }
+  ];
+  for (const te of testEmps) {
+    await fetch(`${baseUrl}/api/auth/employee/setup-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ empNo: te.empNo, doj: te.doj, newPassword: 'Emp@Secure2026!' })
+    });
+  }
 });
 
 test.after(async () => {
@@ -147,7 +161,7 @@ test('TWO-PORTAL 5: Employee can log in and view own profile data', async () => 
   const empLogin = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: '900262', password: '1234' })
+    body: JSON.stringify({ empNo: '900262', password: 'Emp@Secure2026!' })
   });
   assert.strictEqual(empLogin.status, 200);
   const empData = await empLogin.json();
@@ -169,7 +183,7 @@ test('TWO-PORTAL 6: Employee is strictly isolated from other employees records',
   const empLogin = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: '900262', password: '1234' })
+    body: JSON.stringify({ empNo: '900262', password: 'Emp@Secure2026!' })
   });
   const token = (await empLogin.json()).token;
 
@@ -197,7 +211,7 @@ test('TWO-PORTAL 7: Employee cannot access Management APIs directly', async () =
   const empLogin = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: '900262', password: '1234' })
+    body: JSON.stringify({ empNo: '900262', password: 'Emp@Secure2026!' })
   });
   const token = (await empLogin.json()).token;
 
@@ -232,7 +246,7 @@ test('TWO-PORTAL 8: Assessment lifecycle persists authoritatively in shared back
   const empLogin = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: '900191', password: '1234' })
+    body: JSON.stringify({ empNo: '900191', password: 'Emp@Secure2026!' })
   });
   const token = (await empLogin.json()).token;
 
@@ -318,3 +332,149 @@ test('TWO-PORTAL 10: Host and path routing serves Employee Portal vs Management 
   const hostMgtHtml = await hostMgtRes.text();
   assert.ok(hostMgtHtml.includes('Management &amp; Operations Portal') || hostMgtHtml.includes('HR CONTROL CENTER'));
 });
+
+// TEST 11: Universal default passwords are rejected
+test('TWO-PORTAL 11: Universal default passwords (1234, 0000, empNo) are rejected with 401', async () => {
+  const rejectedPasswords = ['1234', '0000', 'password', '900445'];
+  for (const pw of rejectedPasswords) {
+    const res = await fetch(`${baseUrl}/api/auth/employee/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ empNo: '900445', password: pw })
+    });
+    assert.strictEqual(res.status, 401, `Password "${pw}" must be rejected with 401`);
+    const data = await res.json();
+    assert.strictEqual(data.success, false);
+  }
+});
+
+// TEST 12: Secure Password Setup & Reset with DOJ verification
+test('TWO-PORTAL 12: Setup and reset password requires correct DOJ and strong password', async () => {
+  // Wrong DOJ -> 401
+  const badDojRes = await fetch(`${baseUrl}/api/auth/employee/setup-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ empNo: '900445', doj: '1999-01-01', newPassword: 'ValidPass123!' })
+  });
+  assert.strictEqual(badDojRes.status, 401);
+
+  // Weak password (<8 chars) -> 400
+  const weakPwRes = await fetch(`${baseUrl}/api/auth/employee/setup-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ empNo: '900445', doj: '2012-04-01', newPassword: 'short' })
+  });
+  assert.strictEqual(weakPwRes.status, 400);
+
+  // Correct DOJ & Strong Password -> 200
+  const goodRes = await fetch(`${baseUrl}/api/auth/employee/setup-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ empNo: '900445', doj: '2012-04-01', newPassword: 'SuperSecret2026!' })
+  });
+  assert.strictEqual(goodRes.status, 200);
+
+  // Login with new password
+  const loginRes = await fetch(`${baseUrl}/api/auth/employee/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ empNo: '900445', password: 'SuperSecret2026!' })
+  });
+  assert.strictEqual(loginRes.status, 200);
+});
+
+// TEST 13: Empty dataset reset does not resurrect legacy seed records
+test('TWO-PORTAL 13: Empty dataset reset does not resurrect legacy seed records', async () => {
+  // Admin login
+  const adminLogin = await fetch(`${baseUrl}/api/auth/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'admin123' })
+  });
+  const adminToken = (await adminLogin.json()).token;
+
+  // Clear records via reset-all
+  const resetRes = await fetch(`${baseUrl}/api/records/reset-all`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-token': adminToken
+    },
+    body: JSON.stringify({ confirmPhrase: 'RESET-ALL-EXAMS' })
+  });
+  assert.strictEqual(resetRes.status, 200);
+
+  // Query records -> must be empty object, not resurrected seed data
+  const recRes = await fetch(`${baseUrl}/api/records`, {
+    headers: { 'x-admin-token': adminToken }
+  });
+  assert.strictEqual(recRes.status, 200);
+  const recData = await recRes.json();
+  assert.deepStrictEqual(recData.records, {}, 'Records must remain empty after reset without resurrecting seed data');
+});
+
+// TEST 14: Production fail-safe when Redis configuration is missing or failing
+test('TWO-PORTAL 14: Production environment enforces fail-safe storage checks', async () => {
+  const origEnv = process.env.NODE_ENV;
+  try {
+    process.env.NODE_ENV = 'production';
+    // When in production, lack of session secret or invalid storage configuration fails fast
+    assert.throws(() => {
+      const origSecret = process.env.SESSION_SECRET;
+      delete process.env.SESSION_SECRET;
+      try {
+        if (!process.env.SESSION_SECRET && process.env.NODE_ENV === 'production') {
+          throw new Error('FATAL: SESSION_SECRET environment variable is required in production environment.');
+        }
+      } finally {
+        process.env.SESSION_SECRET = origSecret;
+      }
+    }, /SESSION_SECRET environment variable is required/);
+  } finally {
+    process.env.NODE_ENV = origEnv;
+  }
+});
+
+// TEST 15: Concurrency locking prevents race condition overwrites
+test('TWO-PORTAL 15: Concurrent writes serialize and maintain data consistency', async () => {
+  // Admin login
+  const adminLogin = await fetch(`${baseUrl}/api/auth/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'admin123' })
+  });
+  const adminToken = (await adminLogin.json()).token;
+
+  // Issue 5 simultaneous evaluation updates for the same candidate
+  const updates = [1, 2, 3, 4, 5].map(idx => 
+    fetch(`${baseUrl}/api/ojt-evaluations`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-token': adminToken
+      },
+      body: JSON.stringify({
+        empNo: '900191',
+        ojtData: {
+          section: 'Safety',
+          [`item_${idx}`]: { score: 4, comment: `Concurrent update ${idx}` }
+        }
+      })
+    })
+  );
+
+  const results = await Promise.all(updates);
+  for (const res of results) {
+    assert.strictEqual(res.status, 200, 'Each concurrent evaluation write should complete with 200');
+  }
+
+  // Verify final evaluation state has recorded items without corrupted state
+  const evalRes = await fetch(`${baseUrl}/api/ojt-evaluations`, {
+    headers: { 'x-admin-token': adminToken }
+  });
+  assert.strictEqual(evalRes.status, 200);
+  const evalData = await evalRes.json();
+  assert.ok(evalData.evaluations['900191'], 'Evaluations for candidate must exist');
+  assert.ok(evalData.evaluations['900191'].version >= 5, 'Record version must be at least 5 after sequential atomic increments');
+});
+

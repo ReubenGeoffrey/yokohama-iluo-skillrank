@@ -84,9 +84,9 @@ Configure these environment variables in your local `.env` and in your Vercel pr
 | `ALLOWED_ORIGINS` | Recommended | Comma-separated trusted origins for CORS & CSRF | `https://management.yourdomain.in,https://employee.yourdomain.in` |
 | `MANAGEMENT_PORTAL_URL` | Optional | Explicit URL of Management Portal | `https://management.yourdomain.in` |
 | `EMPLOYEE_PORTAL_URL` | Optional | Explicit URL of Employee Portal | `https://employee.yourdomain.in` |
-| `SESSION_SECRET` | **Required** (Min 32 chars) | Cryptographic key used to sign session cookies | `yokohama_production_secret_key_minimum_32_characters_long` |
-| `UPSTASH_REDIS_REST_URL` | Recommended | Upstash Redis REST endpoint for multi-instance state sync | `https://your-upstash-redis-url.upstash.io` |
-| `UPSTASH_REDIS_REST_TOKEN` | Recommended | Upstash Redis REST token | `your_upstash_redis_rest_token_here` |
+| `SESSION_SECRET` | **Required in Prod** (Min 32 chars) | Cryptographic key used to sign session cookies | `yokohama_production_secret_key_minimum_32_characters_long` |
+| `UPSTASH_REDIS_REST_URL` | **Required in Prod** | Upstash Redis REST endpoint for multi-instance state sync & persistent durability | `https://your-upstash-redis-url.upstash.io` |
+| `UPSTASH_REDIS_REST_TOKEN` | **Required in Prod** | Upstash Redis REST token | `your_upstash_redis_rest_token_here` |
 | `SMTP_HOST` | Required for OTP | SMTP hostname for HR login OTP dispatch | `smtp.gmail.com` |
 | `SMTP_PORT` | Required for OTP | SMTP port (465 SSL or 587 TLS) | `465` |
 | `SMTP_SECURE` | Required for OTP | SSL socket flag | `true` |
@@ -98,7 +98,24 @@ Configure these environment variables in your local `.env` and in your Vercel pr
 
 ---
 
-## 5. Vercel Independent Project Deployment
+## 5. Security & Authentication Model
+
+### Insecure Fallback Removal & First-Time Setup
+- Universal default passwords (`1234`, `0000`, `empNo`) are strictly rejected with HTTP `401 Unauthorized`.
+- Uninitialized accounts trigger a first-time password setup workflow requiring verification of the employee's registered Date of Joining (DOJ, `YYYY-MM-DD`).
+- Employee passwords are cryptographically hashed using Node.js `crypto.scryptSync` with unique cryptographic salts (`scrypt:salt:hash`).
+- Real passwords and personal identifiers are sanitized from server audit logs.
+
+### Immutable Data Stores & Upstash Redis Single Source of Truth
+- On Vercel and in production environments, JSON files (`custom_employees.json`, `assessment_records.json`, `ojt_evaluations.json`) are treated strictly as **immutable read-only seed data**.
+- Upstash Redis serves as the authoritative production datastore.
+- Production storage write failures throw explicit errors and fail safely instead of silently swallowing errors.
+- Intentional dataset resets record an initialization sentinel (`__initialized: true` in Redis and `_isExplicitlyCleared: true` in memory), preventing empty datasets from resurrecting legacy seed data.
+- Atomic mutex locking (`acquireEntityLock`) and optimistic concurrency versioning (`version`, `updatedAt`) guard against race condition overwrites on concurrent submissions and evaluations.
+
+---
+
+## 6. Vercel Independent Project Deployment
 
 You can deploy both websites as two independent Vercel projects from this single repository.
 
@@ -113,6 +130,8 @@ You can deploy both websites as two independent Vercel projects from this single
    - `APP_TARGET`: `management`
    - `SESSION_SECRET`: *[your 32+ char secret]*
    - `ALLOWED_ORIGINS`: `https://management.yourdomain.in,https://employee.yourdomain.in`
+   - `UPSTASH_REDIS_REST_URL`: *[Upstash Redis URL]*
+   - `UPSTASH_REDIS_REST_TOKEN`: *[Upstash Redis Token]*
    - `SMTP_USER`, `SMTP_PASS`, `ADMIN_EMAIL`, etc.
 5. Click **Deploy**.
 6. Under **Settings → Domains**, assign your custom domain: `management.yourdomain.in`.
@@ -130,55 +149,47 @@ You can deploy both websites as two independent Vercel projects from this single
    - `APP_TARGET`: `employee`
    - `SESSION_SECRET`: *[same SESSION_SECRET as Project 1]*
    - `ALLOWED_ORIGINS`: `https://management.yourdomain.in,https://employee.yourdomain.in`
-   - `UPSTASH_REDIS_REST_URL`: *[same Redis URL]*
-   - `UPSTASH_REDIS_REST_TOKEN`: *[same Redis Token]*
+   - `UPSTASH_REDIS_REST_URL`: *[same Upstash Redis URL]*
+   - `UPSTASH_REDIS_REST_TOKEN`: *[same Upstash Redis Token]*
 5. Click **Deploy**.
 6. Under **Settings → Domains**, assign your custom domain: `employee.yourdomain.in`.
 
 ---
 
-## 6. Verification and Smoke Testing
+## 7. Verification and Automated Test Suite
 
-Run the automated test runner before and after any deployment:
+Run the complete regression test runner before any deployment:
 
 ```bash
-# Run unit, integration, and security gate tests
+# Run complete test suite (48 automated tests across 6 suites)
 npm test
 ```
 
-### Manual Smoke-Test Checklist:
-- [ ] Open `https://management.yourdomain.in`:
-  - Verify that landing displays **Department**, **HR Login**, **Section Login**, and **Skill Assessment Login**.
-  - Verify that employee link directs to `employee.yourdomain.in`.
-  - Sign in with HR credentials and verify Control Center loads with live company stats.
-- [ ] Open `https://employee.yourdomain.in`:
-  - Verify that clean Employee Sign In screen loads with no management links or forms.
-  - Sign in as candidate (e.g. `900262` / `1234`).
-  - Verify Employee profile, ILUO level badge (`U`), and assigned knowledge exam load.
-  - Start assessment, verify timer countdown, question pagination, and submit.
-  - Verify instant category marks breakdown (Safety, Quality, Process, CI & TPM).
-  - Click Sign Out and verify session termination.
+### Verified Test Suites:
+- `tests/gate.test.js`: 14/14 passed (SESSION_SECRET fail-fast, zero-credential client scan, zero correctAnswer leak, RBAC, IDOR, audit logs, cookie security)
+- `tests/two_portals.test.js`: 15/15 passed (management isolation, employee isolation, default-password rejection, DOJ verification, empty reset resilience, Redis fail-safe, concurrent write locking)
+- `tests/auth.test.js`: 7/7 passed (admin, evaluator, section head, HOD, and employee login)
+- `tests/exam.test.js`: 3/3 passed (exam start sanitization, server-side scoring, conflict prevention)
+- `tests/security.test.js`: 5/5 passed (static asset allowlist, answer key sanitization, CSRF protection, OTP rate limiting)
+- `tests/destructive.test.js`: 4/4 passed (reset-all confirmation phrase validation, audit integrity)
 
 ---
 
-## 7. Rollback Strategy
+## 8. Rollback Strategy
 
 If an unexpected production issue occurs:
 
 1. **Instant Vercel Rollback:**
    - In the Vercel Dashboard for either project, navigate to the **Deployments** tab.
-   - Locate the previous stable deployment.
+   - Locate the previous stable deployment (e.g. commit `2e67fd2`).
    - Click the three dots (`...`) and select **Promote to Production**. Instant switch takes under 5 seconds.
 2. **Git Rollback:**
    ```bash
    git checkout main
-   git revert <commit-hash>
+   git revert HEAD
    git push origin main
    ```
 3. **Data Integrity:**
    - Existing records are stored in `assessment_records.json` and mirrored in Upstash Redis.
    - A verified pristine backup is preserved at `assessment_records_backup_236.json`.
-   - To restore the base demo records if needed:
-     ```bash
-     curl -X POST https://your-management-url/api/records/restore-demo -H "Authorization: Bearer <ADMIN_TOKEN>"
-     ```
+   - Seed data is immutable and protected from destructive resets via memory/Redis sentinels.

@@ -18,6 +18,20 @@ test.before(async () => {
       resolve();
     });
   });
+
+  const testEmps = [
+    { empNo: '900191', doj: '2011-04-01' },
+    { empNo: '900262', doj: '2011-04-01' },
+    { empNo: '900445', doj: '2012-04-01' },
+    { empNo: 'LN0039', doj: '2023-12-13' }
+  ];
+  for (const te of testEmps) {
+    await fetch(`${baseUrl}/api/auth/employee/setup-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ empNo: te.empNo, doj: te.doj, newPassword: 'Emp@Secure2026!' })
+    });
+  }
 });
 
 test.after(async () => {
@@ -92,7 +106,7 @@ test('GATE 3: Candidate exam question payload contains zero correctAnswer proper
   const loginRes = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: '900191', password: '1234' })
+    body: JSON.stringify({ empNo: '900191', password: 'Emp@Secure2026!' })
   });
   assert.strictEqual(loginRes.status, 200);
   const loginData = await loginRes.json();
@@ -132,6 +146,18 @@ test('GATE 3: Candidate exam question payload contains zero correctAnswer proper
       assert.strictEqual('correctAnswer' in q, false, `Exposed correctAnswer in public /api/questions level ${lvl}`);
     });
   });
+
+  // Clean up candidate in-progress test record
+  const adminLogin = await fetch(`${baseUrl}/api/auth/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'admin123' })
+  });
+  const adminToken = (await adminLogin.json()).token;
+  await fetch(`${baseUrl}/api/records/900191`, {
+    method: 'DELETE',
+    headers: { 'x-admin-token': adminToken }
+  });
 });
 
 // GATE CHECK 4: QUESTION CANONICAL SOURCE SYNCHRONIZATION
@@ -162,7 +188,7 @@ test('GATE 5: Strict RBAC enforcement across roles (401/403 for unauthorized acc
   const empLogin = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: 'LN0039', password: '1234' })
+    body: JSON.stringify({ empNo: 'LN0039', password: 'Emp@Secure2026!' })
   });
   const empToken = (await empLogin.json()).token;
 
@@ -196,7 +222,7 @@ test('GATE 6: IDOR - Employee A cannot access Employee B records or reports', as
   const loginA = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: 'LN0039', password: '1234' })
+    body: JSON.stringify({ empNo: 'LN0039', password: 'Emp@Secure2026!' })
   });
   const tokenA = (await loginA.json()).token;
 
@@ -242,7 +268,7 @@ test('GATE 7: Session lifecycle - logged-out and replayed sessions rejected', as
   const loginRes = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: 'LN0039', password: '1234' })
+    body: JSON.stringify({ empNo: 'LN0039', password: 'Emp@Secure2026!' })
   });
   assert.strictEqual(loginRes.status, 200);
   const data = await loginRes.json();
@@ -335,8 +361,10 @@ test('GATE 9: Audit events recorded with comprehensive security metadata', async
 test('GATE 10: Canonical dataset counts match authoritative storage dynamically', async () => {
   const emps = JSON.parse(fs.readFileSync('custom_employees.json', 'utf8'));
   const recs = JSON.parse(fs.readFileSync('assessment_records.json', 'utf8'));
+  delete recs.__initialized;
   const qs = JSON.parse(fs.readFileSync('custom_questions.json', 'utf8'));
   const ojts = JSON.parse(fs.readFileSync('ojt_evaluations.json', 'utf8'));
+  delete ojts.__initialized;
 
   // Admin login to query live authoritative APIs
   const loginRes = await fetch(`${baseUrl}/api/auth/admin/login`, {
@@ -430,7 +458,7 @@ test('GATE 13: Set-Cookie headers enforce HttpOnly, Path=/, SameSite=lax', async
   const res = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: 'LN0039', password: '1234' })
+    body: JSON.stringify({ empNo: 'LN0039', password: 'Emp@Secure2026!' })
   });
   assert.strictEqual(res.status, 200);
 

@@ -153,7 +153,14 @@
                     </svg>
                   </button>
                 </div>
-                <span style="font-size: 0.74rem; color: #64748B; display: block; margin-top: 4px;">Default initial password: 1234</span>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+                  <button type="button" onclick="openPasswordSetupModal('setup')" style="background: none; border: none; color: #005B9E; font-size: 0.78rem; font-weight: 600; cursor: pointer; padding: 0;">
+                    First Time? Set Up Password
+                  </button>
+                  <button type="button" onclick="openPasswordSetupModal('reset')" style="background: none; border: none; color: #64748B; font-size: 0.78rem; cursor: pointer; padding: 0;">
+                    Forgot Password?
+                  </button>
+                </div>
               </div>
 
               <button type="submit" class="btn-primary" style="width: 100%; padding: 13px; font-weight: 700; font-size: 0.95rem; background: linear-gradient(135deg, #003D6B 0%, #005B9E 100%);">
@@ -163,7 +170,7 @@
 
             <div style="margin-top: 20px; padding: 12px; background: #F8FAFC; border-radius: 8px; border: 1px solid #E2E8F0; font-size: 0.8rem; color: #64748B; text-align: center;">
               🔒 Authorized Plant Personnel Access Only.<br>
-              Forgot your credentials? Contact your Section Head or HR.
+              Need assistance? Contact your Section Head or HR.
             </div>
 
             <div style="margin-top: 14px; text-align: center;">
@@ -172,6 +179,36 @@
               </a>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Password Setup / Reset Modal -->
+      <div id="passwordSetupModal" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); z-index: 1000; align-items: center; justify-content: center; padding: 16px;">
+        <div style="background: white; border-radius: 16px; max-width: 420px; width: 100%; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3);">
+          <div style="background: linear-gradient(135deg, #003D6B 0%, #005B9E 100%); color: white; padding: 20px; text-align: center;">
+            <h3 id="pwdModalTitle" style="margin: 0; font-size: 1.2rem; font-weight: 800;">Set Up Employee Password</h3>
+            <p style="margin: 4px 0 0; font-size: 0.82rem; opacity: 0.9;">Verify your Date of Joining to configure a secure password</p>
+          </div>
+          <form onsubmit="handlePasswordSetupSubmit(event)" style="padding: 20px;">
+            <div class="form-group" style="margin-bottom: 14px;">
+              <label for="setupEmpNoInput" style="font-size: 0.82rem; font-weight: 600; color: #334155; display: block; margin-bottom: 4px;">Employee ID</label>
+              <input type="text" id="setupEmpNoInput" class="form-control" placeholder="e.g. LN0039" required style="font-weight: 600;">
+            </div>
+            <div class="form-group" style="margin-bottom: 14px;">
+              <label for="setupDojInput" style="font-size: 0.82rem; font-weight: 600; color: #334155; display: block; margin-bottom: 4px;">Registered Date of Joining (DOJ)</label>
+              <input type="date" id="setupDojInput" class="form-control" required style="font-weight: 600;">
+              <span style="font-size: 0.72rem; color: #64748B;">Matches official HR records</span>
+            </div>
+            <div class="form-group" style="margin-bottom: 18px;">
+              <label for="setupNewPasswordInput" style="font-size: 0.82rem; font-weight: 600; color: #334155; display: block; margin-bottom: 4px;">New Secure Password</label>
+              <input type="password" id="setupNewPasswordInput" class="form-control" placeholder="Min. 6 characters" minlength="6" required style="font-weight: 600;">
+            </div>
+            <div id="setupModalFeedback" style="display: none; padding: 10px; border-radius: 6px; font-size: 0.8rem; margin-bottom: 14px;"></div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+              <button type="button" onclick="closePasswordSetupModal()" class="btn-secondary" style="padding: 10px 16px; font-size: 0.85rem;">Cancel</button>
+              <button type="submit" id="btnSubmitSetupPassword" class="btn-primary" style="padding: 10px 18px; font-size: 0.85rem; font-weight: 700;">Save Password</button>
+            </div>
+          </form>
         </div>
       </div>
     </section>

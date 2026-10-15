@@ -15,18 +15,23 @@ if (!SESSION_SECRET) {
   }
   SESSION_SECRET = 'dev_ephemeral_session_secret_for_local_testing_only';
 }
+const isProduction = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
 const AUTHORIZED_ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
-let rawKvUrl = (process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || '').trim();
+let rawKvUrl = (process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || '').replace(/['"]/g, '').trim();
 if (rawKvUrl.includes('http')) {
   rawKvUrl = rawKvUrl.substring(rawKvUrl.indexOf('http')).trim();
 }
 const kvUrl = rawKvUrl.replace(/[\r\n\t]/g, '');
 
-let rawKvToken = (process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || '').trim();
+let rawKvToken = (process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || '').replace(/['"]/g, '').trim();
 if (rawKvToken.includes('\t')) {
   rawKvToken = rawKvToken.split('\t').pop().trim();
 }
 const kvToken = rawKvToken.replace(/^(?:REST_)?TOKEN[\s\t]+/, '').replace(/[\r\n\t\s]/g, '');
+
+if (isProduction && (!kvUrl || !kvToken)) {
+  console.warn('⚠️ WARNING: Upstash Redis (UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN) is not configured in production. Authoritative data writes will fail safely.');
+}
 
 // Strict Trusted Origins Allowlist
 const CONFIGURED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
@@ -172,7 +177,7 @@ function isEmployeePortalRequest(req) {
   if (p === '/employee' || p.startsWith('/employee/')) return true;
 
   const host = (req.headers['x-forwarded-host'] || req.headers.host || '').toLowerCase();
-  if (host.startsWith('employee.') || host.includes('iluo-employee') || host.includes('employee-portal')) {
+  if (host.includes('employee')) {
     return true;
   }
   return false;
@@ -461,14 +466,26 @@ if (user && pass) {
 // Cloud-Persisted Upstash Redis Helper (Single Source of Truth)
 // ---------------------------------------------------------------------
 async function syncWithCloudKv(action, key = 'yokohama_records', value = null, ttlSeconds = null) {
-  if (!kvUrl || !kvToken) return null;
+  if (!kvUrl || !kvToken) {
+    if (isProduction && (action === 'SET' || action === 'DEL')) {
+      throw new Error(`Production storage configuration missing: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required to persist ${action} on ${key}`);
+    }
+    return null;
+  }
   try {
+    let resp;
     if (action === 'GET') {
-      const resp = await fetch(`${kvUrl}/get/${encodeURIComponent(key)}`, {
+      resp = await fetch(`${kvUrl}/get/${encodeURIComponent(key)}`, {
         headers: { Authorization: `Bearer ${kvToken}` }
       });
+      if (!resp.ok) {
+        throw new Error(`Redis HTTP error: ${resp.status} ${resp.statusText}`);
+      }
       const data = await resp.json();
-      if (data && data.result) {
+      if (data && data.error) {
+        throw new Error(`Redis error: ${data.error}`);
+      }
+      if (data && data.result !== undefined && data.result !== null) {
         return typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
       }
       return null;
@@ -477,7 +494,7 @@ async function syncWithCloudKv(action, key = 'yokohama_records', value = null, t
       const command = ttlSeconds
         ? ['SET', key, valStr, 'EX', String(ttlSeconds)]
         : ['SET', key, valStr];
-      const resp = await fetch(kvUrl, {
+      resp = await fetch(kvUrl, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${kvToken}`,
@@ -485,9 +502,16 @@ async function syncWithCloudKv(action, key = 'yokohama_records', value = null, t
         },
         body: JSON.stringify(command)
       });
-      return await resp.json();
+      if (!resp.ok) {
+        throw new Error(`Redis HTTP error: ${resp.status} ${resp.statusText}`);
+      }
+      const data = await resp.json();
+      if (data && data.error) {
+        throw new Error(`Redis error: ${data.error}`);
+      }
+      return data;
     } else if (action === 'DEL') {
-      const resp = await fetch(kvUrl, {
+      resp = await fetch(kvUrl, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${kvToken}`,
@@ -495,10 +519,21 @@ async function syncWithCloudKv(action, key = 'yokohama_records', value = null, t
         },
         body: JSON.stringify(['DEL', key])
       });
-      return await resp.json();
+      if (!resp.ok) {
+        throw new Error(`Redis HTTP error: ${resp.status} ${resp.statusText}`);
+      }
+      const data = await resp.json();
+      if (data && data.error) {
+        throw new Error(`Redis error: ${data.error}`);
+      }
+      return data;
     }
   } catch (err) {
-    console.error('Cloud KV sync error:', err.message);
+    console.error(`Cloud KV sync error (${action} ${key}):`, err.message);
+    if (isProduction) {
+      throw err;
+    }
+    return null;
   }
   return null;
 }
@@ -506,17 +541,21 @@ async function syncWithCloudKv(action, key = 'yokohama_records', value = null, t
 async function setCloudOtp(email, record) {
   otpStore.set(email, record);
   if (kvUrl && kvToken) {
-    await syncWithCloudKv('SET', `otp:${email}`, record, 300);
+    try {
+      await syncWithCloudKv('SET', `otp:${email}`, record, 300);
+    } catch (e) {}
   }
 }
 
 async function getCloudOtp(email) {
   if (kvUrl && kvToken) {
-    const cloudRecord = await syncWithCloudKv('GET', `otp:${email}`);
-    if (cloudRecord && cloudRecord.otp) {
-      otpStore.set(email, cloudRecord);
-      return cloudRecord;
-    }
+    try {
+      const cloudRecord = await syncWithCloudKv('GET', `otp:${email}`);
+      if (cloudRecord && cloudRecord.otp) {
+        otpStore.set(email, cloudRecord);
+        return cloudRecord;
+      }
+    } catch (e) {}
   }
   return otpStore.get(email) || null;
 }
@@ -524,14 +563,18 @@ async function getCloudOtp(email) {
 async function delCloudOtp(email) {
   otpStore.delete(email);
   if (kvUrl && kvToken) {
-    await syncWithCloudKv('DEL', `otp:${email}`);
+    try {
+      await syncWithCloudKv('DEL', `otp:${email}`);
+    } catch (e) {}
   }
 }
 
 async function setCloudSession(token, sessionData, ttlSeconds = 28800) {
   activeSessions.set(token, sessionData);
   if (kvUrl && kvToken) {
-    await syncWithCloudKv('SET', `sess:${token}`, sessionData, ttlSeconds);
+    try {
+      await syncWithCloudKv('SET', `sess:${token}`, sessionData, ttlSeconds);
+    } catch (e) {}
   }
 }
 
@@ -539,7 +582,9 @@ async function delCloudSession(token) {
   if (!token) return;
   activeSessions.delete(token);
   if (kvUrl && kvToken) {
-    await syncWithCloudKv('DEL', `sess:${token}`);
+    try {
+      await syncWithCloudKv('DEL', `sess:${token}`);
+    } catch (e) {}
   }
 }
 
@@ -547,11 +592,13 @@ async function getCloudSession(token) {
   if (!token) return null;
   let session = null;
   if (kvUrl && kvToken) {
-    const cloudSess = await syncWithCloudKv('GET', `sess:${token}`);
-    if (cloudSess && (cloudSess.email || cloudSess.empNo || cloudSess.role)) {
-      session = cloudSess;
-      activeSessions.set(token, cloudSess);
-    }
+    try {
+      const cloudSess = await syncWithCloudKv('GET', `sess:${token}`);
+      if (cloudSess && (cloudSess.email || cloudSess.empNo || cloudSess.role)) {
+        session = cloudSess;
+        activeSessions.set(token, cloudSess);
+      }
+    } catch (e) {}
   }
   if (!session) {
     session = activeSessions.get(token) || null;
@@ -1256,6 +1303,63 @@ app.post('/api/auth/admin/logout', async (req, res) => {
 // ---------------------------------------------------------------------
 // EMPLOYEE AUTHENTICATION & SECURE SESSIONS
 // ---------------------------------------------------------------------
+
+// Employee Password Cryptographic Engine (Salted scrypt + Legacy SHA256 migration)
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `scrypt:${salt}:${hash}`;
+}
+
+function verifyPassword(password, storedHash) {
+  if (!storedHash || !password) return false;
+  try {
+    if (storedHash.startsWith('scrypt:')) {
+      const parts = storedHash.split(':');
+      if (parts.length !== 3) return false;
+      const salt = parts[1];
+      const expectedHash = parts[2];
+      const actualHash = crypto.scryptSync(password, salt, 64).toString('hex');
+      return crypto.timingSafeEqual(Buffer.from(expectedHash, 'hex'), Buffer.from(actualHash, 'hex'));
+    }
+    // Legacy SHA-256 fallback
+    const sha = crypto.createHash('sha256').update(password).digest('hex');
+    return sha === storedHash;
+  } catch (err) {
+    return false;
+  }
+}
+
+function normalizeDoj(dojStr) {
+  if (!dojStr) return '';
+  const s = String(dojStr).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (m) {
+    const day = m[1].padStart(2, '0');
+    const month = m[2].padStart(2, '0');
+    const year = m[3];
+    return `${year}-${month}-${day}`;
+  }
+  return s;
+}
+
+// Concurrency mutex lock per employee/entity
+const entityLocks = new Map();
+
+async function acquireEntityLock(key) {
+  while (entityLocks.has(key)) {
+    await entityLocks.get(key);
+  }
+  let release;
+  const promise = new Promise(resolve => { release = resolve; });
+  entityLocks.set(key, promise);
+  return () => {
+    entityLocks.delete(key);
+    release();
+  };
+}
+
 app.post('/api/auth/employee/login', async (req, res) => {
   const empNoRaw = (req.body.empNo || '').trim();
   const password = (req.body.password || '').trim();
@@ -1274,22 +1378,34 @@ app.post('/api/auth/employee/login', async (req, res) => {
     return res.status(401).json({ success: false, message: 'Employee ID not found in database' });
   }
 
-  let isValid = false;
-  if (emp.passwordHash) {
-    const inputHash = crypto.createHash('sha256').update(password).digest('hex');
-    isValid = (inputHash === emp.passwordHash);
-  } else {
-    // Backwards-compatible initial verification: emp ID, default '1234', or stored emp.password
-    if (password === emp.empNo || password === '1234' || (emp.password && password === emp.password)) {
-      isValid = true;
-      emp.passwordHash = crypto.createHash('sha256').update(password).digest('hex');
-      delete emp.password;
-      saveAuthoritativeEmployees(employees).catch(e => console.error('Save employee password hash error:', e.message));
-    }
+  // Explicit rejection of universal default passwords (1234, 0000, employee ID)
+  if (password === '1234' || password === '0000' || password === 'password' || password.toLowerCase() === empNoRaw.toLowerCase()) {
+    return res.status(401).json({
+      success: false,
+      requireSetup: !emp.passwordHash,
+      message: !emp.passwordHash 
+        ? 'Account not initialized. Default credentials (1234, employee ID) are disabled for security. Please complete first-time password setup.'
+        : 'Invalid Employee ID or password'
+    });
   }
 
+  if (!emp.passwordHash) {
+    return res.status(401).json({
+      success: false,
+      requireSetup: true,
+      message: 'Account not initialized. Please complete first-time password setup.'
+    });
+  }
+
+  const isValid = verifyPassword(password, emp.passwordHash);
   if (!isValid) {
     return res.status(401).json({ success: false, message: 'Invalid Employee ID or password' });
+  }
+
+  // Transparent migration from legacy sha256 to salted scrypt
+  if (!emp.passwordHash.startsWith('scrypt:')) {
+    emp.passwordHash = hashPassword(password);
+    saveAuthoritativeEmployees(employees).catch(() => {});
   }
 
   const empSessionToken = crypto.randomBytes(32).toString('hex');
@@ -1306,14 +1422,167 @@ app.post('/api/auth/employee/login', async (req, res) => {
   };
 
   await setCloudSession(empSessionToken, sessionData, 28800);
-
   res.cookie('emp_session', empSessionToken, getCookieOptions(8 * 60 * 60 * 1000));
+  await logAuditEvent('EMPLOYEE_LOGIN', emp.empNo, 'Employee signed in to portal', req);
 
   return res.json({
     success: true,
     message: 'Employee authenticated successfully',
     token: empSessionToken,
     employee: sessionData
+  });
+});
+
+app.post('/api/auth/employee/setup-password', async (req, res) => {
+  const empNoRaw = (req.body.empNo || '').trim();
+  const dojRaw = (req.body.doj || '').trim();
+  const newPassword = (req.body.newPassword || '').trim();
+
+  if (!empNoRaw || !dojRaw || !newPassword) {
+    return res.status(400).json({
+      success: false,
+      message: 'Employee ID, Date of Joining (DOJ), and new password are required'
+    });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({
+      success: false,
+      message: 'Password must be at least 6 characters long'
+    });
+  }
+
+  const forbidden = ['1234', '12345', '123456', '0000', 'password', empNoRaw.toLowerCase()];
+  if (forbidden.includes(newPassword.toLowerCase())) {
+    return res.status(400).json({
+      success: false,
+      message: 'Please choose a stronger password. Default credentials, trivial sequences, and employee ID are not allowed.'
+    });
+  }
+
+  const employees = await getAuthoritativeEmployees();
+  const emp = employees.find(e => 
+    String(e.empNo).trim().toLowerCase() === empNoRaw.toLowerCase() ||
+    String(e.empNo).trim().toLowerCase() === ('0' + empNoRaw).toLowerCase()
+  );
+
+  if (!emp) {
+    return res.status(401).json({
+      success: false,
+      message: 'Employee ID verification failed'
+    });
+  }
+
+  const normalizedInputDoj = normalizeDoj(dojRaw);
+  const normalizedEmpDoj = normalizeDoj(emp.doj);
+
+  if (!normalizedEmpDoj || normalizedInputDoj !== normalizedEmpDoj) {
+    return res.status(401).json({
+      success: false,
+      message: 'Verification failed: Date of Joining does not match records'
+    });
+  }
+
+  emp.passwordHash = hashPassword(newPassword);
+  delete emp.password;
+
+  await saveAuthoritativeEmployees(employees);
+  await logAuditEvent('EMPLOYEE_PASSWORD_SETUP', emp.empNo, 'Employee completed password setup', req);
+
+  return res.json({
+    success: true,
+    message: 'Password configured successfully. You may now sign in.'
+  });
+});
+
+app.post('/api/auth/employee/reset-password', async (req, res) => {
+  const empNoRaw = (req.body.empNo || '').trim();
+  const dojRaw = (req.body.doj || '').trim();
+  const newPassword = (req.body.newPassword || '').trim();
+
+  if (!empNoRaw || !dojRaw || !newPassword) {
+    return res.status(400).json({
+      success: false,
+      message: 'Employee ID, Date of Joining (DOJ), and new password are required'
+    });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({
+      success: false,
+      message: 'Password must be at least 6 characters long'
+    });
+  }
+
+  const forbidden = ['1234', '12345', '123456', '0000', 'password', empNoRaw.toLowerCase()];
+  if (forbidden.includes(newPassword.toLowerCase())) {
+    return res.status(400).json({
+      success: false,
+      message: 'Please choose a stronger password. Default credentials, trivial sequences, and employee ID are not allowed.'
+    });
+  }
+
+  const employees = await getAuthoritativeEmployees();
+  const emp = employees.find(e => 
+    String(e.empNo).trim().toLowerCase() === empNoRaw.toLowerCase() ||
+    String(e.empNo).trim().toLowerCase() === ('0' + empNoRaw).toLowerCase()
+  );
+
+  if (!emp) {
+    return res.status(401).json({
+      success: false,
+      message: 'Employee ID verification failed'
+    });
+  }
+
+  const normalizedInputDoj = normalizeDoj(dojRaw);
+  const normalizedEmpDoj = normalizeDoj(emp.doj);
+
+  if (!normalizedEmpDoj || normalizedInputDoj !== normalizedEmpDoj) {
+    return res.status(401).json({
+      success: false,
+      message: 'Verification failed: Date of Joining does not match records'
+    });
+  }
+
+  emp.passwordHash = hashPassword(newPassword);
+  delete emp.password;
+
+  await saveAuthoritativeEmployees(employees);
+  await logAuditEvent('EMPLOYEE_PASSWORD_RESET', emp.empNo, 'Employee reset password', req);
+
+  return res.json({
+    success: true,
+    message: 'Password reset successfully. You may now sign in with your new password.'
+  });
+});
+
+app.post('/api/admin/employees/:empNo/reset-password', requireAdminAuth, async (req, res) => {
+  const empNoRaw = (req.params.empNo || '').trim();
+  const newPassword = (req.body.newPassword || '').trim();
+
+  const employees = await getAuthoritativeEmployees();
+  const emp = employees.find(e => String(e.empNo).trim().toLowerCase() === empNoRaw.toLowerCase());
+  if (!emp) {
+    return res.status(404).json({ success: false, message: 'Employee not found' });
+  }
+
+  if (newPassword) {
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    }
+    emp.passwordHash = hashPassword(newPassword);
+  } else {
+    delete emp.passwordHash;
+  }
+  delete emp.password;
+
+  await saveAuthoritativeEmployees(employees);
+  await logAuditEvent('ADMIN_RESET_EMP_PASSWORD', req.authUser.email || req.authUser.name, `Admin reset password for employee ${emp.empNo}`, req);
+
+  return res.json({
+    success: true,
+    message: newPassword ? `Password updated for employee ${emp.empNo}` : `Password cleared for employee ${emp.empNo}. Employee will complete first-time setup.`
   });
 });
 
@@ -1520,22 +1789,29 @@ async function saveAuthoritativeQuestions(qb) {
   } catch (e) {}
 }
 
-// Authoritative Assessment Records Store (Redis Single Source of Truth + Optimistic Concurrency)
+// Authoritative Assessment Records Store (Redis Single Source of Truth + Concurrency Guard)
 async function getAuthoritativeRecords() {
   if (kvUrl && kvToken) {
-    const cloudRecords = await syncWithCloudKv('GET', 'yokohama_records');
-    if (cloudRecords && typeof cloudRecords === 'object' && !cloudRecords.error && Object.keys(cloudRecords).length > 0) {
-      // Cloud is authoritative: update local cache
-      globalAssessmentRecords.clear();
-      Object.entries(cloudRecords).forEach(([k, v]) => globalAssessmentRecords.set(String(k), v));
-      return cloudRecords;
+    try {
+      const cloudRecords = await syncWithCloudKv('GET', 'yokohama_records');
+      if (cloudRecords !== null && typeof cloudRecords === 'object' && !cloudRecords.error) {
+        // Cloud is authoritative source of truth. Even if empty or __initialized, do NOT load seed files!
+        const clean = { ...cloudRecords };
+        delete clean.__initialized;
+        globalAssessmentRecords.clear();
+        Object.entries(clean).forEach(([k, v]) => globalAssessmentRecords.set(String(k), v));
+        return clean;
+      }
+    } catch (e) {
+      if (isProduction) throw e;
     }
   }
-  if (globalAssessmentRecords.size === 0) {
+  if (globalAssessmentRecords.size === 0 && !globalAssessmentRecords._isExplicitlyCleared) {
     if (fs.existsSync(RECORDS_JSON_FILE)) {
       try {
         const raw = fs.readFileSync(RECORDS_JSON_FILE, 'utf-8');
         const parsed = JSON.parse(raw);
+        delete parsed.__initialized;
         Object.entries(parsed).forEach(([k, v]) => globalAssessmentRecords.set(String(k), v));
       } catch (e) {}
     } else {
@@ -1550,55 +1826,60 @@ async function getAuthoritativeRecords() {
       } catch (e) {}
     }
   }
-  return Object.fromEntries(globalAssessmentRecords);
+  const result = Object.fromEntries(globalAssessmentRecords);
+  delete result.__initialized;
+  return result;
 }
 
 async function saveAuthoritativeRecord(empNo, updaterOrData) {
   const strEmpNo = String(empNo).trim();
-  const currentRecords = await getAuthoritativeRecords();
-  const existing = currentRecords[strEmpNo] || {};
-
-  let updatedData;
-  if (typeof updaterOrData === 'function') {
-    updatedData = updaterOrData(existing);
-  } else {
-    updatedData = { ...existing, ...updaterOrData };
-  }
-
-  // Optimistic concurrency & version tracking
-  updatedData.version = (existing.version || 0) + 1;
-  updatedData.updatedAt = new Date().toISOString();
-
-  currentRecords[strEmpNo] = updatedData;
-  globalAssessmentRecords.set(strEmpNo, updatedData);
-
-  if (kvUrl && kvToken) {
-    await syncWithCloudKv('SET', 'yokohama_records', currentRecords);
-  }
-
+  const release = await acquireEntityLock(`record:${strEmpNo}`);
   try {
-    fs.writeFileSync(RECORDS_JSON_FILE, JSON.stringify(currentRecords, null, 2), 'utf-8');
-  } catch (err) {}
+    const currentRecords = await getAuthoritativeRecords();
+    const existing = currentRecords[strEmpNo] || {};
 
-  return updatedData;
+    let updatedData;
+    if (typeof updaterOrData === 'function') {
+      updatedData = updaterOrData(existing);
+    } else {
+      updatedData = { ...existing, ...updaterOrData };
+    }
+
+    // Monotonic optimistic concurrency versioning & audit timestamp
+    updatedData.version = (existing.version || 0) + 1;
+    updatedData.updatedAt = new Date().toISOString();
+
+    currentRecords[strEmpNo] = updatedData;
+    currentRecords.__initialized = true;
+    globalAssessmentRecords.set(strEmpNo, updatedData);
+
+    if (kvUrl && kvToken) {
+      await syncWithCloudKv('SET', 'yokohama_records', currentRecords);
+    }
+
+    return updatedData;
+  } finally {
+    release();
+  }
 }
 
 async function resetAuthoritativeRecords(filterFn = null) {
   if (!filterFn) {
-    // Reset all
+    // Reset all: mark initialized and explicitly cleared so seed data never resurrects
     globalAssessmentRecords.clear();
+    globalAssessmentRecords._isExplicitlyCleared = true;
     activeExamSessions.clear();
     if (kvUrl && kvToken) {
-      await syncWithCloudKv('SET', 'yokohama_records', {});
+      await syncWithCloudKv('SET', 'yokohama_records', { __initialized: true });
     }
-    try { fs.writeFileSync(RECORDS_JSON_FILE, JSON.stringify({}, null, 2), 'utf-8'); } catch (e) {}
     return {};
   }
 
   const currentRecords = await getAuthoritativeRecords();
-  const newRecords = {};
+  const newRecords = { __initialized: true };
   let resetCount = 0;
   for (const [k, v] of Object.entries(currentRecords)) {
+    if (k === '__initialized') continue;
     if (filterFn(k, v)) {
       resetCount++;
       activeExamSessions.delete(String(k).trim());
@@ -1611,30 +1892,41 @@ async function resetAuthoritativeRecords(filterFn = null) {
   }
 
   globalAssessmentRecords.clear();
-  Object.entries(newRecords).forEach(([k, v]) => globalAssessmentRecords.set(k, v));
+  Object.entries(newRecords).forEach(([k, v]) => {
+    if (k !== '__initialized') globalAssessmentRecords.set(k, v);
+  });
+  globalAssessmentRecords._isExplicitlyCleared = true;
 
   if (kvUrl && kvToken) {
     await syncWithCloudKv('SET', 'yokohama_records', newRecords);
   }
-  try { fs.writeFileSync(RECORDS_JSON_FILE, JSON.stringify(newRecords, null, 2), 'utf-8'); } catch (e) {}
-  return { newRecords, resetCount };
+  const cleanRet = { ...newRecords };
+  delete cleanRet.__initialized;
+  return { newRecords: cleanRet, resetCount };
 }
 
-// Authoritative OJT Store
+// Authoritative OJT Store (Redis Single Source of Truth + Concurrency Guard)
 async function getAuthoritativeOjtEvaluations() {
   if (kvUrl && kvToken) {
-    const cloudOjt = await syncWithCloudKv('GET', 'yokohama_ojt_evaluations');
-    if (cloudOjt && typeof cloudOjt === 'object' && !cloudOjt.error && Object.keys(cloudOjt).length > 0) {
-      globalOjtEvaluations.clear();
-      Object.entries(cloudOjt).forEach(([k, v]) => globalOjtEvaluations.set(String(k), v));
-      return cloudOjt;
+    try {
+      const cloudOjt = await syncWithCloudKv('GET', 'yokohama_ojt_evaluations');
+      if (cloudOjt !== null && typeof cloudOjt === 'object' && !cloudOjt.error) {
+        const clean = { ...cloudOjt };
+        delete clean.__initialized;
+        globalOjtEvaluations.clear();
+        Object.entries(clean).forEach(([k, v]) => globalOjtEvaluations.set(String(k), v));
+        return clean;
+      }
+    } catch (e) {
+      if (isProduction) throw e;
     }
   }
-  if (globalOjtEvaluations.size === 0) {
+  if (globalOjtEvaluations.size === 0 && !globalOjtEvaluations._isExplicitlyCleared) {
     if (fs.existsSync(OJT_JSON_FILE)) {
       try {
         const raw = fs.readFileSync(OJT_JSON_FILE, 'utf-8');
         const parsed = JSON.parse(raw);
+        delete parsed.__initialized;
         Object.entries(parsed).forEach(([k, v]) => globalOjtEvaluations.set(String(k), v));
       } catch (e) {}
     } else {
@@ -1649,22 +1941,34 @@ async function getAuthoritativeOjtEvaluations() {
       } catch (e) {}
     }
   }
-  return Object.fromEntries(globalOjtEvaluations);
+  const result = Object.fromEntries(globalOjtEvaluations);
+  delete result.__initialized;
+  return result;
 }
 
 async function saveAuthoritativeOjtEvaluation(empNo, ojtData) {
   const strEmpNo = String(empNo).trim();
-  const current = await getAuthoritativeOjtEvaluations();
-  current[strEmpNo] = ojtData;
-  globalOjtEvaluations.set(strEmpNo, ojtData);
-
-  if (kvUrl && kvToken) {
-    await syncWithCloudKv('SET', 'yokohama_ojt_evaluations', current);
-  }
+  const release = await acquireEntityLock(`ojt:${strEmpNo}`);
   try {
-    fs.writeFileSync(OJT_JSON_FILE, JSON.stringify(current, null, 2), 'utf-8');
-  } catch (err) {}
-  return ojtData;
+    const current = await getAuthoritativeOjtEvaluations();
+    const existing = current[strEmpNo] || {};
+    const updated = {
+      ...existing,
+      ...ojtData,
+      version: (existing.version || 0) + 1,
+      updatedAt: new Date().toISOString()
+    };
+    current[strEmpNo] = updated;
+    current.__initialized = true;
+    globalOjtEvaluations.set(strEmpNo, updated);
+
+    if (kvUrl && kvToken) {
+      await syncWithCloudKv('SET', 'yokohama_ojt_evaluations', current);
+    }
+    return updated;
+  } finally {
+    release();
+  }
 }
 
 // Question & Exam Evaluation Helpers
@@ -2039,7 +2343,6 @@ app.post('/api/records/restore-demo', requireAdminAuth, async (req, res) => {
       const parsed = JSON.parse(raw);
       globalAssessmentRecords.clear();
       Object.entries(parsed).forEach(([k, v]) => globalAssessmentRecords.set(String(k), v));
-      try { fs.writeFileSync(RECORDS_JSON_FILE, raw, 'utf-8'); } catch (e) {}
       if (kvUrl && kvToken) {
         await syncWithCloudKv('SET', 'yokohama_records', parsed);
       }
@@ -2388,12 +2691,10 @@ app.post('/api/ojt-evaluations/reset-all', requireSuperAdminAuth, async (req, re
   }
 
   globalOjtEvaluations.clear();
+  globalOjtEvaluations._isExplicitlyCleared = true;
   if (kvUrl && kvToken) {
-    await syncWithCloudKv('SET', 'yokohama_ojt_evaluations', {});
+    await syncWithCloudKv('SET', 'yokohama_ojt_evaluations', { __initialized: true });
   }
-  try {
-    fs.writeFileSync(OJT_JSON_FILE, JSON.stringify({}, null, 2), 'utf-8');
-  } catch (err) {}
 
   await logAuditEvent('RESET_ALL_OJT', req.authUser, 'Reset all OJT practical evaluations to zero finished', req);
   res.json({ success: true, message: 'All OJT evaluations have been reset to 0 finished successfully!' });

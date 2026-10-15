@@ -1,23 +1,135 @@
 [
   {
-    "id": "87463234fc28a127",
-    "timestamp": "2026-10-12T07:15:08.665Z",
-    "action": "SEND_ADMIN_OTP",
-    "user": "reubengeoffrey16@gmail.com",
-    "details": "OTP dispatched (test environment)",
+    "id": "be81e5727d619de0",
+    "timestamp": "2026-10-15T09:48:44.938Z",
+    "action": "EMPLOYEE_PASSWORD_SETUP",
+    "user": "900191",
+    "details": "Employee completed password setup",
     "ip": "127.0.0.1"
   },
   {
-    "id": "2c224a966d561849",
-    "timestamp": "2026-10-12T07:15:10.819Z",
+    "id": "82ec925f7a7bfb3a",
+    "timestamp": "2026-10-15T09:48:46.165Z",
+    "action": "EMPLOYEE_PASSWORD_SETUP",
+    "user": "900262",
+    "details": "Employee completed password setup",
+    "ip": "127.0.0.1"
+  },
+  {
+    "id": "7c210d66762ad8d6",
+    "timestamp": "2026-10-15T09:48:47.700Z",
+    "action": "EMPLOYEE_PASSWORD_SETUP",
+    "user": "900445",
+    "details": "Employee completed password setup",
+    "ip": "127.0.0.1"
+  },
+  {
+    "id": "0aee76eb48544924",
+    "timestamp": "2026-10-15T09:48:48.930Z",
+    "action": "EMPLOYEE_PASSWORD_SETUP",
+    "user": "LN0039",
+    "details": "Employee completed password setup",
+    "ip": "127.0.0.1"
+  },
+  {
+    "id": "910c17f0e7a766f4",
+    "timestamp": "2026-10-15T09:48:49.859Z",
     "action": "ADMIN_LOGIN_PASSWORD",
     "user": "reubengeoffrey16@gmail.com",
     "details": "Admin signed in via password",
     "ip": "127.0.0.1"
   },
   {
-    "id": "6527444a82d85f42",
-    "timestamp": "2026-10-12T07:15:12.659Z",
+    "id": "9998cd8ffa1720bf",
+    "timestamp": "2026-10-15T09:48:51.085Z",
+    "action": "DEPT_LOGIN",
+    "user": "QUALITY CONTROL HOD",
+    "details": "Logged in to Department dashboard",
+    "ip": "127.0.0.1"
+  },
+  {
+    "id": "f6514ff84c46bf7e",
+    "timestamp": "2026-10-15T09:48:53.042Z",
+    "action": "SECTION_LOGIN",
+    "user": "Tire building QA Head",
+    "details": "Logged in to Tire building QA portal",
+    "ip": "127.0.0.1"
+  },
+  {
+    "id": "4e5f351bcb295495",
+    "timestamp": "2026-10-15T09:48:54.773Z",
+    "action": "EVALUATOR_LOGIN",
+    "user": "Safety Evaluator",
+    "details": "Logged in to Safety practical evaluation",
+    "ip": "127.0.0.1"
+  },
+  {
+    "id": "16121ccfb3a80749",
+    "timestamp": "2026-10-15T09:48:56.407Z",
+    "action": "EMPLOYEE_LOGIN",
+    "user": "900262",
+    "details": "Employee signed in to portal",
+    "ip": "127.0.0.1"
+  },
+  {
+    "id": "d533c9ac6bbdedb5",
+    "timestamp": "2026-10-15T09:48:57.732Z",
+    "action": "EMPLOYEE_LOGIN",
+    "user": "900262",
+    "details": "Employee signed in to portal",
+    "ip": "127.0.0.1"
+  },
+  {
+    "id": "0f52943a473c9983",
+    "timestamp": "2026-10-15T09:48:59.781Z",
+    "action": "EMPLOYEE_LOGIN",
+    "user": "900262",
+    "details": "Employee signed in to portal",
+    "ip": "127.0.0.1"
+  },
+  {
+    "id": "caf1174a89d9a905",
+    "timestamp": "2026-10-15T09:49:02.648Z",
+    "action": "EMPLOYEE_LOGIN",
+    "user": "900191",
+    "details": "Employee signed in to portal",
+    "ip": "127.0.0.1"
+  },
+  {
+    "id": "af8f1a99d3b64d18",
+    "timestamp": "2026-10-15T09:49:19.591Z",
+    "action": "EMPLOYEE_PASSWORD_SETUP",
+    "user": "900445",
+    "details": "Employee completed password setup",
+    "ip": "127.0.0.1"
+  },
+  {
+    "id": "e88e1a46eaf4e747",
+    "timestamp": "2026-10-15T09:49:20.569Z",
+    "action": "EMPLOYEE_LOGIN",
+    "user": "900445",
+    "details": "Employee signed in to portal",
+    "ip": "127.0.0.1"
+  },
+  {
+    "id": "fb2cded9675d01fb",
+    "timestamp": "2026-10-15T09:49:21.498Z",
+    "action": "ADMIN_LOGIN_PASSWORD",
+    "user": "reubengeoffrey16@gmail.com",
+    "details": "Admin signed in via password",
+    "ip": "127.0.0.1"
+  },
+  {
+    "id": "b45c150264fe892d",
+    "timestamp": "2026-10-15T09:49:22.722Z",
+    "action": "RESET_ALL_EXAMS",
+    "user": "Administrator",
+    "details": "Reset all assessment records to zero finished",
+    "ip": "127.0.0.1"
+  },
+  {
+    "id": "01756d26d8a998ca",
+    "timestamp": "2026-10-15T09:49:24.257Z",
     "action": "ADMIN_LOGIN_PASSWORD",
     "user": "reubengeoffrey16@gmail.com",
     "details": "Admin signed in via password",

@@ -471,10 +471,9 @@ function handleRoute() {
     return;
   }
 
-  // Explicit Employee Login Page (/employee-portal)
-  if (hash === '/employee-portal' || hash === '/employee/login') {
-    updateRoleNavHighlight('employee');
-    showView('viewEmpLogin');
+  // Dedicated Employee Portal Redirect
+  if (hash === '/employee' || hash === '/employee-portal' || hash === '/employee/login' || hash.startsWith('/employee/')) {
+    window.location.href = '/employee';
     return;
   }
 
@@ -501,30 +500,6 @@ function handleRoute() {
     let sub = hash.replace(/^\/(control-center|secure-control)\/?/, '').trim();
     if (!sub) sub = 'dashboard';
     showControlCenterSubView(sub);
-    return;
-  }
-
-  // Protect Employee routes (/employee/*)
-  if (hash.startsWith('/employee/')) {
-    updateRoleNavHighlight('employee');
-    if (!currentUser) {
-      navigateTo('/employee-portal');
-      return;
-    }
-    
-    if (currentUser) updateUserBadge(currentUser.name);
-
-    if (hash === '/employee/dashboard') {
-      showEmpDashboard();
-    } else if (hash === '/employee/exams') {
-      showEmpExamsView();
-    } else if (hash.startsWith('/employee/exam/')) {
-      showView('viewQuiz');
-    } else if (hash === '/employee/results') {
-      showEmpResultsView();
-    } else if (hash === '/employee/profile') {
-      showEmpProfileView();
-    }
     return;
   }
 
@@ -7381,13 +7356,8 @@ function switchRolePortal(role) {
   });
 
   if (role === 'employee') {
-    const btn = document.getElementById('tabRoleEmp');
-    if (btn) btn.classList.add('active');
-    if (currentUser) {
-      navigateTo('/employee/dashboard');
-    } else {
-      navigateTo('/employee-portal');
-    }
+    window.location.href = '/employee';
+    return;
   } else if (role === 'section') {
     const btn = document.getElementById('tabRoleSection');
     if (btn) btn.classList.add('active');
