@@ -178,11 +178,13 @@ body {
 
 /* Login Modal / Card */
 .login-wrapper {
-  min-height: calc(100vh - 120px);
+  min-height: calc(100vh - 140px);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 30px 20px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 .login-card {
@@ -191,6 +193,7 @@ body {
   box-shadow: var(--shadow-lg);
   width: 100%;
   max-width: 440px;
+  margin: 0 auto;
   overflow: hidden;
   border: 1px solid var(--border-color);
 }
@@ -2232,7 +2235,7 @@ body {
     padding: 10px !important;
   }
   .login-card {
-    margin: 8px !important;
+    margin: 8px auto !important;
     width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box;

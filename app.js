@@ -404,7 +404,7 @@ function handleRoute() {
     const dashWrapper = document.getElementById('ojtDashboardWrapper');
     // If arriving at /ojt-login or no active session, always require actual password login
     if (hash === '/ojt-login' || !ojtSession) {
-      if (loginWrapper) loginWrapper.style.display = 'block';
+      if (loginWrapper) loginWrapper.style.display = 'flex';
       if (dashWrapper) dashWrapper.style.display = 'none';
       const pwdInput = document.getElementById('ojtSectionPassword');
       if (pwdInput) pwdInput.value = '';
@@ -448,7 +448,7 @@ function handleRoute() {
       if (dashWrapper) dashWrapper.style.display = 'block';
       renderSectionDashboard(secSession);
     } else {
-      if (loginWrapper) loginWrapper.style.display = 'block';
+      if (loginWrapper) loginWrapper.style.display = 'flex';
       if (dashWrapper) dashWrapper.style.display = 'none';
     }
     return;
@@ -465,7 +465,7 @@ function handleRoute() {
       if (dashWrapper) dashWrapper.style.display = 'block';
       renderDepartmentDashboard();
     } else {
-      if (loginWrapper) loginWrapper.style.display = 'block';
+      if (loginWrapper) loginWrapper.style.display = 'flex';
       if (dashWrapper) dashWrapper.style.display = 'none';
     }
     return;
@@ -7491,7 +7491,7 @@ function ojtLogout() {
   try { localStorage.removeItem('iluo_ojt_session'); } catch (e) {}
   const loginWrapper = document.getElementById('ojtLoginWrapper');
   const dashWrapper = document.getElementById('ojtDashboardWrapper');
-  if (loginWrapper) loginWrapper.style.display = 'block';
+  if (loginWrapper) loginWrapper.style.display = 'flex';
   if (dashWrapper) dashWrapper.style.display = 'none';
   const pwdInput = document.getElementById('ojtSectionPassword');
   if (pwdInput) {
@@ -7714,7 +7714,7 @@ function logoutSection() {
   sessionStorage.removeItem('iluo_section_session');
   const loginWrapper = document.getElementById('sectionLoginWrapper');
   const dashWrapper = document.getElementById('sectionDashboardWrapper');
-  if (loginWrapper) loginWrapper.style.display = 'block';
+  if (loginWrapper) loginWrapper.style.display = 'flex';
   if (dashWrapper) dashWrapper.style.display = 'none';
 }
 
@@ -7931,7 +7931,7 @@ function logoutDept() {
   sessionStorage.removeItem('iluo_dept_token');
   const loginWrapper = document.getElementById('deptLoginWrapper');
   const dashWrapper = document.getElementById('deptDashboardWrapper');
-  if (loginWrapper) loginWrapper.style.display = 'block';
+  if (loginWrapper) loginWrapper.style.display = 'flex';
   if (dashWrapper) dashWrapper.style.display = 'none';
 }
 
