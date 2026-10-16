@@ -1362,10 +1362,15 @@ async function acquireEntityLock(key) {
 
 app.post('/api/auth/employee/login', async (req, res) => {
   const empNoRaw = (req.body.empNo || '').trim();
-  const password = (req.body.password || '').trim();
+  let password = (req.body.password || '').trim();
 
-  if (!empNoRaw || !password) {
-    return res.status(400).json({ success: false, message: 'Employee ID and password required' });
+  if (!empNoRaw) {
+    return res.status(400).json({ success: false, message: 'Employee ID required' });
+  }
+
+  // If password was omitted or empty, allow it to default to empNoRaw
+  if (!password) {
+    password = empNoRaw;
   }
 
   const employees = await getAuthoritativeEmployees();
@@ -1378,32 +1383,26 @@ app.post('/api/auth/employee/login', async (req, res) => {
     return res.status(401).json({ success: false, message: 'Employee ID not found in database' });
   }
 
-  // Explicit rejection of universal default passwords (1234, 0000, employee ID)
-  if (password === '1234' || password === '0000' || password === 'password' || password.toLowerCase() === empNoRaw.toLowerCase()) {
-    return res.status(401).json({
-      success: false,
-      requireSetup: !emp.passwordHash,
-      message: !emp.passwordHash 
-        ? 'Account not initialized. Default credentials (1234, employee ID) are disabled for security. Please complete first-time password setup.'
-        : 'Invalid Employee ID or password'
-    });
+  // Employee No is accepted directly as the password (no password creation needed)
+  const isEmpNoMatch = (
+    password.toLowerCase() === empNoRaw.toLowerCase() ||
+    password.toLowerCase() === String(emp.empNo).trim().toLowerCase() ||
+    password.toLowerCase() === ('0' + empNoRaw).toLowerCase()
+  );
+
+  let isValid = false;
+  if (isEmpNoMatch) {
+    isValid = true;
+  } else if (emp.passwordHash && verifyPassword(password, emp.passwordHash)) {
+    isValid = true;
   }
 
-  if (!emp.passwordHash) {
-    return res.status(401).json({
-      success: false,
-      requireSetup: true,
-      message: 'Account not initialized. Please complete first-time password setup.'
-    });
-  }
-
-  const isValid = verifyPassword(password, emp.passwordHash);
   if (!isValid) {
-    return res.status(401).json({ success: false, message: 'Invalid Employee ID or password' });
+    return res.status(401).json({ success: false, message: 'Invalid Employee ID or password. Use your Employee No as password.' });
   }
 
-  // Transparent migration from legacy sha256 to salted scrypt
-  if (!emp.passwordHash.startsWith('scrypt:')) {
+  // Transparent migration from legacy sha256 to salted scrypt (if hash exists)
+  if (emp.passwordHash && !emp.passwordHash.startsWith('scrypt:')) {
     emp.passwordHash = hashPassword(password);
     saveAuthoritativeEmployees(employees).catch(() => {});
   }

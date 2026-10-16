@@ -341,10 +341,33 @@ test('TWO-PORTAL 10: Host and path routing serves Employee Portal vs Management 
   assert.ok(hostEmpIndexHtml.includes('Employee Skill Assessment Portal'));
 });
 
-// TEST 11: Universal default passwords are rejected
-test('TWO-PORTAL 11: Universal default passwords (1234, 0000, empNo) are rejected with 401', async () => {
-  const rejectedPasswords = ['1234', '0000', 'password', '900445'];
-  for (const pw of rejectedPasswords) {
+// TEST 11: Employee can log in with Employee No as password without setup
+test('TWO-PORTAL 11: Employee can log in with Employee No as password without setup', async () => {
+  // 1. Employee No as password succeeds
+  const empLoginRes = await fetch(`${baseUrl}/api/auth/employee/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ empNo: '900445', password: '900445' })
+  });
+  assert.strictEqual(empLoginRes.status, 200);
+  const empLoginData = await empLoginRes.json();
+  assert.strictEqual(empLoginData.success, true);
+  assert.strictEqual(empLoginData.employee.empNo, '900445');
+  assert.ok(empLoginData.token);
+
+  // 2. Omitting password also defaults to Employee No and succeeds
+  const empNoPassRes = await fetch(`${baseUrl}/api/auth/employee/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ empNo: '900445', password: '' })
+  });
+  assert.strictEqual(empNoPassRes.status, 200);
+  const empNoPassData = await empNoPassRes.json();
+  assert.strictEqual(empNoPassData.success, true);
+
+  // 3. Wrong passwords are rejected with 401
+  const badPasswords = ['wrongpass', '1234', '0000', 'random999'];
+  for (const pw of badPasswords) {
     const res = await fetch(`${baseUrl}/api/auth/employee/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

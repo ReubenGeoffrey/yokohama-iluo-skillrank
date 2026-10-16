@@ -147,11 +147,17 @@ async function handleEmployeeLogin(e) {
   const empPasswordInput = document.getElementById('empPasswordInput');
 
   const empNo = empIdInput ? empIdInput.value.trim() : '';
-  const password = empPasswordInput ? empPasswordInput.value.trim() : '';
+  let password = empPasswordInput ? empPasswordInput.value.trim() : '';
 
-  if (!empNo || !password) {
-    showToast('Please enter both Employee ID and password.', 'error');
+  if (!empNo) {
+    showToast('Please enter your Employee ID.', 'error');
     return;
+  }
+
+  // If password field was left blank, default to Employee No
+  if (!password) {
+    password = empNo;
+    if (empPasswordInput) empPasswordInput.value = empNo;
   }
 
   try {
@@ -163,12 +169,6 @@ async function handleEmployeeLogin(e) {
     });
 
     const data = await res.json();
-
-    if (data.requireSetup) {
-      showToast(data.message || 'Please configure your password.', 'info');
-      openPasswordSetupModal('setup', empNo);
-      return;
-    }
 
     if (data.success && data.token) {
       empState.employee = data.employee;
@@ -185,7 +185,7 @@ async function handleEmployeeLogin(e) {
       await loadEmployeeDashboard();
       showEmployeeView('viewEmpDashboard');
     } else {
-      showToast(data.message || 'Invalid Employee ID or password.', 'error');
+      showToast(data.message || 'Invalid Employee ID or password. Use your Employee No as password.', 'error');
     }
   } catch (err) {
     console.error('Login error:', err);
