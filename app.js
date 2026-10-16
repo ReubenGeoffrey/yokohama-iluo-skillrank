@@ -2966,12 +2966,13 @@ async function syncCloudSettings() {
 
 function saveSecuritySettings(e) {
   if (e) e.preventDefault();
+  const otpDurationEl = document.getElementById('secOtpDuration');
   const settings = {
     adminEmail: document.getElementById('secAdminEmail').value.trim(),
     passingPct: parseInt(document.getElementById('secPassingPct').value) || 70,
     maxTabSwitches: parseInt(document.getElementById('secMaxTabSwitches').value) || 3,
     tabAction: document.getElementById('secTabAction').value,
-    otpDuration: parseInt(document.getElementById('secOtpDuration').value) || 60
+    otpDuration: otpDurationEl ? (parseInt(otpDurationEl.value) || 60) : 60
   };
 
   try {
