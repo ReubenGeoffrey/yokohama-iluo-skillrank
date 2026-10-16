@@ -519,10 +519,10 @@ function renderActiveQuestion() {
   container.innerHTML = '';
 
   const chosenAns = empState.userAnswers[q.id];
-  const btnNext = document.getElementById('btnNextQ');
+    const btnNext = document.getElementById('btnNextQ');
   if (btnNext) {
     btnNext.disabled = (chosenAns === undefined);
-    btnNext.innerText = (index === questions.length - 1) ? 'Submit Assessment ✓' : 'Next Question »';
+    btnNext.innerText = (index === questions.length - 1) ? 'Finish & Sign Assessment »' : 'Next Question »';
   }
 
   const options = q.options || [];
@@ -574,14 +574,175 @@ function handleNextQuestion() {
     empState.currentQIndex++;
     renderActiveQuestion();
   } else {
-    // Final question submission
-    submitEmployeeExam();
+    // Open candidate manual signature modal before final submission
+    openSignatureModal();
   }
 }
 window.handleNextQuestion = handleNextQuestion;
 
+// Signature State & Handlers (Unified Touch & Mouse Drawing)
+let signatureState = {
+  isDrawing: false,
+  hasSigned: false,
+  canvas: null,
+  ctx: null,
+  lastX: 0,
+  lastY: 0,
+  initialized: false
+};
+
+function initSignatureCanvas() {
+  const canvas = document.getElementById('signatureCanvas');
+  if (!canvas) return;
+  signatureState.canvas = canvas;
+
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const width = rect.width || 470;
+  const height = 180;
+
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  signatureState.ctx = ctx;
+  signatureState.hasSigned = false;
+
+  ctx.clearRect(0, 0, width, height);
+
+  if (signatureState.initialized) return;
+  signatureState.initialized = true;
+
+  function getPos(e) {
+    const cRect = canvas.getBoundingClientRect();
+    let clientX, clientY;
+    if (e.touches && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else if (e.changedTouches && e.changedTouches.length > 0) {
+      clientX = e.changedTouches[0].clientX;
+      clientY = e.changedTouches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+    return {
+      x: clientX - cRect.left,
+      y: clientY - cRect.top
+    };
+  }
+
+  function start(e) {
+    e.preventDefault();
+    signatureState.isDrawing = true;
+    const pos = getPos(e);
+    signatureState.lastX = pos.x;
+    signatureState.lastY = pos.y;
+  }
+
+  function move(e) {
+    if (!signatureState.isDrawing) return;
+    e.preventDefault();
+    const pos = getPos(e);
+    const ctx = signatureState.ctx;
+
+    ctx.beginPath();
+    ctx.moveTo(signatureState.lastX, signatureState.lastY);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.strokeStyle = '#002B49'; // Yokohama ATG deep dark blue ink
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    signatureState.lastX = pos.x;
+    signatureState.lastY = pos.y;
+    signatureState.hasSigned = true;
+
+    const guide = document.getElementById('signatureGuideText');
+    if (guide) guide.style.display = 'none';
+  }
+
+  function stop(e) {
+    if (signatureState.isDrawing) {
+      e.preventDefault();
+      signatureState.isDrawing = false;
+    }
+  }
+
+  // Pointer events (native touch & mouse unified)
+  canvas.addEventListener('pointerdown', start);
+  canvas.addEventListener('pointermove', move);
+  canvas.addEventListener('pointerup', stop);
+  canvas.addEventListener('pointercancel', stop);
+
+  // Touch fallback
+  canvas.addEventListener('touchstart', start, { passive: false });
+  canvas.addEventListener('touchmove', move, { passive: false });
+  canvas.addEventListener('touchend', stop, { passive: false });
+
+  // Mouse fallback
+  canvas.addEventListener('mousedown', start);
+  canvas.addEventListener('mousemove', move);
+  canvas.addEventListener('mouseup', stop);
+  canvas.addEventListener('mouseleave', stop);
+}
+
+function openSignatureModal() {
+  const modal = document.getElementById('signatureModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+
+  if (empState.employee) {
+    setText('signModalEmpName', empState.employee.name || 'Candidate');
+    setText('signModalEmpNo', empState.employee.empNo || '');
+  }
+  const dateStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  setText('signModalDate', dateStr);
+
+  const guide = document.getElementById('signatureGuideText');
+  if (guide) guide.style.display = 'block';
+
+  setTimeout(() => {
+    initSignatureCanvas();
+  }, 50);
+}
+window.openSignatureModal = openSignatureModal;
+
+function closeSignatureModal() {
+  const modal = document.getElementById('signatureModal');
+  if (modal) modal.style.display = 'none';
+}
+window.closeSignatureModal = closeSignatureModal;
+
+function clearSignatureCanvas() {
+  if (!signatureState.canvas || !signatureState.ctx) return;
+  const rect = signatureState.canvas.getBoundingClientRect();
+  const width = rect.width || 470;
+  const height = 180;
+  signatureState.ctx.clearRect(0, 0, width, height);
+  signatureState.hasSigned = false;
+
+  const guide = document.getElementById('signatureGuideText');
+  if (guide) guide.style.display = 'block';
+}
+window.clearSignatureCanvas = clearSignatureCanvas;
+
+function confirmSignatureAndSubmit() {
+  if (!signatureState.hasSigned) {
+    showToast('Please provide your signature before finishing.', 'error');
+    return;
+  }
+
+  const signatureDataUrl = signatureState.canvas ? signatureState.canvas.toDataURL('image/png') : '';
+  closeSignatureModal();
+  submitEmployeeExam(false, signatureDataUrl);
+}
+window.confirmSignatureAndSubmit = confirmSignatureAndSubmit;
+
 // Submit Exam
-async function submitEmployeeExam(isAuto = false) {
+async function submitEmployeeExam(isAuto = false, candidateSignature = '') {
   if (empState.isSubmitting) return;
   empState.isSubmitting = true;
 
@@ -596,12 +757,16 @@ async function submitEmployeeExam(isAuto = false) {
       },
       body: JSON.stringify({
         empNo: empState.employee.empNo,
-        answers: empState.userAnswers
+        answers: empState.userAnswers,
+        candidateSignature: candidateSignature || ''
       })
     });
 
     const data = await res.json();
     if (data.success && data.record) {
+      if (candidateSignature && !data.record.candidateSignature) {
+        data.record.candidateSignature = candidateSignature;
+      }
       showResultView(data.record);
     } else {
       showToast(data.message || 'Submission error', 'error');
@@ -637,6 +802,16 @@ function showResultView(record) {
   setText('resQuality', formatCatScore(catMarks.quality, 10));
   setText('resProcess', formatCatScore(catMarks.process, 10));
   setText('resCiTpm', formatCatScore(catMarks.ciTpm, 5));
+
+  // Display verified candidate signature
+  const sigBox = document.getElementById('resultSignatureBox');
+  const sigImg = document.getElementById('resultSignatureImg');
+  if (sigBox && sigImg && record.candidateSignature) {
+    sigImg.src = record.candidateSignature;
+    sigBox.style.display = 'block';
+  } else if (sigBox) {
+    sigBox.style.display = 'none';
+  }
 
   showEmployeeView('viewResult');
 }

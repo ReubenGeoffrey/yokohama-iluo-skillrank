@@ -2486,6 +2486,11 @@ app.post('/api/exam/submit', requireEmpAuth, async (req, res) => {
       scoredRecord.tabSwitchCount = existing.tabSwitchCount;
     }
 
+    const candidateSignature = (req.body && (req.body.candidateSignature || req.body.signature)) || '';
+    if (candidateSignature) {
+      scoredRecord.candidateSignature = candidateSignature;
+    }
+
     // Save final record authoritatively
     await saveAuthoritativeRecord(strEmpNo, scoredRecord);
 

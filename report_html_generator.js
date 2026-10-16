@@ -499,6 +499,7 @@ function generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmp
   <table class="sign-table">
     <tr>
       <td>
+        ${record && record.candidateSignature ? `<img src="${record.candidateSignature}" alt="Candidate Signature" style="max-height: 40px; max-width: 120px; object-fit: contain; display: block; margin: 0 auto 4px auto;">` : ''}
         <div class="sign-title">Candidate Signature</div>
       </td>
       <td>
