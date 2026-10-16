@@ -198,6 +198,17 @@
         </div>
       </div>
 
+      <!-- Promotion / Skill Level Switch Banner (Visible when passed) -->
+      <div id="dashPromotionBanner" style="display: none; background: #ECFDF5; border: 1.5px solid #10B981; border-radius: 12px; padding: 14px 20px; margin-bottom: 20px; box-shadow: var(--shadow-sm);">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-size: 1.6rem;">🎉</span>
+          <div>
+            <div style="font-size: 0.95rem; font-weight: 800; color: #065F46;" id="dashPromoTitle">Skill Level Successfully Switched!</div>
+            <div style="font-size: 0.84rem; color: #047857; margin-top: 2px;" id="dashPromoText">Based on your experience and successful exam completion, your skill qualification has been upgraded.</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Assigned Assessment Action Card -->
       <div style="background: white; border-radius: 14px; border: 2px solid #005B9E; padding: 24px; box-shadow: var(--shadow-sm); margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
         <div style="flex: 1; min-width: 280px;">
@@ -369,6 +380,7 @@
           <div id="resultPassBadge" style="display: inline-block; padding: 4px 14px; border-radius: 20px; font-weight: 700; font-size: 0.85rem; background: #DCFCE7; color: #166534;">
             PASSED (Threshold: 50%)
           </div>
+          <div id="resultSwitchNotice" style="display: none; margin-top: 12px; background: #ECFDF5; border: 1.5px solid #10B981; color: #065F46; font-weight: 800; font-size: 0.9rem; padding: 10px 14px; border-radius: 8px;"></div>
 
           <div class="category-breakdown-grid" style="margin-top: 20px; text-align: left;">
             <div class="category-box safety">
@@ -403,7 +415,7 @@
           Your theoretical MCQ score is submitted. Your practical Skill Assessment evaluation will be conducted and scored on the shop floor by your Section Supervisor.
         </div>
 
-        <button class="btn-primary" style="padding: 12px 28px; font-weight: 700;" onclick="showEmployeeView('viewEmpDashboard')">
+        <button class="btn-primary" style="padding: 12px 28px; font-weight: 700;" onclick="handleReturnToDashboard()">
           Return to My Dashboard &rarr;
         </button>
       </div>

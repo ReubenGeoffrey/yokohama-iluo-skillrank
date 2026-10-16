@@ -1599,6 +1599,14 @@ app.get('/api/auth/employee/me', async (req, res) => {
   if (!user || user.role !== 'emp') {
     return res.json({ success: true, authenticated: false, employee: null });
   }
+  const employees = await getAuthoritativeEmployees();
+  const emp = employees.find(e => String(e.empNo).trim().toLowerCase() === String(user.empNo).trim().toLowerCase());
+  if (emp) {
+    user.currentLevel = emp.currentLevel;
+    user.targetLevel = emp.targetLevel;
+    user.skillLevelAssess2025 = emp.skillLevelAssess2025;
+    user.skillLevelExpBased = emp.skillLevelExpBased;
+  }
   return res.json({ success: true, authenticated: true, employee: user });
 });
 
@@ -2491,6 +2499,27 @@ app.post('/api/exam/submit', requireEmpAuth, async (req, res) => {
       scoredRecord.candidateSignature = candidateSignature;
     }
 
+    // Skill level switch upon exam completion / passing
+    if (scoredRecord.isPassed) {
+      if (emp) {
+        const prevLevel = emp.currentLevel || 'I';
+        emp.currentLevel = lvl;
+        await saveAuthoritativeEmployees(employees);
+        await logAuditEvent('LEVEL_PROMOTION', emp.empNo, `Skill level switched from ${prevLevel} to ${lvl} upon exam completion`, req);
+      }
+      scoredRecord.currentLevel = lvl;
+      scoredRecord.switchedLevel = lvl;
+      if (user && user.role === 'emp') {
+        user.currentLevel = lvl;
+        const sessionToken = req.signedCookies.emp_session || req.cookies.emp_session || req.headers['x-emp-token'] || req.headers['x-session-token'];
+        if (sessionToken) {
+          await setCloudSession(sessionToken, user, 28800);
+        }
+      }
+    } else {
+      scoredRecord.currentLevel = (emp && emp.currentLevel) || 'I';
+    }
+
     // Save final record authoritatively
     await saveAuthoritativeRecord(strEmpNo, scoredRecord);
 
@@ -2561,7 +2590,9 @@ app.get('/api/employees', async (req, res) => {
     expCount: e.expCount,
     yearExp: e.yearExp,
     currentLevel: e.currentLevel,
-    targetLevel: e.targetLevel
+    targetLevel: e.targetLevel,
+    skillLevelAssess2025: e.skillLevelAssess2025,
+    skillLevelExpBased: e.skillLevelExpBased
   }));
   res.json({ success: true, employees: safeEmployees });
 });

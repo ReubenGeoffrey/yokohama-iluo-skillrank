@@ -509,3 +509,78 @@ test('TWO-PORTAL 15: Concurrent writes serialize and maintain data consistency',
   assert.ok(evalData.evaluations['900191'].version >= 5, 'Record version must be at least 5 after sequential atomic increments');
 });
 
+// TEST 16: Quality Control employee switches skill level to experience-based target level upon exam completion
+test('TWO-PORTAL 16: QC employee switches skill level to experience-based level upon passing exam', async () => {
+  // 1. Employee 900844 (SAVARIMUTHU F) logs in using Employee ID as password
+  const empLogin = await fetch(`${baseUrl}/api/auth/employee/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ empNo: '900844', password: '900844' })
+  });
+  assert.strictEqual(empLogin.status, 200);
+  const { token, employee } = await empLogin.json();
+  assert.strictEqual(employee.currentLevel, 'U', 'Initial 2025 assessment level must be U');
+  assert.strictEqual(employee.targetLevel, 'O', 'Experience-based target level must be O');
+
+  // 2. Start exam for targetLevel 'O'
+  const startRes = await fetch(`${baseUrl}/api/exam/start`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-emp-token': token
+    },
+    body: JSON.stringify({ empNo: '900844', targetLevel: 'O', forceRetake: true })
+  });
+  assert.strictEqual(startRes.status, 200);
+  const exam = (await startRes.json()).activeExam;
+  assert.strictEqual(exam.targetLevel, 'O');
+
+  // 3. Superadmin retrieves full question bank with correct answers
+  const adminLogin = await fetch(`${baseUrl}/api/auth/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'admin123' })
+  });
+  const adminToken = (await adminLogin.json()).token;
+  const qRes = await fetch(`${baseUrl}/api/questions`, {
+    headers: { 'x-admin-token': adminToken }
+  });
+  const qBank = (await qRes.json()).questionBank;
+  const oQuestions = qBank['O'] || [];
+  const correctMap = new Map();
+  oQuestions.forEach(q => correctMap.set(q.id, q.correctAnswer));
+
+  // Build passing responses
+  const answers = {};
+  exam.questions.forEach(q => {
+    answers[q.id] = correctMap.get(q.id) || 'A';
+  });
+
+  // 4. Submit exam
+  const submitRes = await fetch(`${baseUrl}/api/exam/submit`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-emp-token': token
+    },
+    body: JSON.stringify({
+      empNo: '900844',
+      answers,
+      candidateSignature: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+    })
+  });
+  assert.strictEqual(submitRes.status, 200);
+  const submitData = await submitRes.json();
+  assert.strictEqual(submitData.success, true);
+  assert.strictEqual(submitData.record.isPassed, true, 'Candidate should pass exam');
+  assert.strictEqual(submitData.record.switchedLevel, 'O', 'Record must record switchedLevel O');
+
+  // 5. Verify /api/auth/employee/me reflects switched level O
+  const meRes = await fetch(`${baseUrl}/api/auth/employee/me`, {
+    headers: { 'x-emp-token': token }
+  });
+  assert.strictEqual(meRes.status, 200);
+  const meData = await meRes.json();
+  assert.strictEqual(meData.employee.currentLevel, 'O', 'Current level must switch to O');
+});
+

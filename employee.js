@@ -329,6 +329,18 @@ async function loadEmployeeDashboard() {
   const emp = empState.employee;
   if (!emp) return;
 
+  // Re-fetch me to ensure fresh level promotions from server
+  try {
+    const meRes = await fetch('/api/auth/employee/me', {
+      headers: { 'x-emp-token': empState.token }
+    });
+    const meData = await meRes.json();
+    if (meData.authenticated && meData.employee) {
+      empState.employee = meData.employee;
+      Object.assign(emp, meData.employee);
+    }
+  } catch (e) {}
+
   // Populate Profile
   setText('dashEmpName', emp.name || 'Candidate');
   setText('dashEmpNo', emp.empNo || '-');
@@ -337,14 +349,24 @@ async function loadEmployeeDashboard() {
   setText('dashEmpDesignation', emp.designation || 'QA Inspector');
   setText('dashEmpDeptSec', `${emp.dept || 'Quality Control'} • ${emp.section || 'Tire Building'}`);
 
-  const level = (emp.level || 'U').toUpperCase();
+  const currentLevel = (emp.currentLevel || emp.level || 'U').toUpperCase();
+  const targetLevel = (emp.targetLevel || currentLevel).toUpperCase();
+
   const lvlBadge = document.getElementById('dashLevelBadge');
   if (lvlBadge) {
-    lvlBadge.innerText = level;
-    lvlBadge.className = `iluo-badge iluo-badge-${level.toLowerCase()}`;
+    lvlBadge.innerText = currentLevel;
+    lvlBadge.className = `iluo-badge iluo-badge-${currentLevel.toLowerCase()}`;
   }
-  setText('dashLevelText', `Level ${level}: ${getLevelTitle(level)}`);
-  setText('dashTargetLevel', `Level ${level}`);
+  setText('dashLevelText', `Level ${currentLevel}: ${getLevelTitle(currentLevel)}`);
+
+  const targetEl = document.getElementById('dashTargetLevel');
+  if (targetEl) {
+    if (emp.skillLevelExpBased && emp.skillLevelExpBased !== 'Not Eligible') {
+      targetEl.innerHTML = `Level ${targetLevel} <span style="font-size: 0.75rem; color: #0284C7; font-weight: 600;">(Experience Based)</span>`;
+    } else {
+      targetEl.innerText = `Level ${targetLevel}`;
+    }
+  }
 
   // Fetch candidate record authoritatively
   try {
@@ -355,7 +377,7 @@ async function loadEmployeeDashboard() {
     const records = data.records || {};
     const myRecord = records[emp.empNo];
 
-    renderAssessmentCardStatus(myRecord, level);
+    renderAssessmentCardStatus(myRecord, currentLevel, targetLevel);
   } catch (err) {
     console.error('Error fetching candidate records:', err);
   }
@@ -371,17 +393,37 @@ function getLevelTitle(lvl) {
   }
 }
 
-function renderAssessmentCardStatus(record, currentLevel) {
+function renderAssessmentCardStatus(record, currentLevel, targetLevel) {
   const badge = document.getElementById('dashExamStatusBadge');
   const btn = document.getElementById('btnStartExam');
   const resultCard = document.getElementById('dashResultContainer');
+  const promoBanner = document.getElementById('dashPromotionBanner');
 
   if (record && record.isCompleted) {
+    const isPassed = record.isPassed !== false;
     if (badge) {
-      badge.innerText = 'Completed';
-      badge.style.background = '#DCFCE7';
-      badge.style.color = '#15803D';
+      badge.innerText = isPassed ? 'Completed & Passed' : 'Completed (Retake Required)';
+      badge.style.background = isPassed ? '#DCFCE7' : '#FEE2E2';
+      badge.style.color = isPassed ? '#15803D' : '#991B1B';
     }
+
+    if (isPassed) {
+      const finalLevel = (record.switchedLevel || record.targetLevel || targetLevel || currentLevel).toUpperCase();
+      const lvlBadge = document.getElementById('dashLevelBadge');
+      if (lvlBadge) {
+        lvlBadge.innerText = finalLevel;
+        lvlBadge.className = `iluo-badge iluo-badge-${finalLevel.toLowerCase()}`;
+      }
+      setText('dashLevelText', `Level ${finalLevel}: ${getLevelTitle(finalLevel)} (Switched on Exam Pass)`);
+      if (promoBanner) {
+        promoBanner.style.display = 'block';
+        setText('dashPromoTitle', `Skill Level Switched to Level ${finalLevel}!`);
+        setText('dashPromoText', `Congratulations! Based on your experience and successful exam completion, your qualification has switched to Level ${finalLevel} (${getLevelTitle(finalLevel)}).`);
+      }
+    } else if (promoBanner) {
+      promoBanner.style.display = 'none';
+    }
+
     if (btn) {
       btn.innerText = 'Retake Assessment';
       btn.className = 'btn-secondary';
@@ -391,7 +433,6 @@ function renderAssessmentCardStatus(record, currentLevel) {
     }
     if (resultCard) {
       resultCard.style.display = 'block';
-      const isPassed = record.isPassed !== false;
       const statusBadge = document.getElementById('dashResultStatusBadge');
       if (statusBadge) {
         statusBadge.innerText = isPassed ? 'PASSED' : 'RETAKE REQUIRED';
@@ -406,6 +447,7 @@ function renderAssessmentCardStatus(record, currentLevel) {
       setText('scoreCiTpm', formatCatScore(catMarks.ciTpm, 5));
     }
   } else {
+    if (promoBanner) promoBanner.style.display = 'none';
     if (badge) {
       badge.innerText = 'Pending';
       badge.style.background = '#EFF6FF';
@@ -436,6 +478,8 @@ async function startEmployeeExam() {
   const emp = empState.employee;
   if (!emp) return;
 
+  const targetLvl = emp.targetLevel || emp.currentLevel || emp.level || 'U';
+
   try {
     const res = await fetch('/api/exam/start', {
       method: 'POST',
@@ -445,7 +489,7 @@ async function startEmployeeExam() {
       },
       body: JSON.stringify({
         empNo: emp.empNo,
-        targetLevel: emp.level || 'U',
+        targetLevel: targetLvl,
         forceRetake: true
       })
     });
@@ -767,6 +811,12 @@ async function submitEmployeeExam(isAuto = false, candidateSignature = '') {
       if (candidateSignature && !data.record.candidateSignature) {
         data.record.candidateSignature = candidateSignature;
       }
+      if (data.record.isPassed) {
+        const newLevel = data.record.switchedLevel || data.record.targetLevel;
+        if (newLevel && empState.employee) {
+          empState.employee.currentLevel = newLevel;
+        }
+      }
       showResultView(data.record);
     } else {
       showToast(data.message || 'Submission error', 'error');
@@ -797,6 +847,17 @@ function showResultView(record) {
     passBadge.style.color = isPassed ? '#166534' : '#991B1B';
   }
 
+  const switchNotice = document.getElementById('resultSwitchNotice');
+  if (switchNotice) {
+    if (isPassed) {
+      const switchedTo = record.switchedLevel || record.targetLevel || 'O';
+      switchNotice.style.display = 'block';
+      switchNotice.innerHTML = `🎉 <strong>Skill Level Switched!</strong> Qualified at <strong>Level ${switchedTo}</strong> (${getLevelTitle(switchedTo)}) based on experience &amp; exam completion.`;
+    } else {
+      switchNotice.style.display = 'none';
+    }
+  }
+
   const catMarks = record.categoryMarks || {};
   setText('resSafety', formatCatScore(catMarks.safety, 5));
   setText('resQuality', formatCatScore(catMarks.quality, 10));
@@ -815,6 +876,13 @@ function showResultView(record) {
 
   showEmployeeView('viewResult');
 }
+
+// Return to Dashboard and reload fresh employee profile
+async function handleReturnToDashboard() {
+  await loadEmployeeDashboard();
+  showEmployeeView('viewEmpDashboard');
+}
+window.handleReturnToDashboard = handleReturnToDashboard;
 
 // Anti-cheating tab switch monitor
 function setupTabSwitchDetection() {
