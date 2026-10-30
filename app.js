@@ -7366,12 +7366,7 @@ function switchRolePortal(role) {
   });
 
   if (role === 'employee') {
-    const host = (window.location.hostname || '').toLowerCase();
-    if (host === 'localhost' || host === '127.0.0.1' || host.includes('employee')) {
-      window.location.href = '/employee.html';
-    } else {
-      window.location.href = 'https://yokohama-iluo-employee.vercel.app/';
-    }
+    window.location.href = '/employee.html';
     return;
   } else if (role === 'section') {
     const btn = document.getElementById('tabRoleSection');
