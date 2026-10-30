@@ -1,5 +1,21 @@
 
+let clientCsrfToken = '';
+
+async function initCsrfToken() {
+  try {
+    const res = await fetch('/api/csrf-token', { credentials: 'include' });
+    const data = await res.json();
+    if (data && data.csrfToken) {
+      clientCsrfToken = data.csrfToken;
+    }
+  } catch (e) {}
+}
+if (typeof window !== 'undefined') {
+  initCsrfToken();
+}
+
 function getCsrfToken() {
+  if (clientCsrfToken) return clientCsrfToken;
   if (typeof document === 'undefined') return '';
   const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : '';

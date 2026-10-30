@@ -487,9 +487,18 @@ app.use((req, res, next) => {
   // 2. Strict Fail-Closed Check for Cookie-Authenticated Requests:
   // If ANY session cookie is present, ambient authority is in use.
   // CSRF validation MUST be enforced; having custom headers does NOT bypass it!
+  // Note: Initial login/password setup endpoints are unauthenticated credential submissions.
+  const isAuthLoginRoute = req.path.startsWith('/api/auth/') && (
+    req.path.includes('/login') ||
+    req.path.includes('/send-otp') ||
+    req.path.includes('/verify-otp') ||
+    req.path.includes('/setup-password') ||
+    req.path.includes('/reset-password')
+  );
+
   const hasCookieSession = hasAuthenticatedSessionCookie(req);
 
-  if (hasCookieSession) {
+  if (hasCookieSession && !isAuthLoginRoute) {
     const token = req.headers['x-csrf-token'] || req.headers['x-xsrf-token'] || (req.body && req.body._csrf);
     const secret = req.cookies ? req.cookies['_csrf_secret'] : null;
 

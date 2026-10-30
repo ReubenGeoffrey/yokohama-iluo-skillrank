@@ -1,5 +1,21 @@
 
+let clientCsrfToken = '';
+
+async function initCsrfToken() {
+  try {
+    const res = await fetch('/api/csrf-token', { credentials: 'include' });
+    const data = await res.json();
+    if (data && data.csrfToken) {
+      clientCsrfToken = data.csrfToken;
+    }
+  } catch (e) {}
+}
+if (typeof window !== 'undefined') {
+  initCsrfToken();
+}
+
 function getCsrfToken() {
+  if (clientCsrfToken) return clientCsrfToken;
   if (typeof document === 'undefined') return '';
   const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : '';
@@ -781,7 +797,8 @@ async function handleEmpLogin(e) {
   try {
     const res = await fetch('/api/auth/employee/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({ empNo: empIdVal, password: passwordVal })
     });
     const data = await res.json();
@@ -911,7 +928,7 @@ async function handleAdminLogin(e) {
   try {
     const res = await fetch('/api/auth/admin/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify({ username, password })
     });
@@ -950,7 +967,8 @@ async function handleSendAdminOTP(e) {
   try {
     const res = await fetch('/api/auth/admin/send-otp', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({ email: emailInput })
     });
 
@@ -996,7 +1014,7 @@ async function handleVerifyAdminOTP(e) {
   try {
     const res = await fetch('/api/auth/admin/verify-otp', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify({ email: email, otp: otpEntered })
     });
@@ -7460,7 +7478,7 @@ async function handleOjtSectionLogin(e) {
   try {
     const res = await fetch('/api/auth/evaluator/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify({ section, password: pwd })
     });
@@ -7682,7 +7700,7 @@ async function handleSectionLogin(e) {
   try {
     const res = await fetch('/api/auth/section/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify({ section: secName, password: pwd })
     });
@@ -7905,7 +7923,7 @@ async function handleDeptLogin(e) {
   try {
     const res = await fetch('/api/auth/dept/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify({ department: selectedDept, password: pwd })
     });
