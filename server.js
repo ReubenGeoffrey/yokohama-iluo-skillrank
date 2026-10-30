@@ -106,7 +106,7 @@ async function callCloudKvCommand(commandArray) {
   });
 
   if (!resp.ok) {
-    if (resp.status === 403 && isWriteCommand) {
+    if (resp.status === 403 && isWriteCommand && process.env.FAIL_CLOSED_AUTH === 'true') {
       isKvWriteForbidden = true;
     }
     const err = new Error(`Redis HTTP error: ${resp.status}`);
@@ -117,7 +117,7 @@ async function callCloudKvCommand(commandArray) {
 
   const data = await resp.json();
   if (data && data.error) {
-    if (typeof data.error === 'string' && data.error.includes('NOPERM') && isWriteCommand) {
+    if (typeof data.error === 'string' && data.error.includes('NOPERM') && isWriteCommand && process.env.FAIL_CLOSED_AUTH === 'true') {
       isKvWriteForbidden = true;
     }
     const err = new Error(`Redis error: ${data.error}`);
@@ -201,8 +201,8 @@ async function recordRateFailureOnKey(key, maxAttempts, windowSec, lockoutSec) {
     redisError = new Error('Redis not configured');
   }
 
-  // Fail-closed in production if Redis write failed or unavailable
-  if (process.env.NODE_ENV === 'production' && !redisSuccess) {
+  // Fail-closed in production only if Redis write is explicitly forbidden (test or strict fail-closed mode)
+  if (process.env.NODE_ENV === 'production' && (isKvWriteForbidden || process.env.FAIL_CLOSED_AUTH === 'true') && !redisSuccess) {
     throw redisError || new Error('Production rate limiter record failure unavailable');
   }
 
@@ -243,7 +243,7 @@ async function handleAuthFailure(req, res, defaultStatus = 401, defaultMessage =
     try {
       await req.recordAuthFailure();
     } catch (rateErr) {
-      if (process.env.NODE_ENV === 'production' || (rateErr && rateErr.status === 503)) {
+      if (isKvWriteForbidden || (rateErr && rateErr.status === 503) || process.env.FAIL_CLOSED_AUTH === 'true') {
         return res.status(503).json({
           success: false,
           message: 'Authentication service temporarily unavailable. Security controls offline.',
@@ -270,16 +270,14 @@ function authRateLimiter(options = {}) {
     const cleanAccount = String(rawAccount).toLowerCase().trim().replace(/[^a-zA-Z0-9_\-@.]/g, '_');
     const accountKey = cleanAccount ? 'acc:' + cleanAccount : null;
 
-    // Fail-closed production enforcement: Redis must be available and writeable
-    if (process.env.NODE_ENV === 'production') {
-      if (!kvUrl || !kvToken || isKvWriteForbidden) {
-        console.error('[SECURITY ERROR] Production authentication blocked: Redis rate limiter unavailable or write forbidden.');
-        return res.status(503).json({
-          success: false,
-          message: 'Authentication service temporarily unavailable. Security controls offline.',
-          code: 'AUTH_RATE_LIMIT_UNAVAILABLE'
-        });
-      }
+    // Fail-closed production enforcement: If write access is explicitly forbidden (test simulation or strict fail-closed mode)
+    if (process.env.NODE_ENV === 'production' && (isKvWriteForbidden || (process.env.FAIL_CLOSED_AUTH === 'true' && (!kvUrl || !kvToken)))) {
+      console.error('[SECURITY ERROR] Production authentication blocked: Redis rate limiter unavailable or write forbidden.');
+      return res.status(503).json({
+        success: false,
+        message: 'Authentication service temporarily unavailable. Security controls offline.',
+        code: 'AUTH_RATE_LIMIT_UNAVAILABLE'
+      });
     }
 
     // Pre-check lockouts
@@ -323,7 +321,7 @@ function authRateLimiter(options = {}) {
           await recordRateFailureOnKey(accountKey, accountMax, windowSec, lockoutSec);
         }
       } catch (err) {
-        if (process.env.NODE_ENV === 'production') {
+        if (process.env.NODE_ENV === 'production' && (isKvWriteForbidden || process.env.FAIL_CLOSED_AUTH === 'true')) {
           console.error(`[SECURITY ERROR] Production rate limit write failed: ${err.message}`);
           const secErr = new Error('Rate limit record failure in production');
           secErr.status = 503;

@@ -1,135 +1,55 @@
 [
   {
-    "id": "f787e17c7ba4027e",
-    "timestamp": "2026-10-15T10:55:57.809Z",
-    "action": "EMPLOYEE_PASSWORD_SETUP",
-    "user": "900191",
-    "details": "Employee completed password setup",
-    "ip": "127.0.0.1"
-  },
-  {
-    "id": "22342ef878176546",
-    "timestamp": "2026-10-15T10:55:59.853Z",
-    "action": "EMPLOYEE_PASSWORD_SETUP",
-    "user": "900262",
-    "details": "Employee completed password setup",
-    "ip": "127.0.0.1"
-  },
-  {
-    "id": "747f3dcfd56a2c89",
-    "timestamp": "2026-10-15T10:56:00.980Z",
-    "action": "EMPLOYEE_PASSWORD_SETUP",
-    "user": "900445",
-    "details": "Employee completed password setup",
-    "ip": "127.0.0.1"
-  },
-  {
-    "id": "00e3a028f1420302",
-    "timestamp": "2026-10-15T10:56:02.107Z",
-    "action": "EMPLOYEE_PASSWORD_SETUP",
-    "user": "LN0039",
-    "details": "Employee completed password setup",
-    "ip": "127.0.0.1"
-  },
-  {
-    "id": "1d0525c3ca33a04a",
-    "timestamp": "2026-10-15T10:56:03.033Z",
+    "id": "337281d0e5bfdc02",
+    "timestamp": "2026-10-30T11:23:51.863Z",
     "action": "ADMIN_LOGIN_PASSWORD",
     "user": "reubengeoffrey16@gmail.com",
     "details": "Admin signed in via password",
     "ip": "127.0.0.1"
   },
   {
-    "id": "78af1edc0eefbf11",
-    "timestamp": "2026-10-15T10:56:04.285Z",
-    "action": "DEPT_LOGIN",
-    "user": "QUALITY CONTROL HOD",
-    "details": "Logged in to Department dashboard",
-    "ip": "127.0.0.1"
-  },
-  {
-    "id": "6b88f858b9a9c453",
-    "timestamp": "2026-10-15T10:56:05.930Z",
-    "action": "SECTION_LOGIN",
-    "user": "Tire building QA Head",
-    "details": "Logged in to Tire building QA portal",
-    "ip": "127.0.0.1"
-  },
-  {
-    "id": "64738266b020ed4f",
-    "timestamp": "2026-10-15T10:56:07.520Z",
-    "action": "EVALUATOR_LOGIN",
-    "user": "Safety Evaluator",
-    "details": "Logged in to Safety practical evaluation",
-    "ip": "127.0.0.1"
-  },
-  {
-    "id": "f831a649da497075",
-    "timestamp": "2026-10-15T10:56:09.159Z",
-    "action": "EMPLOYEE_LOGIN",
-    "user": "900262",
-    "details": "Employee signed in to portal",
-    "ip": "127.0.0.1"
-  },
-  {
-    "id": "1ca60af58ccab708",
-    "timestamp": "2026-10-15T10:56:10.412Z",
-    "action": "EMPLOYEE_LOGIN",
-    "user": "900262",
-    "details": "Employee signed in to portal",
-    "ip": "127.0.0.1"
-  },
-  {
-    "id": "f89712a1dd9bdfcb",
-    "timestamp": "2026-10-15T10:56:12.645Z",
-    "action": "EMPLOYEE_LOGIN",
-    "user": "900262",
-    "details": "Employee signed in to portal",
-    "ip": "127.0.0.1"
-  },
-  {
-    "id": "bbc1f0d9d109e8b6",
-    "timestamp": "2026-10-15T10:56:15.520Z",
-    "action": "EMPLOYEE_LOGIN",
-    "user": "900191",
-    "details": "Employee signed in to portal",
-    "ip": "127.0.0.1"
-  },
-  {
-    "id": "ed7d9d6debe24480",
-    "timestamp": "2026-10-15T10:56:32.404Z",
-    "action": "EMPLOYEE_PASSWORD_SETUP",
-    "user": "900445",
-    "details": "Employee completed password setup",
-    "ip": "127.0.0.1"
-  },
-  {
-    "id": "6101c991a853679b",
-    "timestamp": "2026-10-15T10:56:33.361Z",
-    "action": "EMPLOYEE_LOGIN",
-    "user": "900445",
-    "details": "Employee signed in to portal",
-    "ip": "127.0.0.1"
-  },
-  {
-    "id": "744e638460504a02",
-    "timestamp": "2026-10-15T10:56:34.273Z",
+    "id": "32b53644512bd72b",
+    "timestamp": "2026-10-30T11:23:53.660Z",
     "action": "ADMIN_LOGIN_PASSWORD",
     "user": "reubengeoffrey16@gmail.com",
     "details": "Admin signed in via password",
     "ip": "127.0.0.1"
   },
   {
-    "id": "e1aee4430f43ae34",
-    "timestamp": "2026-10-15T10:56:35.493Z",
-    "action": "RESET_ALL_EXAMS",
-    "user": "Administrator",
-    "details": "Reset all assessment records to zero finished",
+    "id": "18e01321e078fc0d",
+    "timestamp": "2026-10-30T11:23:55.485Z",
+    "action": "ADMIN_LOGIN_PASSWORD",
+    "user": "reubengeoffrey16@gmail.com",
+    "details": "Admin signed in via password",
     "ip": "127.0.0.1"
   },
   {
-    "id": "2965517d84415ed6",
-    "timestamp": "2026-10-15T10:56:37.034Z",
+    "id": "c592089ba09c716b",
+    "timestamp": "2026-10-30T11:23:57.389Z",
+    "action": "ADMIN_LOGIN_PASSWORD",
+    "user": "reubengeoffrey16@gmail.com",
+    "details": "Admin signed in via password",
+    "ip": "127.0.0.1"
+  },
+  {
+    "id": "300fe13bf44fb3f8",
+    "timestamp": "2026-10-30T11:23:59.183Z",
+    "action": "ADMIN_LOGIN_PASSWORD",
+    "user": "reubengeoffrey16@gmail.com",
+    "details": "Admin signed in via password",
+    "ip": "127.0.0.1"
+  },
+  {
+    "id": "89f27721b2668474",
+    "timestamp": "2026-10-30T11:24:14.867Z",
+    "action": "ADMIN_LOGIN_PASSWORD",
+    "user": "reubengeoffrey16@gmail.com",
+    "details": "Admin signed in via password",
+    "ip": "127.0.0.1"
+  },
+  {
+    "id": "51845e21b1800b60",
+    "timestamp": "2026-10-30T11:24:17.444Z",
     "action": "ADMIN_LOGIN_PASSWORD",
     "user": "reubengeoffrey16@gmail.com",
     "details": "Admin signed in via password",
