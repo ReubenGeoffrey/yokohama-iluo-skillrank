@@ -84,9 +84,9 @@ Configure these environment variables in your local `.env` and in your Vercel pr
 | `ALLOWED_ORIGINS` | Recommended | Comma-separated trusted origins for CORS & CSRF | `https://management.yourdomain.in,https://employee.yourdomain.in` |
 | `MANAGEMENT_PORTAL_URL` | Optional | Explicit URL of Management Portal | `https://management.yourdomain.in` |
 | `EMPLOYEE_PORTAL_URL` | Optional | Explicit URL of Employee Portal | `https://employee.yourdomain.in` |
-| `SESSION_SECRET` | **Required in Prod** (Min 32 chars) | Cryptographic key used to sign session cookies | `yokohama_production_secret_key_minimum_32_characters_long` |
+| `SESSION_SECRET` | **Required in Prod** (Min 32 chars) | Cryptographic key used to sign session cookies. **Recommendation:** Use separate, distinct secrets for the Management Project and Employee Project to enforce cryptographic boundary isolation between administrative and workman trust zones. | `yokohama_production_secret_key_minimum_32_characters_long` |
 | `UPSTASH_REDIS_REST_URL` | **Required in Prod** | Upstash Redis REST endpoint for multi-instance state sync & persistent durability | `https://your-upstash-redis-url.upstash.io` |
-| `UPSTASH_REDIS_REST_TOKEN` | **Required in Prod** | Upstash Redis REST token | `your_upstash_redis_rest_token_here` |
+| `UPSTASH_REDIS_REST_TOKEN` | **Required in Prod** | **Primary / Read-Write** REST token from Upstash Console. Do *not* use a Read-Only token, as writes will return `403 Forbidden`. | `your_upstash_redis_rest_token_here` |
 | `SMTP_HOST` | Required for OTP | SMTP hostname for HR login OTP dispatch | `smtp.gmail.com` |
 | `SMTP_PORT` | Required for OTP | SMTP port (465 SSL or 587 TLS) | `465` |
 | `SMTP_SECURE` | Required for OTP | SSL socket flag | `true` |
@@ -161,13 +161,15 @@ You can deploy both websites as two independent Vercel projects from this single
 Run the complete regression test runner before any deployment:
 
 ```bash
-# Run complete test suite (48 automated tests across 6 suites)
+# Run complete test suite (73 automated tests across 8 suites)
 npm test
 ```
 
 ### Verified Test Suites:
 - `tests/gate.test.js`: 14/14 passed (SESSION_SECRET fail-fast, zero-credential client scan, zero correctAnswer leak, RBAC, IDOR, audit logs, cookie security)
-- `tests/two_portals.test.js`: 15/15 passed (management isolation, employee isolation, default-password rejection, DOJ verification, empty reset resilience, Redis fail-safe, concurrent write locking)
+- `tests/two_portals.test.js`: 16/16 passed (management isolation, employee isolation, default-password rejection, DOJ verification, empty reset resilience, Redis fail-safe, concurrent write locking, QC employee level promotion)
+- `tests/rate_limiting_atomic.test.js`: 10/10 passed (atomic Lua INCR/EXPIRE, account/IP isolation, concurrent requests serialization, production fail-closed 503 on Redis failure, development fallback 401, lock expiration, multi-instance simulation, full CSRF coverage)
+- `tests/security_audit_phase2.test.js`: 14/14 passed (fail-closed CSRF enforcement, distributed atomic rate limiting, path traversal containment, safe JSON dataset parsing without eval, Chart.js Subresource Integrity)
 - `tests/auth.test.js`: 7/7 passed (admin, evaluator, section head, HOD, and employee login)
 - `tests/exam.test.js`: 3/3 passed (exam start sanitization, server-side scoring, conflict prevention)
 - `tests/security.test.js`: 5/5 passed (static asset allowlist, answer key sanitization, CSRF protection, OTP rate limiting)

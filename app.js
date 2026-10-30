@@ -1,3 +1,10 @@
+
+function getCsrfToken() {
+  if (typeof document === 'undefined') return '';
+  const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : '';
+}
+
 // Yokohama ILUO MCQ Assessment Application Logic & Router
 
 // LocalStorage Keys
@@ -204,6 +211,8 @@ function initStorage() {
 
 function getAuthHeaders(extraHeaders = {}) {
   const headers = { 'Content-Type': 'application/json', ...extraHeaders };
+  const csrf = getCsrfToken();
+  if (csrf) headers['x-csrf-token'] = csrf;
   try {
     const sessStr = localStorage.getItem(STORAGE_KEY_SESSION);
     if (sessStr) {
@@ -4920,7 +4929,7 @@ async function handleQuestionFileUpload(event) {
         errors.push(`${name}: Unsupported file type (use .docx, .xlsx, .xls, or .json).`);
       }
     } catch (err) {
-      console.error('File parse error for ' + name, err);
+      console.error('File parse error for file:', name, err);
       errors.push(`${name}: ${err.message}`);
     }
   }

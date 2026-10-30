@@ -511,6 +511,25 @@ test('TWO-PORTAL 15: Concurrent writes serialize and maintain data consistency',
 
 // TEST 16: Quality Control employee switches skill level to experience-based target level upon exam completion
 test('TWO-PORTAL 16: QC employee switches skill level to experience-based level upon passing exam', async () => {
+  // Ensure idempotent initial state for employee 900844
+  if (app && app.getAuthoritativeEmployees && app.saveAuthoritativeEmployees) {
+    const emps = await app.getAuthoritativeEmployees();
+    const target = emps.find(e => String(e.empNo) === '900844');
+    if (target && target.currentLevel !== 'U') {
+      target.currentLevel = 'U';
+      await app.saveAuthoritativeEmployees(emps);
+    }
+  } else if (fs.existsSync('custom_employees.json')) {
+    try {
+      const emps = JSON.parse(fs.readFileSync('custom_employees.json', 'utf8'));
+      const target = emps.find(e => String(e.empNo) === '900844');
+      if (target && target.currentLevel !== 'U') {
+        target.currentLevel = 'U';
+        fs.writeFileSync('custom_employees.json', JSON.stringify(emps, null, 2));
+      }
+    } catch (e) {}
+  }
+
   // 1. Employee 900844 (SAVARIMUTHU F) logs in using Employee ID as password
   const empLogin = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',

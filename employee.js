@@ -1,3 +1,20 @@
+
+function getCsrfToken() {
+  if (typeof document === 'undefined') return '';
+  const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : '';
+}
+
+function getAuthHeaders(extraHeaders = {}) {
+  const headers = { 'Content-Type': 'application/json', ...extraHeaders };
+  const csrf = getCsrfToken();
+  if (csrf) headers['x-csrf-token'] = csrf;
+  if (typeof empState !== 'undefined' && empState && empState.token) {
+    headers['x-emp-token'] = empState.token;
+  }
+  return headers;
+}
+
 /**
  * Yokohama ILUO - Dedicated Employee Portal Controller
  * Authoritative single-source API client for employee assessments and skill tracking
@@ -100,9 +117,8 @@ async function checkExistingSession() {
     }
 
     const res = await fetch('/api/auth/employee/me', {
-      headers: {
-        'x-emp-token': parsed.token
-      }
+      headers: getAuthHeaders({ 'x-emp-token': parsed.token }),
+      credentials: 'include'
     });
 
     const data = await res.json();
@@ -163,7 +179,7 @@ async function handleEmployeeLogin(e) {
   try {
     const res = await fetch('/api/auth/employee/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify({ empNo, password })
     });
@@ -258,7 +274,7 @@ async function handlePasswordSetupSubmit(e) {
     const endpoint = (mode === 'setup') ? '/api/auth/employee/setup-password' : '/api/auth/employee/reset-password';
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ empNo, doj, newPassword })
     });
     const data = await res.json();
@@ -296,7 +312,7 @@ async function handleEmployeeLogout() {
     if (empState.token) {
       await fetch('/api/auth/employee/logout', {
         method: 'POST',
-        headers: { 'x-emp-token': empState.token },
+        headers: getAuthHeaders(),
         credentials: 'include'
       });
     }
@@ -332,7 +348,8 @@ async function loadEmployeeDashboard() {
   // Re-fetch me to ensure fresh level promotions from server
   try {
     const meRes = await fetch('/api/auth/employee/me', {
-      headers: { 'x-emp-token': empState.token }
+      headers: getAuthHeaders(),
+      credentials: 'include'
     });
     const meData = await meRes.json();
     if (meData.authenticated && meData.employee) {
@@ -371,7 +388,8 @@ async function loadEmployeeDashboard() {
   // Fetch candidate record authoritatively
   try {
     const res = await fetch('/api/records', {
-      headers: { 'x-emp-token': empState.token }
+      headers: getAuthHeaders(),
+      credentials: 'include'
     });
     const data = await res.json();
     const records = data.records || {};
@@ -483,10 +501,8 @@ async function startEmployeeExam() {
   try {
     const res = await fetch('/api/exam/start', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-emp-token': empState.token
-      },
+      headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({
         empNo: emp.empNo,
         targetLevel: targetLvl,
@@ -570,9 +586,12 @@ function renderActiveQuestion() {
   }
 
   const options = q.options || [];
+  const defaultKeys = ['A', 'B', 'C', 'D', 'E', 'F'];
   options.forEach((opt, optIdx) => {
-    const isSelected = (chosenAns === optIdx);
-    const item = document.createElement('label');
+    const optKey = (typeof opt === 'object' && opt && opt.key) ? opt.key : defaultKeys[optIdx] || String(optIdx);
+    const optText = (typeof opt === 'object' && opt && opt.text) ? opt.text : String(opt);
+    const isSelected = (chosenAns === optKey);
+    const item = document.createElement('div');
     item.className = `option-item ${isSelected ? 'selected' : ''}`;
     item.style.display = 'flex';
     item.style.alignItems = 'center';
@@ -587,25 +606,39 @@ function renderActiveQuestion() {
     const radio = document.createElement('input');
     radio.type = 'radio';
     radio.name = `opt_${q.id}`;
-    radio.value = optIdx;
+    radio.value = optKey;
     radio.checked = isSelected;
     radio.style.accentColor = '#005B9E';
     radio.style.width = '18px';
     radio.style.height = '18px';
 
-    radio.onchange = () => {
-      empState.userAnswers[q.id] = optIdx;
+    item.onclick = (e) => {
+      radio.checked = true;
+      empState.userAnswers[q.id] = optKey;
       if (btnNext) btnNext.disabled = false;
-      renderActiveQuestion();
+      document.querySelectorAll('#optionsContainer .option-item').forEach(el => {
+        el.classList.remove('selected');
+        el.style.background = '#F8FAFC';
+        el.style.border = '1px solid #E2E8F0';
+      });
+      item.classList.add('selected');
+      item.style.background = '#EFF6FF';
+      item.style.border = '2px solid #005B9E';
     };
+
+    const keyBadge = document.createElement('strong');
+    keyBadge.style.minWidth = '24px';
+    keyBadge.style.color = '#005B9E';
+    keyBadge.innerText = `${optKey}.`;
 
     const span = document.createElement('span');
     span.style.fontSize = '0.94rem';
     span.style.fontWeight = isSelected ? '700' : '500';
     span.style.color = isSelected ? '#003D6B' : '#0F172A';
-    span.innerText = opt;
+    span.innerText = optText;
 
     item.appendChild(radio);
+    item.appendChild(keyBadge);
     item.appendChild(span);
     container.appendChild(item);
   });
@@ -795,10 +828,8 @@ async function submitEmployeeExam(isAuto = false, candidateSignature = '') {
   try {
     const res = await fetch('/api/exam/submit', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-emp-token': empState.token
-      },
+      headers: getAuthHeaders(),
+      credentials: 'include',
       body: JSON.stringify({
         empNo: empState.employee.empNo,
         answers: empState.userAnswers,

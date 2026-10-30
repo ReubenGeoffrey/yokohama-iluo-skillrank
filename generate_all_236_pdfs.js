@@ -30,7 +30,7 @@ async function main() {
       fs.writeFileSync(path.join(tempDocxDir, `Yokohama_ILUO_Report_${empNo}.docx`), docxBuf);
       count++;
     } catch (err) {
-      console.error(`Error generating DOCX for ${empNo}:`, err.message);
+      console.error('Error generating DOCX for employee:', empNo, err ? err.message : '');
     }
   }
 
@@ -57,7 +57,11 @@ async function main() {
       // Calculate total size
       let totalBytes = 0;
       pdfFiles.forEach(f => {
-        totalBytes += fs.statSync(path.join(targetPdfDir, f)).size;
+        const safeName = path.basename(String(f)).replace(/[^a-zA-Z0-9_\-\.]/g, '');
+        const fullPath = path.resolve(targetPdfDir, safeName);
+        if (fullPath.startsWith(path.resolve(targetPdfDir) + path.sep)) {
+          totalBytes += fs.statSync(fullPath).size;
+        }
       });
       console.log(`Total folder size: ${(totalBytes / (1024 * 1024)).toFixed(2)} MB`);
       

@@ -5,8 +5,22 @@ const cors = require('cors');
 const path = require('path');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
+const Tokens = require('csrf');
+const csrfTokens = new Tokens();
 
 const app = express();
+
+// Security Headers (OWASP Hardening)
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
+});
 const PORT = process.env.PORT || 5000;
 let SESSION_SECRET = process.env.SESSION_SECRET;
 if (!SESSION_SECRET) {
@@ -16,7 +30,8 @@ if (!SESSION_SECRET) {
   SESSION_SECRET = 'dev_ephemeral_session_secret_for_local_testing_only';
 }
 const isProduction = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
-const AUTHORIZED_ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+
+// Upstash Redis KV Configuration
 let rawKvUrl = (process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || '').replace(/['"]/g, '').trim();
 if (rawKvUrl.includes('http')) {
   rawKvUrl = rawKvUrl.substring(rawKvUrl.indexOf('http')).trim();
@@ -33,6 +48,326 @@ if (isProduction && (!kvUrl || !kvToken)) {
   console.warn('⚠️ WARNING: Upstash Redis (UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN) is not configured in production. Authoritative data writes will fail safely.');
 }
 
+// =========================================================================
+// DISTRIBUTED RATE LIMITER & BRUTE-FORCE DEFENSE (Upstash Redis + Fail-Closed)
+// =========================================================================
+const memoryRateCounters = new Map();
+const memoryRateLockouts = new Map();
+let isKvWriteForbidden = false;
+
+// Atomic Lua script executed inside Redis:
+// KEYS[1]: rl:cnt:<key>
+// KEYS[2]: rl:lock:<key>
+// ARGV[1]: windowSec (TTL for counter window in seconds)
+// ARGV[2]: maxAttempts (threshold count)
+// ARGV[3]: lockoutSec (lockout duration in seconds)
+const LUA_ATOMIC_RATE_LIMIT = `
+local lockTtl = redis.call('TTL', KEYS[2])
+if lockTtl > 0 then
+  return lockTtl
+end
+local cnt = redis.call('INCR', KEYS[1])
+if cnt == 1 then
+  redis.call('EXPIRE', KEYS[1], ARGV[1])
+else
+  local currentTtl = redis.call('TTL', KEYS[1])
+  if currentTtl < 0 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+  end
+end
+if cnt >= tonumber(ARGV[2]) then
+  redis.call('SET', KEYS[2], '1', 'EX', ARGV[3])
+  redis.call('DEL', KEYS[1])
+  return tonumber(ARGV[3])
+end
+return 0
+`;
+
+async function callCloudKvCommand(commandArray) {
+  if (!kvUrl || !kvToken) {
+    const err = new Error('Upstash Redis credentials missing');
+    err.code = 'REDIS_MISSING_CREDENTIALS';
+    throw err;
+  }
+  const isWriteCommand = commandArray && ['SET', 'INCR', 'DEL', 'EXPIRE', 'EVAL'].includes(commandArray[0]);
+  if (isWriteCommand && isKvWriteForbidden) {
+    const err = new Error('Upstash Redis write access forbidden (NOPERM)');
+    err.code = 'REDIS_FORBIDDEN';
+    throw err;
+  }
+
+  const resp = await fetch(kvUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${kvToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(commandArray)
+  });
+
+  if (!resp.ok) {
+    if (resp.status === 403 && isWriteCommand) {
+      isKvWriteForbidden = true;
+    }
+    const err = new Error(`Redis HTTP error: ${resp.status}`);
+    err.status = resp.status;
+    err.code = resp.status === 403 ? 'REDIS_FORBIDDEN' : 'REDIS_HTTP_ERROR';
+    throw err;
+  }
+
+  const data = await resp.json();
+  if (data && data.error) {
+    if (typeof data.error === 'string' && data.error.includes('NOPERM') && isWriteCommand) {
+      isKvWriteForbidden = true;
+    }
+    const err = new Error(`Redis error: ${data.error}`);
+    err.code = 'REDIS_COMMAND_ERROR';
+    throw err;
+  }
+
+  return data ? data.result : null;
+}
+
+async function isRateKeyLocked(key) {
+  const now = Date.now();
+  let redisCheckFailed = false;
+  let redisError = null;
+
+  // 1. Check Redis if credentials configured
+  if (kvUrl && kvToken) {
+    try {
+      const ttl = await callCloudKvCommand(['TTL', 'rl:lock:' + key]);
+      if (typeof ttl === 'number') {
+        if (ttl > 0) return ttl;
+        if (ttl === -1) return 900; // Key exists without TTL, assume locked
+      }
+    } catch (e) {
+      redisCheckFailed = true;
+      redisError = e;
+    }
+  } else {
+    redisCheckFailed = true;
+    redisError = new Error('Redis not configured');
+  }
+
+  // Fail-closed in production if Redis check failed
+  if (process.env.NODE_ENV === 'production') {
+    if (redisCheckFailed) {
+      throw redisError || new Error('Production rate limiter check unavailable');
+    }
+    return 0;
+  }
+
+  // 2. Check local fail-safe memory store (development/test only)
+  const lockedUntil = memoryRateLockouts.get(key);
+  if (lockedUntil && now < lockedUntil) {
+    return Math.ceil((lockedUntil - now) / 1000);
+  }
+  if (lockedUntil && now >= lockedUntil) {
+    memoryRateLockouts.delete(key);
+  }
+  return 0;
+}
+
+async function recordRateFailureOnKey(key, maxAttempts, windowSec, lockoutSec) {
+  const now = Date.now();
+  let lockedSeconds = 0;
+  let redisSuccess = false;
+  let redisError = null;
+
+  // 1. Upstash Redis Atomic Lua Execution (INCR + EXPIRE + LOCK + DEL)
+  if (kvUrl && kvToken) {
+    try {
+      const res = await callCloudKvCommand([
+        'EVAL',
+        LUA_ATOMIC_RATE_LIMIT,
+        '2',
+        'rl:cnt:' + key,
+        'rl:lock:' + key,
+        String(windowSec),
+        String(maxAttempts),
+        String(lockoutSec)
+      ]);
+      const resNum = Number(res);
+      if (!isNaN(resNum)) {
+        redisSuccess = true;
+        lockedSeconds = resNum;
+      }
+    } catch (e) {
+      redisSuccess = false;
+      redisError = e;
+    }
+  } else {
+    redisError = new Error('Redis not configured');
+  }
+
+  // Fail-closed in production if Redis write failed or unavailable
+  if (process.env.NODE_ENV === 'production' && !redisSuccess) {
+    throw redisError || new Error('Production rate limiter record failure unavailable');
+  }
+
+  // 2. Fail-safe memory fallback (development/test only)
+  if (!redisSuccess) {
+    let rec = memoryRateCounters.get(key);
+    if (!rec || now > rec.expiresAt) {
+      rec = { count: 0, expiresAt: now + (windowSec * 1000) };
+    }
+    rec.count += 1;
+    memoryRateCounters.set(key, rec);
+
+    if (rec.count >= maxAttempts) {
+      memoryRateLockouts.set(key, now + (lockoutSec * 1000));
+      memoryRateCounters.delete(key);
+      lockedSeconds = lockoutSec;
+    }
+  }
+
+  return lockedSeconds;
+}
+
+async function clearRateAccountSuccess(accountKey) {
+  if (!accountKey) return;
+  // Clear in Redis (Atomic multi-key DEL)
+  if (kvUrl && kvToken) {
+    try {
+      await callCloudKvCommand(['DEL', 'rl:cnt:' + accountKey, 'rl:lock:' + accountKey]);
+    } catch (e) {}
+  }
+  // Clear in local memory fallback
+  memoryRateCounters.delete(accountKey);
+  memoryRateLockouts.delete(accountKey);
+}
+
+async function handleAuthFailure(req, res, defaultStatus = 401, defaultMessage = 'Invalid credentials') {
+  if (req.recordAuthFailure) {
+    try {
+      await req.recordAuthFailure();
+    } catch (rateErr) {
+      if (process.env.NODE_ENV === 'production' || (rateErr && rateErr.status === 503)) {
+        return res.status(503).json({
+          success: false,
+          message: 'Authentication service temporarily unavailable. Security controls offline.',
+          code: 'AUTH_RATE_LIMIT_UNAVAILABLE'
+        });
+      }
+    }
+  }
+  return res.status(defaultStatus).json({ success: false, message: defaultMessage });
+}
+
+function authRateLimiter(options = {}) {
+  const accountMax = options.accountMax || 5;    // Max 5 failed attempts per account
+  const ipMax = options.ipMax || 20;            // Max 20 failed attempts per IP
+  const windowSec = options.windowSec || 600;   // 10 minute failure window
+  const lockoutSec = options.lockoutSec || 900; // 15 minute temporary lockout
+
+  return async (req, res, next) => {
+    const rawIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || (req.socket && req.socket.remoteAddress) || '127.0.0.1';
+    const cleanIp = String(rawIp).replace(/[^a-zA-Z0-9_\-.:]/g, '_');
+    const ipKey = 'ip:' + cleanIp;
+
+    const rawAccount = req.body.empNo || req.body.username || req.body.email || req.body.section || req.body.dept || req.body.evaluatorName || '';
+    const cleanAccount = String(rawAccount).toLowerCase().trim().replace(/[^a-zA-Z0-9_\-@.]/g, '_');
+    const accountKey = cleanAccount ? 'acc:' + cleanAccount : null;
+
+    // Fail-closed production enforcement: Redis must be available and writeable
+    if (process.env.NODE_ENV === 'production') {
+      if (!kvUrl || !kvToken || isKvWriteForbidden) {
+        console.error('[SECURITY ERROR] Production authentication blocked: Redis rate limiter unavailable or write forbidden.');
+        return res.status(503).json({
+          success: false,
+          message: 'Authentication service temporarily unavailable. Security controls offline.',
+          code: 'AUTH_RATE_LIMIT_UNAVAILABLE'
+        });
+      }
+    }
+
+    // Pre-check lockouts
+    try {
+      const ipRetryAfter = await isRateKeyLocked(ipKey);
+      if (ipRetryAfter > 0) {
+        res.setHeader('Retry-After', String(ipRetryAfter));
+        return res.status(429).json({
+          success: false,
+          message: `Too many failed login attempts from this IP address. Temporarily locked out. Try again in ${ipRetryAfter} seconds.`,
+          retryAfter: ipRetryAfter
+        });
+      }
+
+      if (accountKey) {
+        const accRetryAfter = await isRateKeyLocked(accountKey);
+        if (accRetryAfter > 0) {
+          res.setHeader('Retry-After', String(accRetryAfter));
+          return res.status(429).json({
+            success: false,
+            message: `Too many failed login attempts for this account. Temporarily locked out. Try again in ${accRetryAfter} seconds.`,
+            retryAfter: accRetryAfter
+          });
+        }
+      }
+    } catch (err) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error(`[SECURITY ERROR] Production rate limit pre-check failed: ${err.message}`);
+        return res.status(503).json({
+          success: false,
+          message: 'Authentication service temporarily unavailable. Security controls offline.',
+          code: 'AUTH_RATE_LIMIT_UNAVAILABLE'
+        });
+      }
+    }
+
+    req.recordAuthFailure = async () => {
+      try {
+        await recordRateFailureOnKey(ipKey, ipMax, windowSec, lockoutSec);
+        if (accountKey) {
+          await recordRateFailureOnKey(accountKey, accountMax, windowSec, lockoutSec);
+        }
+      } catch (err) {
+        if (process.env.NODE_ENV === 'production') {
+          console.error(`[SECURITY ERROR] Production rate limit write failed: ${err.message}`);
+          const secErr = new Error('Rate limit record failure in production');
+          secErr.status = 503;
+          secErr.code = 'AUTH_RATE_LIMIT_UNAVAILABLE';
+          throw secErr;
+        }
+      }
+    };
+
+    req.recordAuthSuccess = async () => {
+      // NOTE: Only clears the account counter, intentionally keeping IP failure counter intact
+      // to prevent an attacker using one valid credential from clearing IP rate limits!
+      if (accountKey) {
+        try {
+          await clearRateAccountSuccess(accountKey);
+        } catch (e) {}
+      }
+    };
+
+    next();
+  };
+}
+
+// Session Cookie Names Audited Across Entire Application
+const SESSION_COOKIE_NAMES = [
+  'admin_session',
+  'emp_session',
+  'evaluator_session',
+  'section_session',
+  'dept_session',
+  'yokohama_session'
+];
+
+function hasAuthenticatedSessionCookie(req) {
+  const signed = req.signedCookies || {};
+  const unsigned = req.cookies || {};
+  for (const name of SESSION_COOKIE_NAMES) {
+    if (signed[name] || unsigned[name]) return true;
+  }
+  return false;
+}
+
+const AUTHORIZED_ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+
 // Strict Trusted Origins Allowlist
 const CONFIGURED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
@@ -41,6 +376,7 @@ const CONFIGURED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
 
 const ALLOWED_ORIGINS = [
   'https://yokohama-iluo-portal.vercel.app',
+  'https://yokohama-iluo-employee.vercel.app',
   'https://management.yourdomain.in',
   'https://employee.yourdomain.in',
   'http://localhost:5000',
@@ -96,16 +432,101 @@ function getCookieOptions(maxAgeMs = 8 * 60 * 60 * 1000) {
   };
 }
 
-// CSRF & Untrusted Origin Blocker for mutating requests
+// CSRF & Untrusted Origin Blocker - STRICT FAIL-CLOSED (OWASP A01 / CSRF Defense)
 app.use((req, res, next) => {
-  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
-  const origin = req.headers['origin'] || req.headers['referer'];
+  // Safe read requests (GET, HEAD, OPTIONS): initialize or refresh double-submit CSRF cookies
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    let secret = req.cookies ? req.cookies['_csrf_secret'] : null;
+    let token = req.cookies ? req.cookies['XSRF-TOKEN'] : null;
+
+    if (!secret) {
+      try {
+        secret = csrfTokens.secretSync();
+        res.cookie('_csrf_secret', secret, {
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: isProduction,
+          path: '/'
+        });
+      } catch (err) {
+        console.error('CSRF secret generation failed:', err.message);
+      }
+    }
+
+    if (secret && (!token || !csrfTokens.verify(secret, token))) {
+      try {
+        token = csrfTokens.create(secret);
+        res.cookie('XSRF-TOKEN', token, {
+          httpOnly: false, // Must be readable by client JavaScript for double-submit header
+          sameSite: 'lax',
+          secure: isProduction,
+          path: '/'
+        });
+      } catch (err) {
+        console.error('CSRF token creation failed:', err.message);
+      }
+    }
+
+    return next();
+  }
+
+  // 1. Strict Origin & Referer Verification against trusted allowlist
+  const origin = req.headers['origin'];
+  const referer = req.headers['referer'];
+
   if (origin) {
     if (!isOriginAllowed(origin)) {
       return res.status(403).json({ success: false, message: 'Forbidden: CSRF check failed (Untrusted Origin)' });
     }
+  } else if (referer) {
+    if (!isOriginAllowed(referer)) {
+      return res.status(403).json({ success: false, message: 'Forbidden: CSRF check failed (Untrusted Referer)' });
+    }
   }
+
+  // 2. Strict Fail-Closed Check for Cookie-Authenticated Requests:
+  // If ANY session cookie is present, ambient authority is in use.
+  // CSRF validation MUST be enforced; having custom headers does NOT bypass it!
+  const hasCookieSession = hasAuthenticatedSessionCookie(req);
+
+  if (hasCookieSession) {
+    const token = req.headers['x-csrf-token'] || req.headers['x-xsrf-token'] || (req.body && req.body._csrf);
+    const secret = req.cookies ? req.cookies['_csrf_secret'] : null;
+
+    if (!token) {
+      return res.status(403).json({ success: false, message: 'Forbidden: CSRF token missing' });
+    }
+    if (!secret) {
+      return res.status(403).json({ success: false, message: 'Forbidden: CSRF session secret missing' });
+    }
+    if (!csrfTokens.verify(secret, token)) {
+      return res.status(403).json({ success: false, message: 'Forbidden: Invalid CSRF token' });
+    }
+  }
+
   next();
+});
+
+// Dedicated endpoint to fetch fresh CSRF token
+app.get('/api/csrf-token', (req, res) => {
+  let secret = req.cookies ? req.cookies['_csrf_secret'] : null;
+  if (!secret) {
+    secret = csrfTokens.secretSync();
+    res.cookie('_csrf_secret', secret, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: isProduction,
+      path: '/'
+    });
+  }
+  const token = csrfTokens.create(secret);
+  res.cookie('XSRF-TOKEN', token, {
+    httpOnly: false,
+    sameSite: 'lax',
+    secure: isProduction,
+    path: '/'
+  });
+  res.json({ success: true, csrfToken: token });
 });
 
 // Strict Allowlist of Public Static Assets
@@ -454,7 +875,7 @@ if (user && pass) {
 
   if (!process.env.VERCEL && process.env.NODE_ENV !== 'test') {
     transporter.verify((error) => {
-      if (error) console.error(`SMTP connection failed: ${error.message}`);
+      if (error) console.error('SMTP connection failed:', error ? error.message : '');
       else console.log('SMTP connection successful');
     });
   }
@@ -529,7 +950,7 @@ async function syncWithCloudKv(action, key = 'yokohama_records', value = null, t
       return data;
     }
   } catch (err) {
-    console.error(`Cloud KV sync error (${action} ${key}):`, err.message);
+    console.error('Cloud KV sync error:', action, key, err ? err.message : '');
     if (isProduction) {
       throw err;
     }
@@ -614,40 +1035,46 @@ async function getCloudSession(token) {
 // Role-Based Authorization Engine (RBAC)
 // ---------------------------------------------------------------------
 async function getAuthUser(req) {
-  // Check any signed cookie, regular cookie, or header
-  const token = req.signedCookies.admin_session || req.cookies.admin_session ||
-    req.signedCookies.evaluator_session || req.cookies.evaluator_session ||
-    req.signedCookies.section_session || req.cookies.section_session ||
-    req.signedCookies.dept_session || req.cookies.dept_session ||
-    req.signedCookies.emp_session || req.cookies.emp_session ||
-    req.headers['x-admin-token'] || req.headers['x-evaluator-token'] ||
-    req.headers['x-section-token'] || req.headers['x-dept-token'] ||
-    req.headers['x-emp-token'] || req.headers['x-session-token'] ||
-    (req.headers.authorization && req.headers.authorization.startsWith('Bearer ') ? req.headers.authorization.slice(7).trim() : null);
+  // Check candidate tokens across explicit headers and session cookies
+  const candidateTokens = [
+    req.headers['x-emp-token'],
+    req.headers['x-admin-token'],
+    req.headers['x-evaluator-token'],
+    req.headers['x-section-token'],
+    req.headers['x-dept-token'],
+    req.headers['x-session-token'],
+    req.headers.authorization && req.headers.authorization.startsWith('Bearer ') ? req.headers.authorization.slice(7).trim() : null,
+    req.signedCookies.emp_session || req.cookies.emp_session,
+    req.signedCookies.admin_session || req.cookies.admin_session,
+    req.signedCookies.evaluator_session || req.cookies.evaluator_session,
+    req.signedCookies.section_session || req.cookies.section_session,
+    req.signedCookies.dept_session || req.cookies.dept_session
+  ].filter(Boolean);
 
-  if (!token) return null;
+  for (const token of candidateTokens) {
+    const session = await getCloudSession(token);
+    if (session) {
+      req.authUser = session;
+      if (['SUPERADMIN', 'ADMIN'].includes(session.role)) {
+        req.adminSession = session;
+      }
+      if (session.role === 'emp') {
+        req.empSession = session;
+      }
+      if (session.role === 'EVALUATOR') {
+        req.evaluatorSession = session;
+      }
+      if (session.role === 'SECTION_HEAD') {
+        req.sectionSession = session;
+      }
+      if (session.role === 'DEPT_HEAD') {
+        req.deptSession = session;
+      }
+      return session;
+    }
+  }
 
-  const session = await getCloudSession(token);
-  if (!session) return null;
-
-  req.authUser = session;
-  if (['SUPERADMIN', 'ADMIN'].includes(session.role)) {
-    req.adminSession = session;
-  }
-  if (session.role === 'emp') {
-    req.empSession = session;
-  }
-  if (session.role === 'EVALUATOR') {
-    req.evaluatorSession = session;
-  }
-  if (session.role === 'SECTION_HEAD') {
-    req.sectionSession = session;
-  }
-  if (session.role === 'DEPT_HEAD') {
-    req.deptSession = session;
-  }
-
-  return session;
+  return null;
 }
 
 async function requireSuperAdminAuth(req, res, next) {
@@ -924,7 +1351,7 @@ app.post('/api/auth/admin/send-otp', async (req, res) => {
       expiresIn: OTP_DURATION_SECONDS
     });
   } catch (error) {
-    console.error(`email send failed: ${error.message}`);
+    console.error('Email send failed:', error ? error.message : '');
     return res.status(500).json({
       success: false,
       message: 'Failed to dispatch email OTP. Please check server SMTP configuration.'
@@ -935,7 +1362,7 @@ app.post('/api/auth/admin/send-otp', async (req, res) => {
 // ---------------------------------------------------------------------
 // API ROUTE: POST /api/auth/admin/login (Password Login via Environment Credentials)
 // ---------------------------------------------------------------------
-app.post('/api/auth/admin/login', async (req, res) => {
+app.post('/api/auth/admin/login', authRateLimiter(), async (req, res) => {
   const username = (req.body.username || '').trim();
   const password = (req.body.password || '').trim();
 
@@ -968,6 +1395,7 @@ app.post('/api/auth/admin/login', async (req, res) => {
   }
 
   if (isUserValid && isPassValid) {
+    if (req.recordAuthSuccess) await req.recordAuthSuccess();
     const sessionToken = crypto.randomBytes(32).toString('hex');
     const adminName = 'Administrator';
 
@@ -995,10 +1423,7 @@ app.post('/api/auth/admin/login', async (req, res) => {
     });
   }
 
-  return res.status(401).json({
-    success: false,
-    message: 'Invalid username or password'
-  });
+  return handleAuthFailure(req, res, 401, 'Invalid username or password');
 });
 
 // ---------------------------------------------------------------------
@@ -1101,7 +1526,7 @@ const EVALUATOR_CREDENTIALS = {
   'hr': process.env.EVALUATOR_PASS_HR || 'hr123'
 };
 
-app.post('/api/auth/evaluator/login', async (req, res) => {
+app.post('/api/auth/evaluator/login', authRateLimiter(), async (req, res) => {
   const section = (req.body.section || 'Safety').trim();
   const password = (req.body.password || '').trim();
 
@@ -1122,8 +1547,10 @@ app.post('/api/auth/evaluator/login', async (req, res) => {
   } catch (e) {}
 
   if (!isValid) {
-    return res.status(401).json({ success: false, message: `Invalid password for ${section} Evaluator` });
+    return handleAuthFailure(req, res, 401, `Invalid password for ${section} Evaluator`);
   }
+
+  if (req.recordAuthSuccess) await req.recordAuthSuccess();
 
   const sessionToken = crypto.randomBytes(32).toString('hex');
   const sessionData = {
@@ -1149,7 +1576,7 @@ app.post('/api/auth/evaluator/login', async (req, res) => {
 // ---------------------------------------------------------------------
 // SECTION HEAD AUTHENTICATION (Server-Verified & RBAC Scoped)
 // ---------------------------------------------------------------------
-app.post('/api/auth/section/login', async (req, res) => {
+app.post('/api/auth/section/login', authRateLimiter(), async (req, res) => {
   const section = (req.body.section || '').trim();
   const password = (req.body.password || '').trim();
 
@@ -1168,8 +1595,10 @@ app.post('/api/auth/section/login', async (req, res) => {
   } catch (e) {}
 
   if (!isValid) {
-    return res.status(401).json({ success: false, message: `Invalid password for ${section} Portal` });
+    return handleAuthFailure(req, res, 401, `Invalid password for ${section} Portal`);
   }
+
+  if (req.recordAuthSuccess) await req.recordAuthSuccess();
 
   const sessionToken = crypto.randomBytes(32).toString('hex');
   const sessionData = {
@@ -1195,7 +1624,7 @@ app.post('/api/auth/section/login', async (req, res) => {
 // ---------------------------------------------------------------------
 // DEPARTMENT / HOD AUTHENTICATION (Server-Verified & RBAC Scoped)
 // ---------------------------------------------------------------------
-app.post('/api/auth/dept/login', async (req, res) => {
+app.post('/api/auth/dept/login', authRateLimiter(), async (req, res) => {
   const department = (req.body.department || 'QUALITY CONTROL').trim();
   const password = (req.body.password || '').trim();
 
@@ -1214,8 +1643,10 @@ app.post('/api/auth/dept/login', async (req, res) => {
   } catch (e) {}
 
   if (!isValid) {
-    return res.status(401).json({ success: false, message: 'Invalid password for Department HOD' });
+    return handleAuthFailure(req, res, 401, 'Invalid password for Department HOD');
   }
+
+  if (req.recordAuthSuccess) await req.recordAuthSuccess();
 
   const sessionToken = crypto.randomBytes(32).toString('hex');
   const sessionData = {
@@ -1360,7 +1791,7 @@ async function acquireEntityLock(key) {
   };
 }
 
-app.post('/api/auth/employee/login', async (req, res) => {
+app.post('/api/auth/employee/login', authRateLimiter(), async (req, res) => {
   const empNoRaw = (req.body.empNo || '').trim();
   let password = (req.body.password || '').trim();
 
@@ -1380,7 +1811,7 @@ app.post('/api/auth/employee/login', async (req, res) => {
   );
 
   if (!emp) {
-    return res.status(401).json({ success: false, message: 'Employee ID not found in database' });
+    return handleAuthFailure(req, res, 401, 'Employee ID not found in database');
   }
 
   // Employee No is accepted directly as the password (no password creation needed)
@@ -1398,8 +1829,10 @@ app.post('/api/auth/employee/login', async (req, res) => {
   }
 
   if (!isValid) {
-    return res.status(401).json({ success: false, message: 'Invalid Employee ID or password. Use your Employee No as password.' });
+    return handleAuthFailure(req, res, 401, 'Invalid Employee ID or password. Use your Employee No as password.');
   }
+
+  if (req.recordAuthSuccess) await req.recordAuthSuccess();
 
   // Transparent migration from legacy sha256 to salted scrypt (if hash exists)
   if (emp.passwordHash && !emp.passwordHash.startsWith('scrypt:')) {
@@ -1679,6 +2112,33 @@ try {
   }
 } catch (e) {}
 
+// Validation helpers for base dataset schema
+function validateEmployeesList(list) {
+  if (!Array.isArray(list) || list.length < 1) return null;
+  const valid = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    if (!item.empNo || typeof item.empNo !== 'string') continue;
+    if (!item.name || typeof item.name !== 'string') continue;
+    valid.push(item);
+  }
+  return valid.length >= 1 ? valid : null;
+}
+
+function validateQuestionBankObj(bank) {
+  if (!bank || typeof bank !== 'object' || Array.isArray(bank)) return null;
+  const levels = ['L', 'U', 'O'];
+  for (const lvl of levels) {
+    if (!Array.isArray(bank[lvl]) || bank[lvl].length === 0) return null;
+    for (const q of bank[lvl]) {
+      if (!q || typeof q !== 'object' || !q.id || !q.question || !Array.isArray(q.options)) {
+        return null;
+      }
+    }
+  }
+  return bank;
+}
+
 // Fallback Loader from data.js if files/redis are uninitialized
 function loadBaseDatasetFromDataJs() {
   try {
@@ -1686,29 +2146,45 @@ function loadBaseDatasetFromDataJs() {
     if (!fs.existsSync(dataJsPath)) return null;
     const content = fs.readFileSync(dataJsPath, 'utf-8');
 
-    // Extract EMPLOYEES array
+    // Extract EMPLOYEES array safely using strict boundary matching
     let emps = null;
     const empStart = content.indexOf('const EMPLOYEES = [');
     if (empStart !== -1) {
       const empBracket = content.indexOf('[', empStart);
       const empEnd = content.indexOf('];', empBracket);
       if (empEnd !== -1) {
-        emps = eval('(' + content.slice(empBracket, empEnd + 1) + ')');
+        const empsStr = content.slice(empBracket, empEnd + 1);
+        try {
+          const parsed = JSON.parse(empsStr);
+          emps = validateEmployeesList(parsed);
+        } catch (e) {
+          console.error('Failed to parse EMPLOYEES from data.js:', e.message);
+        }
       }
     }
 
-    // Extract QUESTION_BANK
+    // Extract QUESTION_BANK safely using strict boundary matching
     let qb = null;
     const qbStart = content.indexOf('const QUESTION_BANK = {');
     const qbEnd = content.indexOf('const LEVEL_RULES = {');
     if (qbStart !== -1 && qbEnd !== -1) {
       const qbStr = content.slice(qbStart + 'const QUESTION_BANK = '.length, qbEnd).trim().replace(/;$/, '');
-      qb = eval('(' + qbStr + ')');
+      try {
+        const parsed = JSON.parse(qbStr);
+        qb = validateQuestionBankObj(parsed);
+      } catch (e) {
+        console.error('Failed to parse QUESTION_BANK from data.js:', e.message);
+      }
+    }
+
+    if (!emps || !qb) {
+      console.warn('Fallback base dataset loading from data.js was incomplete or invalid');
+      return null;
     }
 
     return { employees: emps, questionBank: qb };
   } catch (err) {
-    console.error('Error loading fallback base dataset from data.js:', err.message);
+    console.error('Error loading fallback base dataset from data.js:', err ? err.message : '');
     return null;
   }
 }
@@ -2578,7 +3054,7 @@ app.post('/api/questions', requireAdminAuth, async (req, res) => {
 // ---------------------------------------------------------------------
 
 // GET /api/employees: Public directory listing (safe fields without passwordHash)
-app.get('/api/employees', async (req, res) => {
+app.get('/api/employees', requireAnyAuth, async (req, res) => {
   const employees = await getAuthoritativeEmployees();
   const safeEmployees = employees.map(e => ({
     empNo: e.empNo,
@@ -2707,7 +3183,7 @@ app.post('/api/ojt-evaluations', requireEvaluatorAuth, async (req, res) => {
     const scriptPath = path.join(__dirname, 'update_ojt_excel.py');
     if (fs.existsSync(scriptPath)) {
       execFile('python', [scriptPath, '--emp', strEmpNo], (err, stdout) => {
-        if (stdout) console.log(`Excel updated for employee ${strEmpNo}: ${stdout.trim()}`);
+        if (stdout) console.log('Excel updated for employee:', strEmpNo, stdout.trim());
       });
     }
   } catch (err) {}
@@ -2763,6 +3239,37 @@ app.post('/api/settings', requireAdminAuth, async (req, res) => {
 // ---------------------------------------------------------------------
 // INDIVIDUAL EMPLOYEE DOCX & PDF GENERATION (Strict 404 & Read-Only)
 // ---------------------------------------------------------------------
+
+const ALLOWED_TEMPLATE_FILENAMES = new Set([
+  'L Level - Final Finish QA.docx',
+  'L Level - Final Finish RRO & ALT QA.docx',
+  'L Level - Tire Building QA.docx',
+  'L Level - Tire Curing QA.docx',
+  'L Level - Solid Tire QA.docx',
+  'L Level - Preparatory QA.docx',
+  'L Level - Warehouse QA.docx',
+  'L Level - FID Inspector QA.docx',
+
+  'U Level - Final Finish QA.docx',
+  'U Level - Final Finish RRo & ALT QA.docx',
+  'U Level - Final Finish RRO & ALT QA.docx',
+  'U Level - Tire Building QA.docx',
+  'U Level - Tire Curing QA.docx',
+  'U Level - Solid Tire QA.docx',
+  'U Level - Preparatory QA.docx',
+  'U Level - Warehouse QA.docx',
+  'U Level - FID Inspector QA.docx',
+
+  'O Level - Final Finish QA.docx',
+  'O Level - Final Finish RRO & ALT QA.docx',
+  'O Level - Tire Building QA.docx',
+  'O Level - Tire Curing QA.docx',
+  'O Level - Solid Tire QA.docx',
+  'O Level - Preparatory QA.docx',
+  'O Level - Warehouse QA.docx',
+  'O Level - FID Inspector QA.docx'
+]);
+
 const { getTemplateFilename, mapExactTemplate, generateStandaloneOjtDocx } = require('./docx_generator.js');
 let JSZipLib = null;
 try {
@@ -2796,18 +3303,53 @@ async function buildDocxBufferForEmployee(empNo, optionalRecordData) {
   const records = await getAuthoritativeRecords();
   const examRecord = optionalRecordData || records[strEmpNo] || null;
   const targetLevel = (examRecord && examRecord.targetLevel) || emp.targetLevel || emp.currentLevel || 'O';
-  const templateFilename = getTemplateFilename(targetLevel, emp.section);
+  const rawTemplate = getTemplateFilename(targetLevel, emp.section);
 
-  let templatePath = path.join(__dirname, 'QC_templates', templateFilename);
-  if (!fs.existsSync(templatePath)) {
-    templatePath = path.join('D:', 'QC question', templateFilename);
-  }
-  if (!fs.existsSync(templatePath)) {
-    templatePath = path.join(__dirname, 'QC question', templateFilename);
+  // Strict boundary validation: reject invalid formats, extensions, and traversal sequences
+  if (!rawTemplate || typeof rawTemplate !== 'string' || !rawTemplate.toLowerCase().endsWith('.docx')) {
+    const err = new Error(`Invalid template format requested: ${rawTemplate}`);
+    err.statusCode = 400;
+    throw err;
   }
 
-  if (!fs.existsSync(templatePath)) {
-    const err = new Error(`Template not found for ${targetLevel} ${emp.section}: ${templateFilename}`);
+  if (rawTemplate.includes('..') || rawTemplate.includes('/') || rawTemplate.includes('\\') || path.isAbsolute(rawTemplate)) {
+    const err = new Error('Access denied: Path traversal detected in template filename');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const templateFilename = path.basename(String(rawTemplate)).replace(/[^a-zA-Z0-9_\-\.\(\)\s]/g, '');
+
+  if (!ALLOWED_TEMPLATE_FILENAMES.has(templateFilename)) {
+    const err = new Error(`Template not in approved allowlist: ${rawTemplate}`);
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const allowedTemplateDirs = [
+    path.resolve(__dirname, 'QC_templates'),
+    path.resolve('D:', 'QC question'),
+    path.resolve(__dirname, 'QC question')
+  ];
+
+  let templatePath = null;
+  for (const baseDir of allowedTemplateDirs) {
+    if (!fs.existsSync(baseDir)) continue;
+    try {
+      const canonicalBase = fs.realpathSync(baseDir);
+      const candidate = path.resolve(canonicalBase, templateFilename);
+      if (candidate.startsWith(canonicalBase + path.sep) && fs.existsSync(candidate)) {
+        const canonicalCandidate = fs.realpathSync(candidate);
+        if (canonicalCandidate.startsWith(canonicalBase + path.sep)) {
+          templatePath = canonicalCandidate;
+          break;
+        }
+      }
+    } catch (e) {}
+  }
+
+  if (!templatePath) {
+    const err = new Error(`Template not found for ${targetLevel} ${emp.section}: ${rawTemplate}`);
     err.statusCode = 404;
     throw err;
   }
@@ -2839,17 +3381,33 @@ async function buildDocxBufferForEmployee(empNo, optionalRecordData) {
 }
 
 async function convertDocxBufferToPdf(docxBuf, identifier = 'doc') {
-  const tempDir = path.join(os.tmpdir(), 'temp_docx');
-  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+  const safeTempRoot = path.resolve(os.tmpdir(), 'yokohama_pdf_jobs');
+  if (!fs.existsSync(safeTempRoot)) {
+    fs.mkdirSync(safeTempRoot, { recursive: true, mode: 0o700 });
+  }
 
-  const tempDocx = path.join(tempDir, `temp_${identifier}_${Date.now()}_${Math.random().toString(36).slice(2)}.docx`);
-  const tempPdf = path.join(tempDir, `temp_${identifier}_${Date.now()}_${Math.random().toString(36).slice(2)}.pdf`);
+  // Create isolated private job directory with 0o700 permissions
+  const jobDir = fs.mkdtempSync(path.join(safeTempRoot, 'job-'));
+  try {
+    fs.chmodSync(jobDir, 0o700);
+  } catch (e) {}
 
-  fs.writeFileSync(tempDocx, docxBuf);
+  const safePrefix = String(identifier).replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 32) || 'doc';
+  const uniqueId = crypto.randomUUID();
+  const tempDocx = path.resolve(jobDir, `${safePrefix}_${uniqueId}.docx`);
+  const tempPdf = path.resolve(jobDir, `${safePrefix}_${uniqueId}.pdf`);
 
-  const psScript = path.join(__dirname, 'word_to_pdf.ps1');
-  if (process.platform === 'win32' && fs.existsSync(psScript)) {
-    try {
+  const canonicalJobDir = fs.realpathSync(jobDir);
+  if (!tempDocx.startsWith(canonicalJobDir + path.sep) || !tempPdf.startsWith(canonicalJobDir + path.sep)) {
+    throw new Error('Access denied: Invalid temporary file path');
+  }
+
+  try {
+    // Exclusive file creation with restricted 0o600 permissions
+    fs.writeFileSync(tempDocx, docxBuf, { flag: 'wx', mode: 0o600 });
+
+    const psScript = path.join(__dirname, 'word_to_pdf.ps1');
+    if (process.platform === 'win32' && fs.existsSync(psScript)) {
       await new Promise((resolve, reject) => {
         execFile('powershell', ['-ExecutionPolicy', 'Bypass', '-File', psScript, '-srcPath', tempDocx, '-dstPath', tempPdf], (err, stdout, stderr) => {
           if (err) return reject(new Error(stderr || err.message));
@@ -2858,20 +3416,24 @@ async function convertDocxBufferToPdf(docxBuf, identifier = 'doc') {
       });
 
       if (fs.existsSync(tempPdf)) {
-        const pdfBytes = fs.readFileSync(tempPdf);
-        try { fs.unlinkSync(tempDocx); } catch(e){}
-        try { fs.unlinkSync(tempPdf); } catch(e){}
-        return pdfBytes;
+        // Prevent symlink attacks: verify tempPdf is a regular file
+        const lstat = fs.lstatSync(tempPdf);
+        if (lstat.isSymbolicLink() || !lstat.isFile()) {
+          throw new Error('Security violation: Converted PDF is a symbolic link or invalid file');
+        }
+        return fs.readFileSync(tempPdf);
       }
-    } catch (conversionErr) {
-      try { if (fs.existsSync(tempDocx)) fs.unlinkSync(tempDocx); } catch(e){}
-      try { if (fs.existsSync(tempPdf)) fs.unlinkSync(tempPdf); } catch(e){}
-      throw conversionErr;
+    }
+
+    throw new Error('Native Word-to-PDF conversion requires Windows with Microsoft Word installed.');
+  } finally {
+    // Guaranteed cleanup in finally block
+    try {
+      fs.rmSync(jobDir, { recursive: true, force: true });
+    } catch (cleanupErr) {
+      console.error('Temporary directory cleanup error:', cleanupErr.message);
     }
   }
-
-  try { if (fs.existsSync(tempDocx)) fs.unlinkSync(tempDocx); } catch(e){}
-  throw new Error('Native Word-to-PDF conversion requires Windows with Microsoft Word installed.');
 }
 
 const { generateOfficialReportHtml } = require('./report_html_generator.js');
@@ -3274,6 +3836,21 @@ app.buildDocxBufferForEmployee = buildDocxBufferForEmployee;
 app.convertDocxBufferToPdf = convertDocxBufferToPdf;
 app.buildHtmlReportForEmployee = buildHtmlReportForEmployee;
 app.renderDynamicPdf = renderDynamicPdf;
+app.getAuthoritativeEmployees = getAuthoritativeEmployees;
+app.saveAuthoritativeEmployees = saveAuthoritativeEmployees;
+app.isRateKeyLocked = isRateKeyLocked;
+app.recordRateFailureOnKey = recordRateFailureOnKey;
+app.clearRateAccountSuccess = clearRateAccountSuccess;
+app.resetRateLimitMemory = () => {
+  memoryRateCounters.clear();
+  memoryRateLockouts.clear();
+  isKvWriteForbidden = false;
+};
+app.setKvWriteForbidden = (val) => {
+  isKvWriteForbidden = val;
+};
+app.getKvWriteForbidden = () => isKvWriteForbidden;
+app.LUA_ATOMIC_RATE_LIMIT = LUA_ATOMIC_RATE_LIMIT;
 
 module.exports = app;
 
