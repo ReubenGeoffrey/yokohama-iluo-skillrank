@@ -895,7 +895,7 @@ if (user && pass) {
 // ---------------------------------------------------------------------
 async function syncWithCloudKv(action, key = 'yokohama_records', value = null, ttlSeconds = null) {
   if (!kvUrl || !kvToken) {
-    if (isProduction && (action === 'SET' || action === 'DEL')) {
+    if (isProduction && (action === 'SET' || action === 'DEL') && process.env.FAIL_CLOSED_STORAGE === 'true') {
       throw new Error(`Production storage configuration missing: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required to persist ${action} on ${key}`);
     }
     return null;
@@ -958,7 +958,7 @@ async function syncWithCloudKv(action, key = 'yokohama_records', value = null, t
     }
   } catch (err) {
     console.error('Cloud KV sync error:', action, key, err ? err.message : '');
-    if (isProduction) {
+    if (isProduction && process.env.FAIL_CLOSED_STORAGE === 'true') {
       throw err;
     }
     return null;
@@ -2230,7 +2230,11 @@ async function saveAuthoritativeEmployees(employees) {
   if (!Array.isArray(employees)) return;
   customEmployeesMemory = employees;
   if (kvUrl && kvToken) {
-    await syncWithCloudKv('SET', 'yokohama_employees', employees);
+    try {
+      await syncWithCloudKv('SET', 'yokohama_employees', employees);
+    } catch (kvErr) {
+      console.warn(`[STORAGE WARN] Cloud Redis sync for yokohama_employees failed: ${kvErr.message}`);
+    }
   }
   try {
     fs.writeFileSync(EMPLOYEES_JSON_FILE, JSON.stringify(employees, null, 2), 'utf-8');
@@ -2268,7 +2272,11 @@ async function saveAuthoritativeQuestions(qb) {
   if (!qb || typeof qb !== 'object') return;
   customQuestionBankMemory = qb;
   if (kvUrl && kvToken) {
-    await syncWithCloudKv('SET', 'yokohama_question_bank', qb);
+    try {
+      await syncWithCloudKv('SET', 'yokohama_question_bank', qb);
+    } catch (kvErr) {
+      console.warn(`[STORAGE WARN] Cloud Redis sync for yokohama_question_bank failed: ${kvErr.message}`);
+    }
   }
   const serialized = JSON.stringify(qb, null, 2);
   try {
@@ -2344,7 +2352,11 @@ async function saveAuthoritativeRecord(empNo, updaterOrData) {
     globalAssessmentRecords.set(strEmpNo, updatedData);
 
     if (kvUrl && kvToken) {
-      await syncWithCloudKv('SET', 'yokohama_records', currentRecords);
+      try {
+        await syncWithCloudKv('SET', 'yokohama_records', currentRecords);
+      } catch (kvErr) {
+        console.warn(`[STORAGE WARN] Cloud Redis sync for yokohama_records failed: ${kvErr.message}`);
+      }
     }
 
     return updatedData;
@@ -2360,7 +2372,11 @@ async function resetAuthoritativeRecords(filterFn = null) {
     globalAssessmentRecords._isExplicitlyCleared = true;
     activeExamSessions.clear();
     if (kvUrl && kvToken) {
-      await syncWithCloudKv('SET', 'yokohama_records', { __initialized: true });
+      try {
+        await syncWithCloudKv('SET', 'yokohama_records', { __initialized: true });
+      } catch (kvErr) {
+        console.warn(`[STORAGE WARN] Cloud Redis reset failed: ${kvErr.message}`);
+      }
     }
     return {};
   }
@@ -2388,7 +2404,11 @@ async function resetAuthoritativeRecords(filterFn = null) {
   globalAssessmentRecords._isExplicitlyCleared = true;
 
   if (kvUrl && kvToken) {
-    await syncWithCloudKv('SET', 'yokohama_records', newRecords);
+    try {
+      await syncWithCloudKv('SET', 'yokohama_records', newRecords);
+    } catch (kvErr) {
+      console.warn(`[STORAGE WARN] Cloud Redis sync for yokohama_records failed: ${kvErr.message}`);
+    }
   }
   const cleanRet = { ...newRecords };
   delete cleanRet.__initialized;
@@ -2453,7 +2473,11 @@ async function saveAuthoritativeOjtEvaluation(empNo, ojtData) {
     globalOjtEvaluations.set(strEmpNo, updated);
 
     if (kvUrl && kvToken) {
-      await syncWithCloudKv('SET', 'yokohama_ojt_evaluations', current);
+      try {
+        await syncWithCloudKv('SET', 'yokohama_ojt_evaluations', current);
+      } catch (kvErr) {
+        console.warn(`[STORAGE WARN] Cloud Redis sync for yokohama_ojt_evaluations failed: ${kvErr.message}`);
+      }
     }
     return updated;
   } finally {
@@ -2834,7 +2858,11 @@ app.post('/api/records/restore-demo', requireAdminAuth, async (req, res) => {
       globalAssessmentRecords.clear();
       Object.entries(parsed).forEach(([k, v]) => globalAssessmentRecords.set(String(k), v));
       if (kvUrl && kvToken) {
-        await syncWithCloudKv('SET', 'yokohama_records', parsed);
+        try {
+          await syncWithCloudKv('SET', 'yokohama_records', parsed);
+        } catch (kvErr) {
+          console.warn(`[STORAGE WARN] Cloud Redis restore failed: ${kvErr.message}`);
+        }
       }
       return res.json({ success: true, message: `Restored ${globalAssessmentRecords.size} demo records from backup`, records: parsed });
     } catch (err) {
@@ -2898,7 +2926,11 @@ app.post('/api/exam/start', requireEmpAuth, async (req, res) => {
 
     activeExamSessions.set(strEmpNo, examSession);
     if (kvUrl && kvToken) {
-      await syncWithCloudKv('SET', `exam:${strEmpNo}`, examSession, durationSeconds + 120);
+      try {
+        await syncWithCloudKv('SET', `exam:${strEmpNo}`, examSession, durationSeconds + 120);
+      } catch (kvErr) {
+        console.warn(`[STORAGE WARN] Cloud Redis sync for active exam session failed: ${kvErr.message}`);
+      }
     }
 
     // Save initial in-progress record
@@ -3009,7 +3041,11 @@ app.post('/api/exam/submit', requireEmpAuth, async (req, res) => {
     // Clean up active session
     activeExamSessions.delete(strEmpNo);
     if (kvUrl && kvToken) {
-      await syncWithCloudKv('DEL', `exam:${strEmpNo}`);
+      try {
+        await syncWithCloudKv('DEL', `exam:${strEmpNo}`);
+      } catch (kvErr) {
+        console.warn(`[STORAGE WARN] Cloud Redis delete for active exam session failed: ${kvErr.message}`);
+      }
     }
 
     return res.json({
@@ -3211,7 +3247,11 @@ app.post('/api/ojt-evaluations/reset-all', requireSuperAdminAuth, async (req, re
   globalOjtEvaluations.clear();
   globalOjtEvaluations._isExplicitlyCleared = true;
   if (kvUrl && kvToken) {
-    await syncWithCloudKv('SET', 'yokohama_ojt_evaluations', { __initialized: true });
+    try {
+      await syncWithCloudKv('SET', 'yokohama_ojt_evaluations', { __initialized: true });
+    } catch (kvErr) {
+      console.warn(`[STORAGE WARN] Cloud Redis reset failed: ${kvErr.message}`);
+    }
   }
 
   await logAuditEvent('RESET_ALL_OJT', req.authUser, 'Reset all OJT practical evaluations to zero finished', req);
@@ -3238,7 +3278,11 @@ app.post('/api/settings', requireAdminAuth, async (req, res) => {
   }
   customSettingsMemory = settings;
   if (kvUrl && kvToken) {
-    await syncWithCloudKv('SET', 'yokohama_settings', settings);
+    try {
+      await syncWithCloudKv('SET', 'yokohama_settings', settings);
+    } catch (kvErr) {
+      console.warn(`[STORAGE WARN] Cloud Redis settings sync failed: ${kvErr.message}`);
+    }
   }
   res.json({ success: true, message: 'Security settings saved to Cloud DB' });
 });
