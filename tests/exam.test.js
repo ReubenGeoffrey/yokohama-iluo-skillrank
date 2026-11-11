@@ -116,3 +116,53 @@ test('Duplicate exam submission is rejected (409 Conflict)', async () => {
   const data = await res.json();
   assert.strictEqual(data.success, false);
 });
+
+// TEST: Pool Capacity & Shortfall Audit (Task 2.5 / S6)
+test('GET /api/admin/questions/capacity calculates pool capacity and flags single-paper shortfall', async () => {
+  // 1. Authenticate as Admin
+  const adminLogin = await fetch(`${baseUrl}/api/auth/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'admin123' })
+  });
+  assert.strictEqual(adminLogin.status, 200);
+  const { token: adminToken } = await adminLogin.json();
+
+  // 2. Query question capacity
+  const capRes = await fetch(`${baseUrl}/api/admin/questions/capacity`, {
+    headers: { 'x-admin-token': adminToken }
+  });
+  assert.strictEqual(capRes.status, 200);
+  const capData = await capRes.json();
+  assert.strictEqual(capData.success, true);
+  assert.ok(capData.capacity);
+  assert.ok(capData.capacity.totalQuestions >= 720, 'Authoritative pool has at least 720 questions');
+  assert.strictEqual(capData.capacity.hasShortfall, true, 'Flags single-paper shortfall across sections');
+  assert.ok(capData.capacity.shortfallSections.length > 0);
+  assert.ok(capData.capacity.auditWarning.includes('CAPACITY AUDIT NOTICE'));
+});
+
+// TEST: Candidate Option Randomization (Task 2.5 / S6)
+test('POST /api/exam/start randomizes candidate options while maintaining canonical keys', async () => {
+  const res = await fetch(`${baseUrl}/api/exam/start`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-emp-token': empToken
+    },
+    body: JSON.stringify({ empNo: 'LN0039', targetLevel: 'L', forceRetake: true })
+  });
+
+  assert.strictEqual(res.status, 200);
+  const data = await res.json();
+  assert.strictEqual(data.success, true);
+  assert.ok(data.activeExam.questions.length > 0);
+
+  // Assert all options have valid non-empty keys and text
+  for (const q of data.activeExam.questions) {
+    const keys = q.options.map(o => o.key);
+    assert.strictEqual(new Set(keys).size, keys.length, 'Option keys must be distinct');
+    assert.strictEqual('correctAnswer' in q, false, 'Correct answer must never be exposed');
+  }
+});
+

@@ -3064,12 +3064,22 @@ function normalizeSectionNameServer(sec) {
   return s;
 }
 
-function getQuestionsForSectionServer(allLevelQuestions, targetLevel, section) {
+function getQuestionsForSectionServer(allLevelQuestions, targetLevel, section, options = {}) {
   const reqCount = (targetLevel === 'O' ? 40 : (targetLevel === 'U' ? 30 : 20));
-  if (!section) return allLevelQuestions.slice(0, reqCount);
+  const shouldRandomize = options && options.randomize === true;
+
+  if (!section) {
+    const pool = [...allLevelQuestions];
+    if (shouldRandomize) pool.sort(() => Math.random() - 0.5);
+    return pool.slice(0, reqCount);
+  }
   const empSecNorm = normalizeSectionNameServer(section);
   const sectionQs = allLevelQuestions.filter(q => normalizeSectionNameServer(q.section) === empSecNorm);
-  if (sectionQs.length === 0) return allLevelQuestions.slice(0, reqCount);
+  if (sectionQs.length === 0) {
+    const pool = [...allLevelQuestions];
+    if (shouldRandomize) pool.sort(() => Math.random() - 0.5);
+    return pool.slice(0, reqCount);
+  }
 
   const byCat = {};
   sectionQs.forEach(q => {
@@ -3078,29 +3088,46 @@ function getQuestionsForSectionServer(allLevelQuestions, targetLevel, section) {
     byCat[cat].push(q);
   });
   const cats = Object.keys(byCat);
-  if (cats.length <= 1) return sectionQs.slice(0, reqCount);
+  if (cats.length <= 1) {
+    const pool = [...sectionQs];
+    if (shouldRandomize) pool.sort(() => Math.random() - 0.5);
+    return pool.slice(0, reqCount);
+  }
 
   const baseTarget = Math.floor(reqCount / cats.length);
   const extraSlots = reqCount % cats.length;
   const selected = [];
   cats.forEach((cat, idx) => {
     const targetForCat = baseTarget + (idx < extraSlots ? 1 : 0);
-    selected.push(...byCat[cat].slice(0, targetForCat));
+    const catPool = [...byCat[cat]];
+    if (shouldRandomize) catPool.sort(() => Math.random() - 0.5);
+    selected.push(...catPool.slice(0, targetForCat));
   });
   if (selected.length < reqCount) {
     const selIds = new Set(selected.map(q => q.id));
     const remaining = sectionQs.filter(q => !selIds.has(q.id));
+    if (shouldRandomize) remaining.sort(() => Math.random() - 0.5);
     selected.push(...remaining.slice(0, reqCount - selected.length));
   }
-  return selected.slice(0, reqCount);
+
+  const result = selected.slice(0, reqCount);
+  if (shouldRandomize) result.sort(() => Math.random() - 0.5);
+  return result;
 }
 
 // Strip correctAnswer from questions payload before returning to employee client
-function sanitizeQuestionsForEmployee(questions) {
+function sanitizeQuestionsForEmployee(questions, randomizeOptions = true) {
   if (!Array.isArray(questions)) return [];
   return questions.map(q => {
-    const { correctAnswer, ...sanitized } = q;
-    return sanitized;
+    const { correctAnswer, options: opts, ...sanitized } = q;
+    let finalOptions = Array.isArray(opts) ? [...opts] : [];
+    if (randomizeOptions) {
+      finalOptions.sort(() => Math.random() - 0.5);
+    }
+    return {
+      ...sanitized,
+      options: finalOptions
+    };
   });
 }
 
@@ -3474,7 +3501,7 @@ app.post('/api/exam/start', requireEmpAuth, async (req, res) => {
     const targetLevel = req.body.targetLevel || emp.targetLevel || 'L';
     const qBank = await getAuthoritativeQuestions();
     const allQs = qBank[targetLevel] || qBank['L'] || [];
-    const questions = getQuestionsForSectionServer(allQs, targetLevel, emp.section);
+    const questions = getQuestionsForSectionServer(allQs, targetLevel, emp.section, { randomize: true });
 
     const durationSeconds = 45 * 60; // 45 minutes
     const expiresAt = Date.now() + (durationSeconds * 1000) + 30000; // 30s latency grace
@@ -3626,6 +3653,87 @@ app.post('/api/exam/submit', requireEmpAuth, async (req, res) => {
 // ---------------------------------------------------------------------
 // QUESTION BANK API (Sanitized for Employees, Full for Admin)
 // ---------------------------------------------------------------------
+
+
+// ---------------------------------------------------------------------
+// QUESTION POOL CAPACITY & SHORTFALL AUDIT ENGINE (Task 2.5 / S6)
+// ---------------------------------------------------------------------
+function calculateQuestionPoolCapacity(qBank) {
+  const REQUIRED_PER_LEVEL = { L: 20, U: 30, O: 40 };
+  const result = {
+    totalQuestions: 0,
+    byLevel: { L: 0, U: 0, O: 0 },
+    bySection: {},
+    shortfallSections: [],
+    sufficientSections: [],
+    hasShortfall: false,
+    auditWarning: null
+  };
+
+  if (!qBank || typeof qBank !== 'object') return result;
+
+  for (const [lvl, qs] of Object.entries(qBank)) {
+    if (!Array.isArray(qs)) continue;
+    result.byLevel[lvl] = qs.length;
+    result.totalQuestions += qs.length;
+
+    qs.forEach(q => {
+      const sec = q.section || 'General';
+      if (!result.bySection[sec]) {
+        result.bySection[sec] = { total: 0, byLevel: { L: 0, U: 0, O: 0 } };
+      }
+      result.bySection[sec].total++;
+      if (result.bySection[sec].byLevel[lvl] !== undefined) {
+        result.bySection[sec].byLevel[lvl]++;
+      }
+    });
+  }
+
+  // Single-paper shortfall audit per section & level
+  for (const [sec, data] of Object.entries(result.bySection)) {
+    let secHasShortfall = false;
+    const levelStatus = {};
+
+    for (const [lvl, reqCount] of Object.entries(REQUIRED_PER_LEVEL)) {
+      const count = (data.byLevel && data.byLevel[lvl]) || 0;
+      const surplus = count - reqCount;
+      levelStatus[lvl] = { count, required: reqCount, surplus: Math.max(0, surplus) };
+      if (surplus <= 0) {
+        secHasShortfall = true;
+      }
+    }
+
+    if (secHasShortfall) {
+      result.shortfallSections.push({
+        section: sec,
+        total: data.total,
+        byLevel: levelStatus,
+        status: 'SINGLE_PAPER_SHORTFALL',
+        recommendation: 'Upload expanded question bank to enable randomized candidate question sampling'
+      });
+    } else {
+      result.sufficientSections.push({
+        section: sec,
+        total: data.total,
+        byLevel: levelStatus
+      });
+    }
+  }
+
+  if (result.shortfallSections.length > 0) {
+    result.hasShortfall = true;
+    result.auditWarning = `CAPACITY AUDIT NOTICE: ${result.shortfallSections.length} section(s) operate with single-paper question pools (zero surplus buffer for randomized distinct papers). Total pool contains ${result.totalQuestions} questions across ${Object.keys(result.bySection).length} sections.`;
+  }
+
+  return result;
+}
+
+// GET /api/admin/questions/capacity
+app.get('/api/admin/questions/capacity', requireAdminAuth, async (req, res) => {
+  const qBank = await getAuthoritativeQuestions();
+  const capacity = calculateQuestionPoolCapacity(qBank);
+  return res.json({ success: true, capacity });
+});
 
 // GET /api/questions: Strips correct answers unless Superadmin
 app.get('/api/questions', async (req, res) => {
