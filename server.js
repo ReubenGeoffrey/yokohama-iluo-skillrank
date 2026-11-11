@@ -986,6 +986,45 @@ async function delCloudOtp(email) {
   }
 }
 
+// ---------------------------------------------------------------------
+// Employee Setup Token / OTP Store (Task 2.3)
+// ---------------------------------------------------------------------
+const empSetupTokenStore = new Map();
+
+async function setCloudSetupToken(empNo, tokenData, ttlSeconds = 600) {
+  const normKey = String(empNo).trim().toLowerCase();
+  empSetupTokenStore.set(normKey, tokenData);
+  if (kvUrl && kvToken) {
+    try {
+      await syncWithCloudKv('SET', `setup_token:${normKey}`, tokenData, ttlSeconds);
+    } catch (e) {}
+  }
+}
+
+async function getCloudSetupToken(empNo) {
+  const normKey = String(empNo).trim().toLowerCase();
+  if (kvUrl && kvToken) {
+    try {
+      const cloudRecord = await syncWithCloudKv('GET', `setup_token:${normKey}`);
+      if (cloudRecord && cloudRecord.token) {
+        empSetupTokenStore.set(normKey, cloudRecord);
+        return cloudRecord;
+      }
+    } catch (e) {}
+  }
+  return empSetupTokenStore.get(normKey) || null;
+}
+
+async function delCloudSetupToken(empNo) {
+  const normKey = String(empNo).trim().toLowerCase();
+  empSetupTokenStore.delete(normKey);
+  if (kvUrl && kvToken) {
+    try {
+      await syncWithCloudKv('DEL', `setup_token:${normKey}`);
+    } catch (e) {}
+  }
+}
+
 async function setCloudSession(token, sessionData, ttlSeconds = 28800) {
   activeSessions.set(token, sessionData);
   if (kvUrl && kvToken) {
@@ -2277,15 +2316,106 @@ app.post('/api/auth/employee/login', authRateLimiter(), async (req, res) => {
   });
 });
 
+
+// ---------------------------------------------------------------------
+// EMPLOYEE ONE-TIME SETUP TOKEN REQUEST (Task 2.3)
+// ---------------------------------------------------------------------
+app.post('/api/auth/employee/request-setup-token', authRateLimiter(), async (req, res) => {
+  const empNoRaw = (req.body.empNo || '').trim();
+  const dojRaw = (req.body.doj || '').trim();
+
+  if (!empNoRaw) {
+    return res.status(400).json({ success: false, message: 'Employee ID is required' });
+  }
+
+  const employees = await getAuthoritativeEmployees();
+  const emp = employees.find(e => 
+    String(e.empNo).trim().toLowerCase() === empNoRaw.toLowerCase() ||
+    String(e.empNo).trim().toLowerCase() === ('0' + empNoRaw).toLowerCase()
+  );
+
+  if (!emp) {
+    return handleAuthFailure(req, res, 404, 'Employee ID not found in database');
+  }
+
+  // Validate DOJ if provided
+  if (dojRaw) {
+    const inputDoj = normalizeDoj(dojRaw);
+    const empDoj = normalizeDoj(emp.doj);
+    if (!empDoj || inputDoj !== empDoj) {
+      return handleAuthFailure(req, res, 401, 'Verification failed: Date of Joining does not match records');
+    }
+  }
+
+  // Generate 6-digit cryptographic token
+  const token = crypto.randomInt(100000, 999999).toString();
+  const tokenData = {
+    token,
+    empNo: emp.empNo,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + (10 * 60 * 1000), // 10 minutes
+    attempts: 0
+  };
+
+  await setCloudSetupToken(emp.empNo, tokenData, 600);
+  await logAuditEvent('EMPLOYEE_SETUP_TOKEN_ISSUED', emp.empNo, 'One-time setup token issued', req);
+
+  const responsePayload = {
+    success: true,
+    message: 'One-time setup token dispatched successfully. Token is valid for 10 minutes.'
+  };
+  if (process.env.NODE_ENV !== 'production') {
+    responsePayload.token = token;
+  }
+  return res.json(responsePayload);
+});
+
+// ---------------------------------------------------------------------
+// HR ADMIN ISSUES ONE-TIME SETUP TOKEN (Task 2.3)
+// ---------------------------------------------------------------------
+app.post('/api/admin/employees/:empNo/issue-setup-token', requireAdminAuth, async (req, res) => {
+  const empNoRaw = (req.params.empNo || '').trim();
+  const employees = await getAuthoritativeEmployees();
+  const emp = employees.find(e => 
+    String(e.empNo).trim().toLowerCase() === empNoRaw.toLowerCase() ||
+    String(e.empNo).trim().toLowerCase() === ('0' + empNoRaw).toLowerCase()
+  );
+
+  if (!emp) {
+    return res.status(404).json({ success: false, message: 'Employee not found' });
+  }
+
+  const token = crypto.randomInt(100000, 999999).toString();
+  const tokenData = {
+    token,
+    empNo: emp.empNo,
+    issuedBy: req.adminSession?.email || 'admin',
+    createdAt: Date.now(),
+    expiresAt: Date.now() + (24 * 60 * 60 * 1000),
+    attempts: 0
+  };
+
+  await setCloudSetupToken(emp.empNo, tokenData, 86400);
+  await logAuditEvent('ADMIN_ISSUED_SETUP_TOKEN', emp.empNo, `HR Admin issued setup token for employee ${emp.empNo}`, req);
+
+  return res.json({
+    success: true,
+    message: `Setup token generated for Employee ${emp.empNo}`,
+    token,
+    expiresAt: tokenData.expiresAt
+  });
+});
+
 app.post('/api/auth/employee/setup-password', async (req, res) => {
   const empNoRaw = (req.body.empNo || '').trim();
+  const setupToken = (req.body.setupToken || req.body.token || '').trim();
   const dojRaw = (req.body.doj || '').trim();
   const newPassword = (req.body.newPassword || '').trim();
 
-  if (!empNoRaw || !dojRaw || !newPassword) {
+  if (!empNoRaw || !newPassword || (!setupToken && !dojRaw)) {
     return res.status(400).json({
       success: false,
-      message: 'Employee ID, Date of Joining (DOJ), and new password are required'
+      message: 'Employee ID, new password, and either a setup token or Date of Joining (DOJ) are required'
     });
   }
 
@@ -2317,14 +2447,43 @@ app.post('/api/auth/employee/setup-password', async (req, res) => {
     });
   }
 
-  const normalizedInputDoj = normalizeDoj(dojRaw);
-  const normalizedEmpDoj = normalizeDoj(emp.doj);
+  // Token Verification takes priority
+  let verified = false;
+  if (setupToken) {
+    const tokenRecord = await getCloudSetupToken(empNoRaw);
+    if (!tokenRecord) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired setup token' });
+    }
+    if (Date.now() > tokenRecord.expiresAt) {
+      await delCloudSetupToken(empNoRaw);
+      return res.status(400).json({ success: false, message: 'Setup token has expired. Please request a new token.' });
+    }
+    tokenRecord.attempts = (tokenRecord.attempts || 0) + 1;
+    if (tokenRecord.attempts > 5) {
+      await delCloudSetupToken(empNoRaw);
+      return res.status(429).json({ success: false, message: 'Too many failed attempts. Setup token invalidated.' });
+    }
+    if (tokenRecord.token !== setupToken) {
+      await setCloudSetupToken(empNoRaw, tokenRecord);
+      return res.status(401).json({ success: false, message: 'Incorrect setup token' });
+    }
+    verified = true;
+    await delCloudSetupToken(empNoRaw);
+  }
 
-  if (!normalizedEmpDoj || normalizedInputDoj !== normalizedEmpDoj) {
-    return res.status(401).json({
-      success: false,
-      message: 'Verification failed: Date of Joining does not match records'
-    });
+  if (!verified) {
+    if (isProduction && !setupToken) {
+      return res.status(403).json({ success: false, message: 'One-time setup token is required for self-service password setup in production.' });
+    }
+    const normalizedInputDoj = normalizeDoj(dojRaw);
+    const normalizedEmpDoj = normalizeDoj(emp.doj);
+
+    if (!normalizedEmpDoj || normalizedInputDoj !== normalizedEmpDoj) {
+      return res.status(401).json({
+        success: false,
+        message: 'Verification failed: Date of Joining does not match records'
+      });
+    }
   }
 
   emp.passwordHash = hashPassword(newPassword);

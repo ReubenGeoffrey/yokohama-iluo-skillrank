@@ -211,3 +211,113 @@ test('ACCOUNTS 4: Evaluator, Section, and Dept endpoints set individual roleClai
   assert.strictEqual(deptData.user.roleClaim, 'dept_hod');
   assert.ok(deptData.user.accountId);
 });
+
+// TEST 5: Employee one-time setup token dispatch, verification, and rate limiting (Task 2.3)
+test('ACCOUNTS 5: Employee one-time setup token dispatch, verification, and rate limiting', async () => {
+  // 1. Request one-time token
+  const tokenReq = await fetch(`${baseUrl}/api/auth/employee/request-setup-token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ empNo: '900262' })
+  });
+  assert.strictEqual(tokenReq.status, 200);
+  const tokenData = await tokenReq.json();
+  assert.strictEqual(tokenData.success, true);
+  assert.ok(tokenData.token, 'Non-production environment provides token for automated testing');
+
+  const validToken = tokenData.token;
+
+  // 2. Reject incorrect setup token
+  const badSetup = await fetch(`${baseUrl}/api/auth/employee/setup-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      empNo: '900262',
+      setupToken: '000000',
+      newPassword: 'StrongPass900262!'
+    })
+  });
+  assert.strictEqual(badSetup.status, 401);
+  const badData = await badSetup.json();
+  assert.strictEqual(badData.success, false);
+
+  // 3. Complete password setup with correct token
+  const goodSetup = await fetch(`${baseUrl}/api/auth/employee/setup-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      empNo: '900262',
+      setupToken: validToken,
+      newPassword: 'StrongPass900262!'
+    })
+  });
+  assert.strictEqual(goodSetup.status, 200);
+  const goodData = await goodSetup.json();
+  assert.strictEqual(goodData.success, true);
+
+  // 4. Verify login with the new password
+  const empLogin = await fetch(`${baseUrl}/api/auth/employee/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      empNo: '900262',
+      password: 'StrongPass900262!'
+    })
+  });
+  assert.strictEqual(empLogin.status, 200);
+  const empLoginData = await empLogin.json();
+  assert.strictEqual(empLoginData.success, true);
+  assert.strictEqual(empLoginData.employee.empNo, '900262');
+
+  // 5. Verify the one-time token was burned and cannot be reused
+  const reuseToken = await fetch(`${baseUrl}/api/auth/employee/setup-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      empNo: '900262',
+      setupToken: validToken,
+      newPassword: 'AnotherStrongPass900262!'
+    })
+  });
+  assert.strictEqual(reuseToken.status, 400);
+});
+
+// TEST 6: HR Admin can issue one-time setup token for employee (Task 2.3)
+test('ACCOUNTS 6: HR Admin can issue one-time setup token for employee', async () => {
+  // 1. Sign in as Admin
+  const adminLogin = await fetch(`${baseUrl}/api/auth/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'admin123' })
+  });
+  assert.strictEqual(adminLogin.status, 200);
+  const { token } = await adminLogin.json();
+
+  // 2. Issue setup token
+  const issueRes = await fetch(`${baseUrl}/api/admin/employees/LN0039/issue-setup-token`, {
+    method: 'POST',
+    headers: {
+      'x-admin-token': token,
+      'Content-Type': 'application/json'
+    }
+  });
+  assert.strictEqual(issueRes.status, 200);
+  const issueData = await issueRes.json();
+  assert.strictEqual(issueData.success, true);
+  assert.ok(issueData.token);
+
+  // 3. Use admin-issued token to set password
+  const setupRes = await fetch(`${baseUrl}/api/auth/employee/setup-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      empNo: 'LN0039',
+      setupToken: issueData.token,
+      newPassword: 'SecureLN0039Pass!'
+    })
+  });
+  assert.strictEqual(setupRes.status, 200);
+  const setupData = await setupRes.json();
+  assert.strictEqual(setupData.success, true);
+});
+
