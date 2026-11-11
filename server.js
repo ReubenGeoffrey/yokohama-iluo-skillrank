@@ -3060,6 +3060,139 @@ async function saveAuthoritativeOjtEvaluation(empNo, ojtData) {
   }
 }
 
+// Canonical Plant Taxonomy (33 Reconciled Sections: 8 QA + 25 Production per docs/GLOSSARY.md)
+const CANONICAL_PLANT_SECTIONS = {
+  qa: [
+    { code: 'QA-TB', name: 'Tire Building QA', dept: 'QUALITY CONTROL' },
+    { code: 'QA-TC', name: 'Tire Curing QA', dept: 'QUALITY CONTROL' },
+    { code: 'QA-FF', name: 'Final Finish QA', dept: 'QUALITY CONTROL' },
+    { code: 'QA-FF-RRO', name: 'Final Finish RRO & ALT QA', dept: 'QUALITY CONTROL' },
+    { code: 'QA-PR', name: 'Preparatory QA', dept: 'QUALITY CONTROL' },
+    { code: 'QA-ST', name: 'Solid Tire QA', dept: 'QUALITY CONTROL' },
+    { code: 'QA-WH', name: 'Warehouse QA', dept: 'QUALITY CONTROL' },
+    { code: 'QA-FID', name: 'FID Inspector QA', dept: 'QUALITY CONTROL' }
+  ],
+  production: [
+    { code: 'PR-MIX', name: 'Mixing', dept: 'PRODUCTION' },
+    { code: 'PR-4ROLL', name: '4 Roll Calender', dept: 'PRODUCTION' },
+    { code: 'PR-3ROLL', name: '3 Roll Calender P2', dept: 'PRODUCTION' },
+    { code: 'PR-EXT', name: 'Extruder', dept: 'PRODUCTION' },
+    { code: 'PR-BEAD', name: 'Bead Winding', dept: 'PRODUCTION' },
+    { code: 'PR-STEL', name: 'Steelastic', dept: 'PRODUCTION' },
+    { code: 'PR-TB1', name: 'Tyre Building P1', dept: 'PRODUCTION' },
+    { code: 'PR-TB2', name: 'Tyre Building P2', dept: 'PRODUCTION' },
+    { code: 'PR-TB3', name: 'Tyre Building P3', dept: 'PRODUCTION' },
+    { code: 'PR-BB1', name: 'Band Building P1', dept: 'PRODUCTION' },
+    { code: 'PR-BB2', name: 'Band Building P2', dept: 'PRODUCTION' },
+    { code: 'PR-BB3', name: 'Band Building P3', dept: 'PRODUCTION' },
+    { code: 'PR-TC', name: 'Tyre Curing Production', dept: 'PRODUCTION' },
+    { code: 'PR-BIAS1', name: 'Bias Cutting 1', dept: 'PRODUCTION' },
+    { code: 'PR-BIAS2', name: 'Bias Cutting 2', dept: 'PRODUCTION' },
+    { code: 'PR-BIAS4', name: 'Bias Cutting 4', dept: 'PRODUCTION' },
+    { code: 'PR-BIAS5', name: 'Bias Cutting 5', dept: 'PRODUCTION' },
+    { code: 'PR-AUTOB', name: 'Auto Bias Cutter', dept: 'PRODUCTION' },
+    { code: 'PR-SLIT', name: 'Slitting', dept: 'PRODUCTION' },
+    { code: 'PR-LINE', name: 'Liner Dressing', dept: 'PRODUCTION' },
+    { code: 'PR-SALV', name: 'Salvage', dept: 'PRODUCTION' },
+    { code: 'PR-RADM', name: 'Radial Marangoni', dept: 'PRODUCTION' },
+    { code: 'PR-BIASM', name: 'Bias Marangoni & Bestry', dept: 'PRODUCTION' },
+    { code: 'PR-YAN', name: 'Yanthai', dept: 'PRODUCTION' },
+    { code: 'PR-ST', name: 'Solid Tyre Production', dept: 'PRODUCTION' }
+  ]
+};
+
+// Canonical Assessment Configuration [PENDING HR CONFIRMATION]
+const ASSESSMENT_CONFIG = {
+  // Service-month transition eligibility thresholds
+  transitionMonths: {
+    'I->L': 0,    // Initial onboarding to Learner (0 to 1 month)
+    'L->U': 6,    // Minimum 6 months service before eligible for U
+    'U->O': 24    // Minimum 24 months service before eligible for O default [PENDING HR CONFIRMATION]
+  },
+  // Tiered Pass Mark Standards per Target Level
+  passMarks: {
+    'L': 50,  // Level L: >= 50%
+    'U': 60,  // Level U: >= 60%
+    'O': 75   // Level O: >= 75%
+  },
+  // OJT Practical Evaluation passing threshold
+  ojtPassPct: 70
+};
+
+function getActiveAssessmentConfig() {
+  if (customSettingsMemory && typeof customSettingsMemory === 'object') {
+    return {
+      transitionMonths: Object.assign({}, ASSESSMENT_CONFIG.transitionMonths, customSettingsMemory.transitionMonths || {}),
+      passMarks: Object.assign({}, ASSESSMENT_CONFIG.passMarks, customSettingsMemory.passMarks || {}),
+      ojtPassPct: customSettingsMemory.ojtPassPct !== undefined ? customSettingsMemory.ojtPassPct : ASSESSMENT_CONFIG.ojtPassPct
+    };
+  }
+  return ASSESSMENT_CONFIG;
+}
+
+// Pure Promotion Eligibility Function
+function calculateEligibleLevel(currentLevel, dojStr) {
+  const activeConfig = getActiveAssessmentConfig();
+  const config = activeConfig.transitionMonths;
+  if (!currentLevel || currentLevel === 'O') {
+    return currentLevel || 'I';
+  }
+
+  let months = 0;
+  if (dojStr && dojStr !== '-') {
+    let dojDate = null;
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dojStr)) {
+      const [d, m, y] = dojStr.split('/').map(Number);
+      dojDate = new Date(y, m - 1, d);
+    } else {
+      dojDate = new Date(dojStr);
+    }
+    if (!isNaN(dojDate.getTime())) {
+      const now = new Date();
+      months = (now.getFullYear() - dojDate.getFullYear()) * 12 + (now.getMonth() - dojDate.getMonth());
+      if (now.getDate() < dojDate.getDate()) {
+        months -= 1;
+      }
+      months = Math.max(0, months);
+    }
+  }
+
+  if (currentLevel === 'I') {
+    return 'L';
+  } else if (currentLevel === 'L') {
+    const minMonths = config['L->U'] !== undefined ? config['L->U'] : 6;
+    return months >= minMonths ? 'U' : 'L';
+  } else if (currentLevel === 'U') {
+    const minMonths = config['U->O'] !== undefined ? config['U->O'] : 24;
+    return months >= minMonths ? 'O' : 'U';
+  }
+
+  return currentLevel;
+}
+
+// Standalone Manufacturing Foundation Module Question Generator (Task 2.13)
+function getFoundationQuestionsServer(qBank, options = {}) {
+  const shouldRandomize = options && options.randomize === true;
+  const allQs = [...(qBank.L || []), ...(qBank.U || []), ...(qBank.O || [])];
+
+  const safety = allQs.filter(q => (q.category || '').toLowerCase().includes('safety'));
+  const ciTpm = allQs.filter(q => (q.category || '').toLowerCase().includes('ci') || (q.category || '').toLowerCase().includes('tpm'));
+  const quality = allQs.filter(q => (q.category || '').toLowerCase().includes('qa') || (q.category || '').toLowerCase().includes('quality'));
+
+  if (shouldRandomize) {
+    safety.sort(() => Math.random() - 0.5);
+    ciTpm.sort(() => Math.random() - 0.5);
+    quality.sort(() => Math.random() - 0.5);
+  }
+
+  const selected = [
+    ...safety.slice(0, 7),
+    ...ciTpm.slice(0, 7),
+    ...quality.slice(0, 6)
+  ];
+  return selected;
+}
+
 // Question & Exam Evaluation Helpers
 function normalizeSectionNameServer(sec) {
   let s = (sec || '').toLowerCase().trim().replace(/\s+/g, ' ');
@@ -3069,8 +3202,8 @@ function normalizeSectionNameServer(sec) {
   if (s.includes('curing')) return 'tire curing qa';
   if (s.includes('solid')) return 'solid tire qa';
   if (s.includes('preparatory')) return 'preparatory qa';
-  if (s.includes('fid')) return 'fid inspector qa';
-  if (s.includes('warehouse') || s.includes('data entry')) return 'warehouse qa';
+  if (s.includes('fid') || s.includes('data entry')) return 'fid inspector qa';
+  if (s.includes('warehouse')) return 'warehouse qa';
   if (s.includes('finish')) return 'final finish qa';
   return s;
 }
@@ -3087,9 +3220,8 @@ function getQuestionsForSectionServer(allLevelQuestions, targetLevel, section, o
   const empSecNorm = normalizeSectionNameServer(section);
   const sectionQs = allLevelQuestions.filter(q => normalizeSectionNameServer(q.section) === empSecNorm);
   if (sectionQs.length === 0) {
-    const pool = [...allLevelQuestions];
-    if (shouldRandomize) pool.sort(() => Math.random() - 0.5);
-    return pool.slice(0, reqCount);
+    // Section bank not uploaded: locked to prevent unapproved promotion via borrowed questions
+    return [];
   }
 
   const byCat = {};
@@ -3150,8 +3282,14 @@ async function scoreAssessmentServerSide(empNo, targetLevel, responses, section)
   const empSection = section || (emp && emp.section) || '';
 
   const qBank = await getAuthoritativeQuestions();
-  const allLevelQuestions = qBank[targetLevel] || qBank['L'] || [];
-  const questions = getQuestionsForSectionServer(allLevelQuestions, targetLevel, empSection);
+  let questions = [];
+  const isFoundation = targetLevel === 'FOUNDATION';
+  if (isFoundation) {
+    questions = getFoundationQuestionsServer(qBank);
+  } else {
+    const allLevelQuestions = qBank[targetLevel] || qBank['L'] || [];
+    questions = getQuestionsForSectionServer(allLevelQuestions, targetLevel, empSection);
+  }
 
   let correctCount = 0;
   let safetyMark = 0, safetyTotal = 0;
@@ -3198,15 +3336,9 @@ async function scoreAssessmentServerSide(empNo, targetLevel, responses, section)
 
   const totalQs = questions.length || 1;
   const markPct = Math.round((correctCount / totalQs) * 100);
-  const currentLevel = (emp && emp.currentLevel) || 'I';
-  const levelRules = {
-    "I": { "nextLevel": "L", "numQuestions": 20, "passingPct": 50 },
-    "L": { "nextLevel": "U", "numQuestions": 20, "passingPct": 50 },
-    "U": { "nextLevel": "O", "numQuestions": 30, "passingPct": 50 },
-    "O": { "nextLevel": "O", "numQuestions": 40, "passingPct": 50 }
-  };
-  const rule = levelRules[currentLevel] || levelRules['I'];
-  const pass = markPct >= rule.passingPct;
+  const activeConfig = getActiveAssessmentConfig();
+  const passingPct = isFoundation ? 70 : (activeConfig.passMarks[targetLevel] || 70);
+  const pass = markPct >= passingPct;
 
   let uMark = 0, lMark = 0, oMark = 0;
   if (targetLevel === 'U') uMark = correctCount;
@@ -3220,6 +3352,9 @@ async function scoreAssessmentServerSide(empNo, targetLevel, responses, section)
     section: emp ? emp.section : empSection,
     doj: emp ? emp.doj : '-',
     targetLevel: targetLevel,
+    isFoundation: isFoundation,
+    moduleName: isFoundation ? 'Manufacturing Foundation Module' : `Level ${targetLevel} MCQ Assessment`,
+    passingPct,
     inProgress: false,
     isCompleted: true,
     responses: responses,
@@ -3556,9 +3691,23 @@ app.post('/api/exam/start', requireEmpAuth, async (req, res) => {
     }
 
     const targetLevel = req.body.targetLevel || emp.targetLevel || 'L';
+    const isFoundation = targetLevel === 'FOUNDATION' || req.body.isFoundation === true;
+
     const qBank = await getAuthoritativeQuestions();
-    const allQs = qBank[targetLevel] || qBank['L'] || [];
-    const questions = getQuestionsForSectionServer(allQs, targetLevel, emp.section, { randomize: true });
+    let questions = [];
+    if (isFoundation) {
+      questions = getFoundationQuestionsServer(qBank, { randomize: true });
+    } else {
+      const allQs = qBank[targetLevel] || qBank['L'] || [];
+      questions = getQuestionsForSectionServer(allQs, targetLevel, emp.section, { randomize: true });
+      if (!questions || questions.length === 0) {
+        return res.status(403).json({
+          success: false,
+          locked: true,
+          message: 'Level exams for this section are locked until a section question bank is uploaded. Please complete the Manufacturing Foundation Module in the interim.'
+        });
+      }
+    }
 
     const durationSeconds = 45 * 60; // 45 minutes
     const expiresAt = Date.now() + (durationSeconds * 1000) + 30000; // 30s latency grace
@@ -3757,7 +3906,8 @@ app.post('/api/exam/submit', requireEmpAuth, async (req, res) => {
     const employees = await getAuthoritativeEmployees();
     const emp = employees.find(e => String(e.empNo).trim().toLowerCase() === strEmpNo.toLowerCase());
     const section = (emp && emp.section) || (existing && existing.section) || '';
-    const lvl = targetLevel || (existing && existing.targetLevel) || (emp && emp.targetLevel) || 'L';
+    const isFoundation = targetLevel === 'FOUNDATION' || req.body.isFoundation === true || (existing && existing.isFoundation);
+    const lvl = isFoundation ? 'FOUNDATION' : (targetLevel || (existing && existing.targetLevel) || (emp && emp.targetLevel) || 'L');
 
     // Server-Side Scoring: authoritative evaluation
     const scoredRecord = await scoreAssessmentServerSide(strEmpNo, lvl, responses || {}, section);
@@ -3770,8 +3920,8 @@ app.post('/api/exam/submit', requireEmpAuth, async (req, res) => {
       scoredRecord.candidateSignature = candidateSignature;
     }
 
-    // Skill level switch upon exam completion / passing
-    if (scoredRecord.isPassed) {
+    // Skill level switch upon exam completion / passing (NEVER for foundation module)
+    if (scoredRecord.isPassed && !isFoundation && lvl !== 'FOUNDATION') {
       if (emp) {
         const prevLevel = emp.currentLevel || 'I';
         emp.currentLevel = lvl;
@@ -4122,6 +4272,26 @@ app.post('/api/settings', requireAdminAuth, async (req, res) => {
     }
   }
   res.json({ success: true, message: 'Security settings saved to Cloud DB' });
+});
+
+// GET /api/config/assessment-standards: Single configuration source for standards (Task 2.12)
+app.get('/api/config/assessment-standards', (req, res) => {
+  res.json({
+    success: true,
+    standards: getActiveAssessmentConfig(),
+    status: 'ACTIVE_PENDING_HR_CONFIRMATION'
+  });
+});
+
+// GET /api/taxonomy/sections: Canonical plant taxonomy (Task 2.14)
+app.get('/api/taxonomy/sections', (req, res) => {
+  res.json({
+    success: true,
+    totalSections: 33,
+    qaCount: CANONICAL_PLANT_SECTIONS.qa.length,
+    productionCount: CANONICAL_PLANT_SECTIONS.production.length,
+    taxonomy: CANONICAL_PLANT_SECTIONS
+  });
 });
 
 // ---------------------------------------------------------------------
@@ -4741,5 +4911,8 @@ app.getKvWriteForbidden = () => isKvWriteForbidden;
 app.LUA_ATOMIC_RATE_LIMIT = LUA_ATOMIC_RATE_LIMIT;
 
 app._sanitizeFormulaInjection = sanitizeFormulaInjection;
+app._calculateEligibleLevel = calculateEligibleLevel;
+app._getActiveAssessmentConfig = getActiveAssessmentConfig;
+app._CANONICAL_PLANT_SECTIONS = CANONICAL_PLANT_SECTIONS;
 module.exports = app;
 
