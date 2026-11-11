@@ -3439,8 +3439,21 @@ app.post('/api/records/reset-department', requireAdminAuth, async (req, res) => 
   });
 });
 
-// POST /api/records/restore-demo (Superadmin only)
-app.post('/api/records/restore-demo', requireAdminAuth, async (req, res) => {
+// POST /api/records/restore-demo (Superadmin only - strictly disabled in production)
+app.post('/api/records/restore-demo', requireSuperAdminAuth, async (req, res) => {
+  if (isProduction) {
+    return res.status(403).json({
+      success: false,
+      message: 'Forbidden: Demo data restoration is strictly prohibited in production environments'
+    });
+  }
+  const { confirmPhrase } = req.body || {};
+  if (confirmPhrase !== 'RESTORE-DEMO-DATA') {
+    return res.status(400).json({
+      success: false,
+      message: 'Confirmation phrase mismatch. You must explicitly type "RESTORE-DEMO-DATA" to perform this action.'
+    });
+  }
   const BACKUP_FILE = path.join(__dirname, 'assessment_records_backup_236.json');
   if (fs.existsSync(BACKUP_FILE)) {
     try {
