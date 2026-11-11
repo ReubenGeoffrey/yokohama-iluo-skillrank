@@ -164,21 +164,21 @@ During code inspection, the following critical inconsistencies and hardcoded val
 - **Remediation Requirement:** Remove static strings; bind all counter elements to dynamic backend aggregates with skeleton loading states.
 
 ### 6.4 Inconsistent Section & Department Naming (Issues B4 & B5)
-- QA Section duplicate spellings across datasets:
-  - `"Tire building QA"` vs `"Tire Building QA"`
-  - `"Ware House QA"` vs `"Warehouse QA"`
-  - `"Tire curing QA"` vs `"Tire Curing QA"`
-  - `"FINAL FINISH"` vs `"Final Finish QA"` vs `"Final Finish ALT QA"` vs `"Final Finish RRO QA"` vs `"Final Finish RRO & ALT QA"`
+- **Section Count Reconciliation (33 Total Sections):**
+  - **Quality Control:** Exactly **8 canonical QA sections** match the 720 questions in the master bank: `Tire Building QA`, `Tire Curing QA`, `Final Finish QA`, `Final Finish RRO & ALT QA`, `Preparatory QA`, `Solid Tire QA`, `Warehouse QA`, and `FID Inspector QA`.
+  - The employee roster contained 10 raw entries because sub-sections (`Data Entry QA`, `FINAL FINISH`, `Final Finish ALT QA`, `Final Finish RRO QA`) appeared as separate strings. These map directly into the 8 canonical QA sections.
+  - **Production:** Exactly **25 manufacturing sections**.
+  - **Total Reconciled Sections:** 8 QA + 25 Production = **33 operational manufacturing sections**.
 - Production spelling anomalies:
   - `"TYRE CURING"` vs `"Tire curing QA"` (Tyre vs Tire)
   - Legacy/typo names: `"YANTHAI"`, `"BIAS MARANGONI&BESTRY"`
-- **Remediation Requirement:** Introduce a canonical `sections` table/schema with standardized codes (e.g., `TB`, `FF`, `PR`, `ST`, `WH`, `TC`, `RA`, `FD`) and consistent title casing.
+- **Remediation Requirement:** Introduce a canonical `sections` table/schema with standardized codes (e.g., `TB`, `FF`, `PR`, `ST`, `WH`, `TC`, `RA`, `FD`) and consistent title casing adhering to `docs/GLOSSARY.md`.
 
 ### 6.5 Production Staff Exam Void (Issue B8)
 - 1,179 production employees across 25 production sections are rostered in `custom_employees.json`.
 - The question bank (`custom_questions.json`) has **0 questions for Production sections** (all 720 questions belong to 8 QA sections).
-- Production staff cannot take exams or advance skill ranks through the portal.
-- **Remediation Requirement:** Clarify with stakeholders whether Production questions will be uploaded via bulk import, or provide a generic manufacturing foundational module.
+- Production staff cannot advance ILUO levels through the portal without approved question banks.
+- **Remediation Requirement:** Per stakeholder decision, provide a dedicated non-promotional "Manufacturing Foundation Module" (Safety, CI & TPM, Quality) recorded as compliance training without changing ILUO skill levels. Section-specific exams remain locked until section question banks are uploaded.
 
 ### 6.6 Admin Surface Exposure (Issue S1)
 - `index.html` currently bundles markup for all 5 roles (HR Control Center, HOD Dashboard, Section Portal, OJT Form, Reset All Exams modal, Security Settings modal) into one 2,300-line file served to every visitor.
@@ -200,4 +200,4 @@ During code inspection, the following critical inconsistencies and hardcoded val
 
 ## 8. Conclusion & Sign-Off
 
-Reconnaissance is complete with zero unverified assumptions. All 11 security items and 13 logic/data consistency items have been traced to concrete source locations. The implementation plan in `docs/PLAN.md` provides the exact step-by-step roadmap for executing Phases 2 through 8 on branch `audit/full-fix`.
+Reconnaissance has verified the concrete code realities, security scanners, dependencies, and business logic across all 11 security items and 13 logic/data consistency items. All items requiring plant policy verification (eligibility transition months, tiered pass marks, OJT thresholds) are explicitly cataloged as `PENDING HR CONFIRMATION` in `docs/ASSUMPTIONS.md`. The implementation plan in `docs/PLAN.md` provides the exact step-by-step roadmap for executing Phases 2 through 8 on branch `audit/full-fix`.

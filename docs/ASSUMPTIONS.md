@@ -1,89 +1,95 @@
 # Architectural & Business Rule Assumptions
 
 **Project:** ATC Tires (Yokohama Group) ILUO Skill Assessment & Analytics Portal  
-**Document Version:** 1.0.0  
+**Document Version:** 1.1.0  
 **Date:** 2026-11-11  
 
-This document records all baseline assumptions, operational definitions, and business logic reconciliations formulated during the Phase 1 audit. Any changes to plant HR policies should be updated here.
+This document records all baseline assumptions, operational definitions, and business logic reconciliations formulated during the Phase 1 audit and refined following stakeholder review.
 
 ---
 
 ## 1. Exam Eligibility & Experience Rules (Issue B1)
 
 ### Identified Gap
-The public matrix currently states:
+The legacy public matrix currently displays:
 - **Level L (Learner):** 7 to 90 days of experience.
 - **Level U (Executor):** 3 months to 2 years of experience.
 - **Level O (Expert):** > 4 years of experience.
 
-Employees with **2 years to 4 years of experience (24 to 48 months)** fall into an unmapped dead zone where no advancement rule applies.
+Employees with experience between 2 years and 4 years (24 to 48 months) fell into an unmapped dead zone where no advancement rule applied.
 
-### Baseline Assumption
-1. **Progression Path:**
-   - **I → L (Induction to Learner):** Eligible between 7 days and 90 days.
-   - **L → U (Learner to Executor):** Eligible between 3 months and 24 months (2 years).
-   - **U → O (Executor to Expert):** Eligible from **24 months (2 years) and above**. Candidates with 4+ years are categorized as Senior Expert candidates with expedited scheduling priority.
-2. **Pure Function Rule:** Experience is calculated in completed months from `doj` (Date of Joining) relative to the assessment date in timezone `Asia/Kolkata`.
+### Approved Architecture & Baseline Rule
+1. **Model:** Eligibility is calculated purely from the employee's `currentLevel` plus **configurable minimum service months per transition**, with zero overlapping ranges.
+2. **Transition Matrix Configuration (`eligibility_config`):**
+   - **`I → L` (Induction to Learner):** Minimum 7 days (0.25 months), Maximum 90 days (3.0 months).
+   - **`L → U` (Learner to Executor):** Minimum 3 months (0.25 years), Maximum 24 months (2.0 years).
+   - **`U → O` (Executor to Expert):** Default Minimum **24 months (2.0 years)** `[PENDING HR CONFIRMATION]`.
+3. **Execution Rule:**
+   - Calculation is performed by a pure function: `isEligibleForAssessment(emp, targetLevel, config)`.
+   - Experience is computed in completed months from `doj` (Date of Joining) relative to the assessment date in timezone `Asia/Kolkata`.
+   - No invented designations (e.g., "Senior Expert" or "expedited priority" have been removed).
 
 ---
 
-## 2. Pass Mark Standards (Issue B2)
+## 2. Pass Mark Standards & Score Thresholds (Issue B2)
 
-### Identified Discrepancy
-- `server.js` evaluates score as `>= 50%` (0.50).
+### Identified Policy Divergence
+- `server.js` previously evaluated score as `>= 50%` (0.50).
 - `app.js` UI text states `> 50%`.
 - Security Settings modal default input shows `70%`.
-- Excel export formula evaluates `L >= 50%, U >= 60%, O >= 75%`.
+- Excel export formula evaluates tiered thresholds: `L >= 50%, U >= 60%, O >= 75%`.
 - Practical OJT threshold states `≥ 70%` (35 out of 50 marks).
 
-### Baseline Assumption
-1. **MCQ Knowledge Pass Rule:**
-   - Standard minimum pass threshold is **>= 50%** (inclusive).
-   - For Level L (20 questions): Passing mark is **10 / 20**.
-   - For Level U (30 questions): Passing mark is **15 / 30**.
-   - For Level O (40 questions): Passing mark is **20 / 40**.
-2. **Practical OJT Pass Rule:**
-   - Evaluated out of 50 total possible marks across 10 checkpoints (1-5 scale).
-   - Passing threshold is strictly **>= 70% (35 / 50 marks)** AND adherence to Work Instructions (WI).
-3. **Dual Qualification Status:**
-   - **Both Passed:** Candidate is recommended for target level advancement.
-   - **MCQ Failed, OJT Qualified:** MCQ Retest required.
-   - **MCQ Passed, OJT Failed:** Practical Checkpoint Refresher required.
-   - **Both Failed:** Full Retraining and Retest required.
+### Approved Architecture & Baseline Rule
+1. **Do Not Flatten:** Passing thresholds reflect intentional, tiered competence rigor per skill level.
+2. **Single Config Source (`threshold_config`):**
+   - **Level L Knowledge MCQ:** Default **>= 50%** (10 / 20 marks) `[PENDING HR CONFIRMATION]`.
+   - **Level U Knowledge MCQ:** Default **>= 60%** (18 / 30 marks) `[PENDING HR CONFIRMATION]`.
+   - **Level O Knowledge MCQ:** Default **>= 75%** (30 / 40 marks) `[PENDING HR CONFIRMATION]`.
+   - **Admin Settings Default Fallback:** Default **70%** `[PENDING HR CONFIRMATION]`.
+   - **Practical OJT Passing Threshold:** Default **>= 70%** (35 / 50 marks) AND strict adherence to Work Instructions (WI) `[PENDING HR CONFIRMATION]`.
+3. **Evaluation Logic:** UI badges, server-side grading, and reporting modules read directly from this single authoritative configuration.
 
 ---
 
-## 3. Database Architecture & Supabase / PostgreSQL (Phase 3)
-
-### Current Architecture
-- The application currently operates as an Express serverless monolith on Vercel backed by:
-  - Local JSON files (`custom_employees.json`, `custom_questions.json`, `assessment_records.json`, `ojt_evaluations.json`, `audit_logs.json`).
-  - Upstash Redis REST KV (`yokohama_records`, `yokohama_employees`, `yokohama_question_bank`, `yokohama_ojt_evaluations`, `yokohama_audit_logs`, `yokohama_settings`, `exam:<empNo>`).
-- No active Supabase or PostgreSQL database instance is currently configured in the environment variables.
-
-### Baseline Assumption
-1. Full PostgreSQL / Supabase schemas, tables, constraints, foreign keys, triggers, and Row Level Security (RLS) policies will be authored as versioned SQL migration scripts in `migrations/` and documented in `docs/DB_SCHEMA.md`.
-2. A typed data-access adapter layer will be implemented that supports both PostgreSQL/Supabase (when connection parameters `DATABASE_URL` / `SUPABASE_URL` are set) and Upstash Redis / local JSON (for local testing and offline execution), preventing deployment disruption.
-
----
-
-## 4. Production Staff Question Bank (Issue B8)
+## 3. Production Staff Assessment & Foundational Modules (Issue B8)
 
 ### Identified Void
 - 1,179 production employees across 25 production sections are rostered in the employee directory.
-- All 720 existing questions in `custom_questions.json` are tagged to 8 Quality Control sections. No production questions exist.
+- All 720 existing questions in `custom_questions.json` belong exclusively to 8 Quality Control sections. Zero questions exist for Production.
 
-### Baseline Assumption
-1. Until production-specific technical question banks are uploaded via the Excel/Word bulk import tool, production employees assigned for assessment will receive foundational plant-wide questions covering:
-   - **Safety (PPE, Hazard identification, 5S, Fire safety)**
-   - **CI & TPM (Continuous Improvement, Kaizen, Autonomous Maintenance)**
-   - **General Quality & Defect Identification**
-2. The bulk import facility (Phase 6) will enable HR and Production HODs to upload section-specific question banks for all 25 production sections.
+### Approved Architecture & Baseline Rule
+1. **No Level Promotion via Foundation Questions:** Production employees **cannot** advance their ILUO skill level using generic foundational questions.
+2. **Dedicated Manufacturing Foundation Module:**
+   - A standalone, non-promotional module covering plant fundamentals: Safety (PPE, 5S, Fire Safety), CI & TPM (Kaizen, 1S-5S), and Basic Quality Awareness.
+   - Successful completion is recorded, badged, and reported as **Compliance / Induction Training**, but the candidate's ILUO skill level remains unchanged.
+3. **Section Exam Locking:**
+   - Technical ILUO skill advancement exams for any section remain **strictly locked** until an approved, section-specific question bank is uploaded by HR/HOD via the bulk import facility.
 
 ---
 
-## 5. Canonical Naming & Glossary (Issues B4, B5, B6, B7)
+## 4. Database Architecture, Persistence & Production Fail-Closed
 
-### Baseline Assumption
-1. **Spelling Standard:** We adopt the standardized corporate plant spelling **"Tire"** for consistency with the official template `ATC/T/FOR/HR/87D` (e.g., "Tire Building QA", "Solid Tire QA", "Tire Curing QA").
-2. **Section Normalization:** All duplicate and case-variant section names will map to canonical section IDs via the mapping table documented in `docs/GLOSSARY.md`.
+### Current Architecture vs Target
+- Currently operates on Vercel with Upstash Redis KV and local JSON files.
+- No Supabase or PostgreSQL instance is currently linked in active environment variables.
+
+### Approved Architecture & Baseline Rule
+1. **Production Fail-Closed Enforcement:**
+   - The Vercel serverless filesystem is ephemeral and read-only.
+   - In production, the system must **fail closed**: if the authoritative cloud datastore (PostgreSQL / Upstash Redis) is unavailable or write-forbidden, write requests must return HTTP 503 (`SERVICE_UNAVAILABLE`).
+   - Local JSON file fallback is strictly permitted in local development and test environments (`NODE_ENV !== 'production'`).
+2. **Service-Role Key & Defense-in-Depth RLS:**
+   - The Express backend server runs in a trusted serverless execution environment. It connects to PostgreSQL / Supabase using the database connection pool or Supabase service-role credentials.
+   - **Row Level Security (RLS)** is configured on all tables as defense-in-depth. For client-direct queries or edge functions, Supabase JWTs with verified claims (`role: hr_admin | dept_hod | section_head | evaluator | employee`, `section: string`, `dept: string`) enforce row access policies.
+3. **Data Migration Plan (Redis/JSON → Postgres):**
+   - Migration pipeline includes: schema validation, dry-run export/import script, dual-write verification period, row count verification, and documented rollback.
+
+---
+
+## 5. Canonical Naming & Taxonomy Reconciled (Issues B4, B5, B6, B7)
+
+### Approved Section Count
+- Total operational manufacturing sections: **33 Sections** (exactly **8 QA sections** + **25 Production sections**).
+- Legacy employee section aliases (e.g., `FINAL FINISH`, `Final Finish ALT QA`, `Final Finish RRO QA`, `Data Entry QA`, `FID Inspector QA`) are normalized to the 8 canonical QA section codes in `docs/GLOSSARY.md`.
+- Plant standard spelling **"Tire"** is adopted uniformly across all modules to match official form `ATC/T/FOR/HR/87D`.

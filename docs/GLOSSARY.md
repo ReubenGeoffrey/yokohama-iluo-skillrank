@@ -1,7 +1,7 @@
 # Canonical Glossary & Taxonomy
 
 **Project:** ATC Tires (Yokohama Group) ILUO Skill Assessment & Analytics Portal  
-**Document Version:** 1.0.0  
+**Document Version:** 1.1.0  
 **Date:** 2026-11-11  
 
 This glossary establishes the canonical terminology, identifiers, and taxonomy to be used uniformly across the user interface, database schemas, API contracts, and exported reports (`ATC/T/FOR/HR/87D`).
@@ -32,24 +32,26 @@ This glossary establishes the canonical terminology, identifiers, and taxonomy t
 
 ---
 
-## 3. Canonical QA Sections (Quality Control)
+## 3. Canonical QA Sections (Quality Control — Exactly 8 Sections)
 
-| Section Code | Canonical Display Name | Legacy / Variant Aliases |
+The Quality Control department is organized into exactly **8 canonical technical sections** matching the verified master question bank:
+
+| Canonical Code | Canonical Display Name | Legacy / Employee Roster Aliases Mapped |
 | :---: | :--- | :--- |
 | **QA-TB** | `Tire Building QA` | `Tire building QA`, `TYRE BUILDING QA` |
 | **QA-TC** | `Tire Curing QA` | `Tire curing QA`, `TYRE CURING QA` |
-| **QA-FF** | `Final Finish QA` | `FINAL FINISH`, `Final Finish` |
-| **QA-FF-ALT**| `Final Finish ALT QA` | `Final Finish ALT` |
-| **QA-FF-RRO**| `Final Finish RRO & ALT QA`| `Final Finish RRO QA`, `Final Finish RRO` |
+| **QA-FF** | `Final Finish QA` | `FINAL FINISH`, `Final Finish`, `Final Finish QA` |
+| **QA-FF-RRO**| `Final Finish RRO & ALT QA`| `Final Finish ALT QA`, `Final Finish RRO QA`, `Final Finish ALT`, `Final Finish RRO` |
 | **QA-PR** | `Preparatory QA` | `Preparatory`, `PREPARATORY QA` |
 | **QA-ST** | `Solid Tire QA` | `Solid tire QA`, `SOLID TYRE QA` |
 | **QA-WH** | `Warehouse QA` | `Ware House QA`, `WAREHOUSE QA` |
-| **QA-DE** | `Data Entry QA` | `Data Entry`, `DATA ENTRY QA` |
-| **QA-FID** | `FID Inspector QA` | `FID Inspector`, `FID QA` |
+| **QA-FID** | `FID Inspector QA` | `FID Inspector`, `FID QA`, `Data Entry QA` |
 
 ---
 
-## 4. Canonical Production Sections
+## 4. Canonical Production Sections (Production — Exactly 25 Sections)
+
+The Production department is organized into exactly **25 manufacturing sections**:
 
 | Section Code | Canonical Display Name | Section Code | Canonical Display Name |
 | :---: | :--- | :---: | :--- |
@@ -66,6 +68,8 @@ This glossary establishes the canonical terminology, identifiers, and taxonomy t
 | **PR-BB2** | `Band Building P2` | **PR-YAN** | `Yanthai` |
 | **PR-BB3** | `Band Building P3` | **PR-ST** | `Solid Tyre Production` |
 | **PR-TC** | `Tyre Curing Production` | | |
+
+**Reconciled Plant Total:** 8 QA Sections + 25 Production Sections = **Exactly 33 Sections Total**.
 
 ---
 
