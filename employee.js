@@ -1,4 +1,34 @@
 
+let empAutosaveTimer = null;
+function triggerEmployeeAutosave() {
+  if (!empState || !empState.employee) return;
+  if (empAutosaveTimer) clearTimeout(empAutosaveTimer);
+  empAutosaveTimer = setTimeout(async () => {
+    try {
+      const res = await fetch('/api/exam/autosave', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({
+          empNo: empState.employee.empNo,
+          responses: empState.userAnswers,
+          currentIndex: empState.currentQIndex,
+          tabSwitchCount: empState.tabSwitches || 0
+        })
+      });
+      const data = await res.json();
+      if (data && data.autoSubmitted) {
+        if (empState.examTimerInterval) clearInterval(empState.examTimerInterval);
+        showToast('Assessment auto-terminated due to exceeding tab switch limit.', 'error');
+        if (data.record) {
+          showResultView(data.record);
+        }
+      }
+    } catch (e) {}
+  }, 400);
+}
+
+
 let clientCsrfToken = '';
 
 async function initCsrfToken() {
@@ -530,10 +560,18 @@ async function startEmployeeExam() {
     if (data.success && data.activeExam) {
       empState.exam = data.activeExam;
       empState.examQuestions = data.activeExam.questions || [];
-      empState.currentQIndex = 0;
-      empState.userAnswers = {};
-      empState.tabSwitches = 0;
-      empState.timeRemainingSec = (data.activeExam.durationMinutes || 45) * 60;
+      if (data.isResumed) {
+        empState.currentQIndex = data.activeExam.currentIndex || 0;
+        empState.userAnswers = data.activeExam.responses || {};
+        empState.tabSwitches = data.activeExam.tabSwitchCount || 0;
+        empState.timeRemainingSec = data.activeExam.remainingSeconds || (45 * 60);
+        showToast('Resumed active assessment from server session.', 'info');
+      } else {
+        empState.currentQIndex = 0;
+        empState.userAnswers = {};
+        empState.tabSwitches = 0;
+        empState.timeRemainingSec = (data.activeExam.durationMinutes || 45) * 60;
+      }
 
       setText('tabSwitchCountDisplay', '0 / 3');
       startExamTimer();
@@ -631,6 +669,7 @@ function renderActiveQuestion() {
     item.onclick = (e) => {
       radio.checked = true;
       empState.userAnswers[q.id] = optKey;
+      triggerEmployeeAutosave();
       if (btnNext) btnNext.disabled = false;
       document.querySelectorAll('#optionsContainer .option-item').forEach(el => {
         el.classList.remove('selected');
@@ -937,6 +976,7 @@ function setupTabSwitchDetection() {
     if (document.hidden && empState.examTimerInterval) {
       empState.tabSwitches++;
       setText('tabSwitchCountDisplay', `${empState.tabSwitches} / 3`);
+        triggerEmployeeAutosave();
       if (empState.tabSwitches >= 3) {
         showToast('Maximum tab switches exceeded. Exam logged.', 'error');
       } else {

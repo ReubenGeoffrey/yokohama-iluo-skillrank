@@ -1,4 +1,34 @@
 
+let appAutosaveTimer = null;
+function triggerExamAutosave() {
+  if (!activeExam || activeExam.isCompleted) return;
+  if (appAutosaveTimer) clearTimeout(appAutosaveTimer);
+  appAutosaveTimer = setTimeout(async () => {
+    try {
+      const res = await fetch('/api/exam/autosave', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          empNo: activeExam.empNo,
+          responses: activeExam.responses,
+          currentIndex: activeExam.currentIndex,
+          tabSwitchCount: activeExam.tabSwitchCount || 0
+        })
+      });
+      const data = await res.json();
+      if (data && data.autoSubmitted) {
+        if (timerInterval) clearInterval(timerInterval);
+        activeExam.isCompleted = true;
+        showToast('Assessment auto-terminated due to security policy violations.');
+        if (data.record) {
+          showResultView(data.record);
+        }
+      }
+    } catch (e) {}
+  }, 400);
+}
+
+
 let clientCsrfToken = '';
 
 async function initCsrfToken() {
@@ -629,6 +659,7 @@ function initSecurityMonitors() {
 
     updateTabWarningBadge();
     showToast(`Notice: Assessment window lost focus (${activeExam.tabSwitchCount})`);
+    triggerExamAutosave();
   };
 
   document.addEventListener('visibilitychange', () => {
@@ -1698,6 +1729,7 @@ function selectOption(key) {
   if (!activeExam) return;
   const q = activeExam.questions[activeExam.currentIndex];
   activeExam.responses[q.id] = key;
+  triggerExamAutosave();
 
   renderCurrentQuestion();
 

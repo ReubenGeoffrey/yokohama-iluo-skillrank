@@ -3498,6 +3498,39 @@ app.post('/api/exam/start', requireEmpAuth, async (req, res) => {
       }
     }
 
+    // Resume In-Progress Exam (Task 2.6: Autosave & Resume)
+    let existingSession = activeExamSessions.get(strEmpNo);
+    if (!existingSession && kvUrl && kvToken) {
+      try { existingSession = await syncWithCloudKv('GET', `exam:${strEmpNo}`); } catch (e) {}
+    }
+
+    if (existingSession && !existingSession.isCompleted && Date.now() < existingSession.expiresAt && !req.body.forceRetake) {
+      const serverRemaining = Math.max(0, Math.floor((existingSession.expiresAt - Date.now()) / 1000));
+      const rec = records[strEmpNo] || {};
+
+      const qBank = await getAuthoritativeQuestions();
+      const allQs = qBank[existingSession.targetLevel] || qBank['L'] || [];
+      const questions = existingSession.questions || getQuestionsForSectionServer(allQs, existingSession.targetLevel, emp.section);
+      const sanitizedQuestions = sanitizeQuestionsForEmployee(questions, false);
+
+      return res.json({
+        success: true,
+        isResumed: true,
+        message: 'Active assessment session resumed',
+        activeExam: {
+          empNo: strEmpNo,
+          targetLevel: existingSession.targetLevel,
+          questions: sanitizedQuestions,
+          durationSeconds: existingSession.durationSeconds || 2700,
+          remainingSeconds: serverRemaining,
+          expiresAt: existingSession.expiresAt,
+          responses: rec.responses || existingSession.responses || {},
+          currentIndex: rec.currentIndex || existingSession.currentIndex || 0,
+          tabSwitchCount: rec.tabSwitchCount || existingSession.tabSwitchCount || 0
+        }
+      });
+    }
+
     const targetLevel = req.body.targetLevel || emp.targetLevel || 'L';
     const qBank = await getAuthoritativeQuestions();
     const allQs = qBank[targetLevel] || qBank['L'] || [];
@@ -3561,6 +3594,109 @@ app.post('/api/exam/start', requireEmpAuth, async (req, res) => {
   }
 });
 
+
+// ---------------------------------------------------------------------
+// POST /api/exam/autosave: Debounced in-progress autosave (Task 2.6 & 2.7)
+// ---------------------------------------------------------------------
+app.post('/api/exam/autosave', requireEmpAuth, async (req, res) => {
+  try {
+    const user = req.authUser;
+    const empNo = req.body.empNo || user.empNo;
+    const strEmpNo = String(empNo).trim();
+
+    if (user.role === 'emp' && String(user.empNo).trim() !== strEmpNo) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You can only autosave your own assessment' });
+    }
+
+    const { responses, currentIndex, tabSwitchCount } = req.body || {};
+
+    let examSession = activeExamSessions.get(strEmpNo);
+    if (!examSession && kvUrl && kvToken) {
+      try {
+        examSession = await syncWithCloudKv('GET', `exam:${strEmpNo}`);
+      } catch (e) {}
+    }
+
+    if (!examSession) {
+      return res.status(404).json({ success: false, message: 'No active exam session found to autosave' });
+    }
+
+    if (examSession.isCompleted) {
+      return res.status(409).json({ success: false, message: 'Exam is already completed' });
+    }
+
+    // Check timer expiration (server-authoritative: 45m + 30s grace)
+    if (Date.now() > (examSession.expiresAt + 30000)) {
+      return res.status(403).json({ success: false, message: 'Exam session expired', isExpired: true });
+    }
+
+    const serverRemaining = Math.max(0, Math.floor((examSession.expiresAt - Date.now()) / 1000));
+
+    // Update session state
+    examSession.responses = responses || examSession.responses || {};
+    examSession.currentIndex = (typeof currentIndex === 'number') ? currentIndex : (examSession.currentIndex || 0);
+    examSession.tabSwitchCount = (typeof tabSwitchCount === 'number') ? tabSwitchCount : (examSession.tabSwitchCount || 0);
+    examSession.lastAutosaveAt = Date.now();
+    activeExamSessions.set(strEmpNo, examSession);
+
+    // Sync to Redis
+    if (kvUrl && kvToken) {
+      try {
+        await syncWithCloudKv('SET', `exam:${strEmpNo}`, examSession, serverRemaining + 120);
+      } catch (e) {}
+    }
+
+    // Update in-progress record
+    const records = await getAuthoritativeRecords();
+    const existing = records[strEmpNo] || {};
+    if (!existing.isCompleted) {
+      await saveAuthoritativeRecord(strEmpNo, {
+        ...existing,
+        empNo: strEmpNo,
+        inProgress: true,
+        isCompleted: false,
+        remainingSeconds: serverRemaining,
+        currentIndex: examSession.currentIndex,
+        responses: examSession.responses,
+        tabSwitchCount: examSession.tabSwitchCount,
+        lastAutosaveAt: new Date().toISOString()
+      });
+    }
+
+    // Tab-switch auto-submit trigger if violations exceed limit (>= 3) (Task 2.7)
+    if (examSession.tabSwitchCount >= 3) {
+      const employees = await getAuthoritativeEmployees();
+      const emp = employees.find(e => String(e.empNo).trim().toLowerCase() === strEmpNo.toLowerCase());
+      const section = (emp && emp.section) || (existing && existing.section) || '';
+      const lvl = examSession.targetLevel || (existing && existing.targetLevel) || 'L';
+      const scoredRecord = await scoreAssessmentServerSide(strEmpNo, lvl, examSession.responses, section);
+      scoredRecord.tabSwitchCount = examSession.tabSwitchCount;
+      scoredRecord.autoSubmitted = true;
+      scoredRecord.autoSubmitReason = 'EXCEEDED_TAB_SWITCH_LIMIT';
+      await saveAuthoritativeRecord(strEmpNo, scoredRecord);
+      await logAuditEvent('EXAM_TERMINATED_TAB_SWITCHES', strEmpNo, `Exam auto-terminated: candidate exceeded 3 tab switches (${examSession.tabSwitchCount})`, req);
+      activeExamSessions.delete(strEmpNo);
+      if (kvUrl && kvToken) {
+        try { await syncWithCloudKv('DEL', `exam:${strEmpNo}`); } catch (e) {}
+      }
+      return res.json({
+        success: true,
+        autoSubmitted: true,
+        message: 'Exam terminated and submitted automatically due to exceeding allowable tab switches (3/3)',
+        record: scoredRecord
+      });
+    }
+
+    return res.json({
+      success: true,
+      remainingSeconds: serverRemaining,
+      savedAt: examSession.lastAutosaveAt
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Autosave error: ' + err.message });
+  }
+});
+
 // POST /api/exam/submit: Server-Side Scoring, Timing Validation & Single Submission Enforcement
 app.post('/api/exam/submit', requireEmpAuth, async (req, res) => {
   try {
@@ -3585,8 +3721,13 @@ app.post('/api/exam/submit', requireEmpAuth, async (req, res) => {
       examSession = await syncWithCloudKv('GET', `exam:${strEmpNo}`);
     }
 
-    if (examSession && examSession.expiresAt && Date.now() > (examSession.expiresAt + 15000)) {
-      console.warn(`Assessment submission for ${strEmpNo} arrived after server expiration.`);
+    if (examSession && examSession.expiresAt && Date.now() > (examSession.expiresAt + 30000)) {
+      if (!req.body.isAutoSubmit) {
+        return res.status(403).json({
+          success: false,
+          message: 'Assessment submission rejected: Exam time limit of 45 minutes has expired'
+        });
+      }
     }
 
     const employees = await getAuthoritativeEmployees();
