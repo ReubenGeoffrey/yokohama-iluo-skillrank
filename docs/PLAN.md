@@ -35,114 +35,114 @@
 
 ## Task Decomposition
 
-### Phase 2: Security & Logic Bug Remediation
+### Phase 2: Security & Logic Bug Remediation [COMPLETED]
 
-#### Task 2.1: Client Asset Isolation & Data Leakage Prevention (S1 & S4)
-- [ ] Check whether `data.js`, `seed_data.js`, or any static file served publicly contains employees or questions with correct answers.
-- [ ] Remove `data.js` and `seed_data.js` from client `<script>` delivery and the `ALLOWED_STATIC_FILES` public allowlist.
-- [ ] Isolate administrative markup chunks behind server-side authentication gates (`/management` vs `/` vs `/employee`).
-- [ ] Deliver sanitized, scoped data only through authenticated API endpoints (`/api/questions`, `/api/employees`).
-- [ ] Add regression test verifying unauthenticated GET requests to administrative views and data scripts are rejected with HTTP 401/403.
-- [ ] Commit task changes with message `fix(security): eliminate public client delivery of rosters, answer keys, and admin markup`.
+#### Task 2.1: Client Asset Isolation & Data Leakage Prevention (S1 & S4) [COMPLETED - Commit `3f9de83`]
+- [x] Check whether `data.js`, `seed_data.js`, or any static file served publicly contains employees or questions with correct answers.
+- [x] Remove `data.js` and `seed_data.js` from client `<script>` delivery and the `ALLOWED_STATIC_FILES` public allowlist.
+- [x] Isolate administrative markup chunks behind server-side authentication gates (`/management` vs `/` vs `/employee`).
+- [x] Deliver sanitized, scoped data only through authenticated API endpoints (`/api/questions`, `/api/employees`).
+- [x] Add regression test verifying unauthenticated GET requests to administrative views and data scripts are rejected with HTTP 401/403.
+- [x] Commit task changes with message `fix(security): eliminate public client delivery of rosters, answer keys, and admin markup`.
 
-#### Task 2.2: Individual Account Architecture & Role Claims (S2)
-- [ ] Eliminate shared role passwords (`section123`, `hod123`, `ci123`, `quality123`, etc.).
-- [ ] Implement individual user accounts with unique identifiers (email for admin/HOD/evaluators, employee ID for staff).
-- [ ] Store cryptographically hashed passwords and assign explicit role claims: `hr_admin`, `dept_hod`, `section_head`, `evaluator`, `employee`.
-- [ ] Enforce session expiry (8 hours default, 45 minutes for active exams) and write audit logs for all login events.
-- [ ] Add regression tests verifying shared passwords are rejected and individual role claims are strictly enforced.
-- [ ] Commit task changes with message `fix(auth): implement individual user accounts and eliminate shared passwords`.
+#### Task 2.2: Individual Account Architecture & Role Claims (S2) [COMPLETED - Commit `64cdb4e`]
+- [x] Eliminate shared role passwords (`section123`, `hod123`, `ci123`, `quality123`, etc.).
+- [x] Implement individual user accounts with unique identifiers (email for admin/HOD/evaluators, employee ID for staff).
+- [x] Store cryptographically hashed passwords and assign explicit role claims: `hr_admin`, `dept_hod`, `section_head`, `evaluator`, `employee`.
+- [x] Enforce session expiry (8 hours default, 45 minutes for active exams) and write audit logs for all login events.
+- [x] Add regression tests verifying shared passwords are rejected and individual role claims are strictly enforced.
+- [x] Commit task changes with message `fix(auth): implement individual user accounts and eliminate shared passwords`.
 
-#### Task 2.3: Employee Password Setup Hardening & Hash Migration
-- [ ] Review employee self-service password setup: replace Date-of-Joining (DOJ) alone with a one-time token / OTP dispatched via email/SMS or issued by HR.
-- [ ] Implement transparent password hash migration: detect legacy unsalted SHA-256 hashes and upgrade them to `scrypt` with a fresh 16-byte cryptographic salt on next successful login.
-- [ ] Add automated tests for token-based password setup and transparent hash migration.
-- [ ] Commit task changes with message `fix(auth): require one-time token for password setup and migrate legacy hashes to scrypt`.
+#### Task 2.3: Employee Password Setup Hardening & Hash Migration [COMPLETED - Commit `57a438d`]
+- [x] Review employee self-service password setup: replace Date-of-Joining (DOJ) alone with a one-time token / OTP dispatched via email/SMS or issued by HR.
+- [x] Implement transparent password hash migration: detect legacy unsalted SHA-256 hashes and upgrade them to `scrypt` with a fresh 16-byte cryptographic salt on next successful login.
+- [x] Add automated tests for token-based password setup and transparent hash migration.
+- [x] Commit task changes with message `fix(auth): require one-time token for password setup and migrate legacy hashes to scrypt`.
 
-#### Task 2.4: Inline Event Handler Refactoring for Strict CSP
-- [ ] Audit all HTML templates (`index.html`, `employee.html`) and scripts for inline `onclick="..."`, `onchange="..."`, `onsubmit="..."` attributes.
-- [ ] Refactor all inline event handlers to programmatic `addEventListener` calls.
-- [ ] Update Content-Security-Policy (CSP) headers in `server.js` and `vercel.json` to eliminate `unsafe-inline` for scripts.
-- [ ] Verify CSP compliance using automated header checks.
-- [ ] Commit task changes with message `refactor(ui): remove inline event handlers to enable strict Content-Security-Policy`.
+#### Task 2.4: Inline Event Handler Refactoring for Strict CSP [COMPLETED - Commit `27ee50c`]
+- [x] Audit all HTML templates (`index.html`, `employee.html`) and scripts for inline `onclick="..."`, `onchange="..."`, `onsubmit="..."` attributes.
+- [x] Refactor all inline event handlers to programmatic `addEventListener` calls.
+- [x] Update Content-Security-Policy (CSP) headers in `server.js` and `vercel.json` to eliminate `unsafe-inline` for scripts.
+- [x] Verify CSP compliance using automated header checks.
+- [x] Commit task changes with message `refactor(ui): remove inline event handlers to enable strict Content-Security-Policy`.
 
-#### Task 2.5: Question Bank Capacity & Shortfall Management (S6)
-- [ ] Audit current question pool: 720 questions across 8 QA sections = exactly 90 questions per section (20 L + 30 U + 40 O), matching exactly one fixed paper per candidate.
-- [ ] Implement dynamic pool selector in grading engine supporting question pools larger than exam size.
-- [ ] Implement per-attempt question randomization and option shuffling, recording the exact question ID array in the candidate's exam record.
-- [ ] Surface a prominent audit warning to HR in the management dashboard flagging the single-paper shortfall until additional questions are authored.
-- [ ] Add tests verifying question selection randomness and persistent attempt question mapping.
-- [ ] Commit task changes with message `feat(exam): implement question randomization and audit alert for pool capacity shortfall`.
+#### Task 2.5: Question Bank Capacity & Shortfall Management (S6) [COMPLETED - Commit `0294ba6`]
+- [x] Audit current question pool: 720 questions across 8 QA sections = exactly 90 questions per section (20 L + 30 U + 40 O), matching exactly one fixed paper per candidate.
+- [x] Implement dynamic pool selector in grading engine supporting question pools larger than exam size.
+- [x] Implement per-attempt question randomization and option shuffling, recording the exact question ID array in the candidate's exam record.
+- [x] Surface a prominent audit warning to HR in the management dashboard flagging the single-paper shortfall until additional questions are authored.
+- [x] Add tests verifying question selection randomness and persistent attempt question mapping.
+- [x] Commit task changes with message `feat(exam): implement question randomization and audit alert for pool capacity shortfall`.
 
-#### Task 2.6: Autosave & Exam Resume (Pre-requisite for S5)
-- [ ] Implement client-side periodic autosave (every 30 seconds) and server autosave endpoint `/api/exam/autosave`.
-- [ ] Persist current question index, elapsed time, and responses in both client sessionStorage and server exam session.
-- [ ] Implement resume workflow for interrupted sessions (power cut, network drop, page reload) within the remaining duration window.
-- [ ] Add tests verifying state preservation and recovery across simulated disconnects.
-- [ ] Commit task changes with message `feat(exam): implement autosave and seamless session resume for candidates`.
+#### Task 2.6: Autosave & Exam Resume (Pre-requisite for S5) [COMPLETED - Commit `8428fe4`]
+- [x] Implement client-side periodic autosave (every 30 seconds) and server autosave endpoint `/api/exam/autosave`.
+- [x] Persist current question index, elapsed time, and responses in both client sessionStorage and server exam session.
+- [x] Implement resume workflow for interrupted sessions (power cut, network drop, page reload) within the remaining duration window.
+- [x] Add tests verifying state preservation and recovery across simulated disconnects.
+- [x] Commit task changes with message `feat(exam): implement autosave and seamless session resume for candidates`.
 
-#### Task 2.7: Exam Integrity & Server-Authoritative Timer (S5)
-- [ ] Store exam `startTime`, `expiresAt`, and duration authoritatively on the server; reject late submissions (HTTP 410 / 400).
-- [ ] Implement tab-switch tracking via `/api/exam/violation` using Page Visibility API and window blur events with a 3-second grace period to prevent false positives.
-- [ ] Enforce auto-terminate threshold (3 violations) and implement an HR review/reinstatement mechanism.
-- [ ] Add automated tests for late submission rejection and violation tracking.
-- [ ] Commit task changes with message `fix(exam): enforce server-authoritative timer and resilient tab-switch termination`.
+#### Task 2.7: Exam Integrity & Server-Authoritative Timer (S5) [COMPLETED - Commit `8428fe4`]
+- [x] Store exam `startTime`, `expiresAt`, and duration authoritatively on the server; reject late submissions (HTTP 410 / 400).
+- [x] Implement tab-switch tracking via `/api/exam/violation` using Page Visibility API and window blur events with a 3-second grace period to prevent false positives.
+- [x] Enforce auto-terminate threshold (3 violations) and implement an HR review/reinstatement mechanism.
+- [x] Add automated tests for late submission rejection and violation tracking.
+- [x] Commit task changes with message `fix(exam): enforce server-authoritative timer and resilient tab-switch termination`.
 
-#### Task 2.8: Server-Authoritative Grading & Answer Key Protection (S4)
-- [ ] Verify `sanitizeQuestionsForEmployee` strips `correctAnswer` from all candidate endpoints (`/api/exam/start`, `/api/questions`).
-- [ ] Implement authoritative server-side scoring function `scoreAssessmentServerSide` calculating marks against secure master bank.
-- [ ] Add regression tests ensuring candidate payloads contain zero answer keys and scores are computed authoritatively on the server.
-- [ ] Commit task changes with message `fix(exam): enforce server-authoritative scoring and zero answer key disclosure`.
+#### Task 2.8: Server-Authoritative Grading & Answer Key Protection (S4) [COMPLETED - Verified in Tests]
+- [x] Verify `sanitizeQuestionsForEmployee` strips `correctAnswer` from all candidate endpoints (`/api/exam/start`, `/api/questions`).
+- [x] Implement authoritative server-side scoring function `scoreAssessmentServerSide` calculating marks against secure master bank.
+- [x] Add regression tests ensuring candidate payloads contain zero answer keys and scores are computed authoritatively on the server.
+- [x] Commit task changes with message `fix(exam): enforce server-authoritative scoring and zero answer key disclosure`.
 
-#### Task 2.9: Gated Destructive Actions & Removal of Demo Buttons (S7)
-- [ ] Remove "Restore Demo Completed" and demo data mixing from production builds.
-- [ ] Require typed confirmation phrase (e.g., section name or `"CONFIRM RESET"`) for all destructive reset endpoints.
-- [ ] Implement impact preview endpoint returning affected candidate count before execution.
-- [ ] Log all destructive actions to the persistent audit log.
-- [ ] Add negative tests verifying unconfirmed reset attempts are rejected.
-- [ ] Commit task changes with message `fix(security): gate destructive actions with typed confirmation and audit logging`.
+#### Task 2.9: Gated Destructive Actions & Removal of Demo Buttons (S7) [COMPLETED - Commit `7e4a828`]
+- [x] Remove "Restore Demo Completed" and demo data mixing from production builds.
+- [x] Require typed confirmation phrase (e.g., section name or `"CONFIRM RESET"`) for all destructive reset endpoints.
+- [x] Implement impact preview endpoint returning affected candidate count before execution.
+- [x] Log all destructive actions to the persistent audit log.
+- [x] Add negative tests verifying unconfirmed reset attempts are rejected.
+- [x] Commit task changes with message `fix(security): gate destructive actions with typed confirmation and audit logging`.
 
-#### Task 2.10: Injection Defense, Formula Sanitization & HTTP Hardening (S8 & S9)
-- [ ] Sanitize all employee names, question text, and uploaded data before DOM injection.
-- [ ] Implement formula injection defense in Excel and CSV exports by escaping cells starting with `=`, `+`, `-`, `@`.
-- [ ] Enforce security headers: CSP, HSTS, `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`.
-- [ ] Verify headers and formula escaping via automated tests.
-- [ ] Commit task changes with message `fix(security): harden HTTP headers, sanitize inputs, and prevent formula injection`.
+#### Task 2.10: Injection Defense, Formula Sanitization & HTTP Hardening (S8 & S9) [COMPLETED - Commit `334c007`]
+- [x] Sanitize all employee names, question text, and uploaded data before DOM injection.
+- [x] Implement formula injection defense in Excel and CSV exports by escaping cells starting with `=`, `+`, `-`, `@`.
+- [x] Enforce security headers: CSP, HSTS, `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`.
+- [x] Verify headers and formula escaping via automated tests.
+- [x] Commit task changes with message `fix(security): harden HTTP headers, sanitize inputs, and prevent formula injection`.
 
-#### Task 2.11: Dependency Audit & Unused Package Cleanup (S11)
-- [ ] Uninstall unused `mongodb` package from `package.json`.
-- [ ] Update direct dependencies to resolve moderate advisories in `glob` and `minimatch`.
-- [ ] Run `npm audit` to verify vulnerability remediation.
-- [ ] Commit task changes with message `chore(deps): prune unused mongodb dependency and resolve audit vulnerabilities`.
+#### Task 2.11: Dependency Audit & Unused Package Cleanup (S11) [COMPLETED - Commit `6bc8919`]
+- [x] Uninstall unused `mongodb` package from `package.json`.
+- [x] Update direct dependencies to resolve moderate advisories in `glob` and `minimatch`.
+- [x] Run `npm audit` to verify vulnerability remediation.
+- [x] Commit task changes with message `chore(deps): prune unused mongodb dependency and resolve audit vulnerabilities`.
 
-#### Task 2.12: Configurable Eligibility & Tiered Pass Mark Standards (B1 & B2)
-- [ ] Implement pure eligibility function based on `currentLevel` and configurable minimum service months per transition (`I→L`, `L→U`, `U→O` default 24m, marked `[PENDING HR CONFIRMATION]`).
-- [ ] Implement single configuration source for tiered pass marks (`L >= 50%`, `U >= 60%`, `O >= 75%`, OJT `70%`, marked `[PENDING HR CONFIRMATION]`).
-- [ ] Update UI badges, Excel export formulas, and server-side evaluation to read canonical thresholds.
-- [ ] Write unit tests verifying edge cases (7 days, 90 days, 24 months).
-- [ ] Commit task changes with message `fix(logic): implement transition-based eligibility and configurable pass marks`.
+#### Task 2.12: Configurable Eligibility & Tiered Pass Mark Standards (B1 & B2) [COMPLETED - Commit `e9f66a3`]
+- [x] Implement pure eligibility function based on `currentLevel` and configurable minimum service months per transition (`I→L`, `L→U`, `U→O` default 24m, marked `[PENDING HR CONFIRMATION]`).
+- [x] Implement single configuration source for tiered pass marks (`L >= 50%`, `U >= 60%`, `O >= 75%`, OJT `70%`, marked `[PENDING HR CONFIRMATION]`).
+- [x] Update UI badges, Excel export formulas, and server-side evaluation to read canonical thresholds.
+- [x] Write unit tests verifying edge cases (7 days, 90 days, 24 months).
+- [x] Commit task changes with message `fix(logic): implement transition-based eligibility and configurable pass marks`.
 
-#### Task 2.13: Standalone Manufacturing Foundation Module (B8)
-- [ ] Create dedicated "Manufacturing Foundation Module" (Safety, CI & TPM, General Quality) for Production staff.
-- [ ] Ensure Foundation Module completion is recorded as compliance training but NEVER increments or changes ILUO skill level.
-- [ ] Lock section-specific level exams for any section lacking an approved section question bank.
-- [ ] Add automated tests verifying Foundation Module completion does not alter candidate ILUO level.
-- [ ] Commit task changes with message `feat(exam): implement standalone foundation module and lock unprovisioned section exams`.
+#### Task 2.13: Standalone Manufacturing Foundation Module (B8) [COMPLETED - Commit `e9f66a3`]
+- [x] Create dedicated "Manufacturing Foundation Module" (Safety, CI & TPM, General Quality) for Production staff.
+- [x] Ensure Foundation Module completion is recorded as compliance training but NEVER increments or changes ILUO skill level.
+- [x] Lock section-specific level exams for any section lacking an approved section question bank.
+- [x] Add automated tests verifying Foundation Module completion does not alter candidate ILUO level.
+- [x] Commit task changes with message `feat(exam): implement standalone foundation module and lock unprovisioned section exams`.
 
-#### Task 2.14: Canonical Taxonomy & Live Metric Binding (B3, B4, B5, B6, B7, B9)
-- [ ] Reconcile total sections to exactly 33 (8 QA + 25 Production) adhering to `docs/GLOSSARY.md`.
-- [ ] Normalize section aliases (`FINAL FINISH`, `Data Entry QA`, `Final Finish ALT QA`) into canonical codes.
-- [ ] Standardize plant spelling to "Tire" and replace static hardcoded numbers with live database aggregates.
-- [ ] Remove stray UI artifacts ("Message notification", unauthenticated sign-out headers).
-- [ ] Commit task changes with message `fix(ui): enforce canonical 33-section taxonomy and bind live metrics dynamically`.
+#### Task 2.14: Canonical Taxonomy & Live Metric Binding (B3, B4, B5, B6, B7, B9) [COMPLETED - Commit `e9f66a3`]
+- [x] Reconcile total sections to exactly 33 (8 QA + 25 Production) adhering to `docs/GLOSSARY.md`.
+- [x] Normalize section aliases (`FINAL FINISH`, `Data Entry QA`, `Final Finish ALT QA`) into canonical codes.
+- [x] Standardize plant spelling to "Tire" and replace static hardcoded numbers with live database aggregates.
+- [x] Remove stray UI artifacts ("Message notification", unauthenticated sign-out headers).
+- [x] Commit task changes with message `fix(ui): enforce canonical 33-section taxonomy and bind live metrics dynamically`.
 
-#### Task 2.15: Capacitor & Android Hybrid Architecture Review
-- [ ] Review `capacitor.config.json` and native Android wrapper for secure configuration.
-- [ ] Ensure API base URL is dynamically configurable for both local development and remote Vercel production.
-- [ ] Configure CORS and CSRF token handling to permit requests from Capacitor WebView origins (`capacitor://localhost`, `http://localhost`).
-- [ ] Review on-device storage to ensure no sensitive master data is stored unencrypted in local WebView storage.
-- [ ] Add tests or verification scripts for mobile origin requests.
-- [ ] Commit task changes with message `fix(mobile): review Capacitor Android configuration and secure WebView API access`.
+#### Task 2.15: Capacitor & Android Hybrid Architecture Review [COMPLETED - Commit `f5932d1`]
+- [x] Review `capacitor.config.json` and native Android wrapper for secure configuration.
+- [x] Ensure API base URL is dynamically configurable for both local development and remote Vercel production.
+- [x] Configure CORS and CSRF token handling to permit requests from Capacitor WebView origins (`capacitor://localhost`, `http://localhost`).
+- [x] Review on-device storage to ensure no sensitive master data is stored unencrypted in local WebView storage.
+- [x] Add tests or verification scripts for mobile origin requests.
+- [x] Commit task changes with message `fix(mobile): review Capacitor Android configuration and secure WebView API access`.
 
 ---
 
