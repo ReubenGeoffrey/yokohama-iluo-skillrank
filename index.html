@@ -9,15 +9,7 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#005B9E">
   <link rel="stylesheet" href="styles.css?v=58.0">
-  <script>
-    // Client-side domain router guard: ensure employee portal domain always displays employee portal
-    (function() {
-      var host = (window.location.hostname || '').toLowerCase();
-      if (host.includes('employee')) {
-        window.location.replace('/employee.html' + window.location.search + window.location.hash);
-      }
-    })();
-  </script>
+
 </head>
 <body>
 

@@ -1,3 +1,85 @@
+// ---------------------------------------------------------------------
+// Strict Content Security Policy (CSP) Programmatic Event Delegator (Task 2.4)
+// Eliminates inline event handler execution without using unsafe-eval
+// ---------------------------------------------------------------------
+(function() {
+  if (typeof window === 'undefined') return;
+
+  function safeExecuteAction(expr, el, e) {
+    if (!expr || typeof expr !== 'string') return;
+    const match = expr.match(/^([a-zA-Z0-9_$.]+)(?:\((.*)\))?$/);
+    if (!match) return;
+    const fnPath = match[1];
+    const argsRaw = match[2];
+
+    const parts = fnPath.split('.');
+    let fn = window;
+    let parent = window;
+    for (const part of parts) {
+      if (!fn) break;
+      parent = fn;
+      fn = fn[part];
+    }
+
+    if (typeof fn !== 'function') return;
+
+    let args = [];
+    if (argsRaw && argsRaw.trim().length > 0) {
+      args = argsRaw.split(',').map(s => {
+        s = s.trim();
+        if (s === 'event' || s === 'e') return e;
+        if (s === 'this') return el;
+        if (s === 'true') return true;
+        if (s === 'false') return false;
+        if (s === 'null') return null;
+        if (!isNaN(s) && s !== '') return Number(s);
+        if ((s.startsWith("'") && s.endsWith("'")) || (s.startsWith('"') && s.endsWith('"'))) {
+          return s.slice(1, -1);
+        }
+        const foundEl = document.getElementById(s);
+        if (foundEl) return foundEl;
+        return s;
+      });
+    } else if (expr.includes('(event)')) {
+      args = [e];
+    }
+
+    try {
+      fn.apply(parent, args);
+    } catch (err) {
+      console.error('Error executing CSP action [' + expr + ']:', err);
+    }
+  }
+
+  document.addEventListener('click', function(e) {
+    const el = e.target.closest('[data-click], [onclick]');
+    if (!el) return;
+    const expr = el.getAttribute('data-click') || el.getAttribute('onclick');
+    if (expr) {
+      safeExecuteAction(expr, el, e);
+    }
+  }, false);
+
+  document.addEventListener('change', function(e) {
+    const el = e.target.closest('[data-change], [onchange]');
+    if (!el) return;
+    const expr = el.getAttribute('data-change') || el.getAttribute('onchange');
+    if (expr) {
+      safeExecuteAction(expr, el, e);
+    }
+  }, false);
+
+  document.addEventListener('submit', function(e) {
+    const el = e.target.closest('[data-submit], [onsubmit]');
+    if (!el) return;
+    const expr = el.getAttribute('data-submit') || el.getAttribute('onsubmit');
+    if (expr) {
+      e.preventDefault();
+      safeExecuteAction(expr, el, e);
+    }
+  }, false);
+})();
+
 
 let empAutosaveTimer = null;
 function triggerEmployeeAutosave() {

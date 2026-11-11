@@ -38,7 +38,8 @@ async function runTests() {
     assert.ok(res.headers['permissions-policy'], 'Missing Permissions-Policy');
     assert.ok(res.headers['content-security-policy'], 'Missing Content-Security-Policy');
     assert.ok(res.headers['content-security-policy'].includes("default-src 'self'"), 'CSP does not restrict default-src');
-    console.log('PASS: Security Headers verified (CSP, nosniff, SAMEORIGIN, Referrer-Policy)');
+    assert.ok(!res.headers['content-security-policy'].includes("'unsafe-inline' https://cdn.jsdelivr.net"), 'CSP script-src must not contain unsafe-inline');
+    console.log('PASS: Strict Security Headers verified (CSP without script unsafe-inline, nosniff, SAMEORIGIN, Referrer-Policy)');
     passed++;
   } catch (err) {
     console.error('FAIL TEST 1:', err.message);
