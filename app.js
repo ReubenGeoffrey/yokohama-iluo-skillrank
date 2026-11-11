@@ -500,9 +500,57 @@ function handleRoute() {
     return;
   }
 
-  // Dedicated Employee Portal Redirect
-  if (hash === '/employee' || hash === '/employee-portal' || hash === '/employee/login' || hash.startsWith('/employee/')) {
-    window.location.href = '/employee';
+  // Dedicated Employee Portal in-app views
+  if (hash === '/employee' || hash === '/employee-portal' || hash === '/employee/login') {
+    updateRoleNavHighlight('employee');
+    const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
+    let session = null;
+    try { session = sessionStr ? JSON.parse(sessionStr) : null; } catch(e) {}
+    if (session && (session.role === 'emp' || session.roleClaim === 'employee') && session.empNo) {
+      currentUser = session;
+      navigateTo('/employee/dashboard');
+    } else {
+      showView('viewEmpLogin');
+    }
+    return;
+  }
+
+  if (hash === '/employee/dashboard') {
+    updateRoleNavHighlight('employee');
+    const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
+    let session = null;
+    try { session = sessionStr ? JSON.parse(sessionStr) : null; } catch(e) {}
+    if (!currentUser && session && (session.role === 'emp' || session.roleClaim === 'employee')) {
+      currentUser = session;
+    }
+    if (!currentUser) {
+      navigateTo('/employee');
+      return;
+    }
+    showEmpDashboard();
+    return;
+  }
+
+  if (hash === '/employee/exams') {
+    updateRoleNavHighlight('employee');
+    showEmpExamsView();
+    return;
+  }
+
+  if (hash.startsWith('/employee/exam/') || hash === '/exam') {
+    showView('viewQuiz');
+    return;
+  }
+
+  if (hash === '/employee/results') {
+    updateRoleNavHighlight('employee');
+    showEmpResultsView();
+    return;
+  }
+
+  if (hash === '/employee/profile') {
+    updateRoleNavHighlight('employee');
+    showEmpProfileView();
     return;
   }
 
@@ -7388,7 +7436,17 @@ function switchRolePortal(role) {
   });
 
   if (role === 'employee') {
-    window.location.href = '/employee.html';
+    const btn = document.getElementById('tabRoleEmp');
+    if (btn) btn.classList.add('active');
+    const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
+    let session = null;
+    try { session = sessionStr ? JSON.parse(sessionStr) : null; } catch(e) {}
+    if (session && (session.role === 'emp' || session.roleClaim === 'employee') && session.empNo) {
+      currentUser = session;
+      navigateTo('/employee/dashboard');
+    } else {
+      navigateTo('/employee');
+    }
     return;
   } else if (role === 'section') {
     const btn = document.getElementById('tabRoleSection');
