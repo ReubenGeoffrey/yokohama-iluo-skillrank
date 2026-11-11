@@ -16,6 +16,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://yokohama-iluo-portal.vercel.app https://*.vercel.app; frame-ancestors 'self';");
   if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
@@ -675,6 +676,16 @@ app.get('/manifest.json', (req, res) => {
   });
 });
 
+// Formula Injection Defense (CWE-1236)
+function sanitizeFormulaInjection(value) {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (/^[=+@\-\t\r]/.test(str)) {
+    return "'" + str;
+  }
+  return str;
+}
+
 // Function to update Master Excel workbook with live candidate exam marks & OJT records
 function updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees) {
   if (!wb || !records) return;
@@ -742,7 +753,7 @@ function updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees) {
       if (marks.ci !== null) nl['M' + r] = { t: 'n', v: marks.ci };
       if (rec.totalMark !== undefined) nl['O' + r] = { t: 'n', v: rec.totalMark, f: `SUM(J${r}:N${r})` };
       if (rec.markPct !== undefined) nl['P' + r] = { t: 'n', v: rec.markPct / 100, z: '0%' };
-      if (rec.status) nl['Q' + r] = { t: 's', v: rec.status };
+      if (rec.status) nl['Q' + r] = { t: 's', v: sanitizeFormulaInjection(rec.status) };
 
       const ojt = ojtMap.get(empNoKey);
       if (ojt && ojt.totalScore !== undefined) {
@@ -750,7 +761,7 @@ function updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees) {
         nl['T' + r] = { t: 'n', v: parseInt(ojt.sopScore || 15, 10) };
         nl['U' + r] = { t: 'n', v: ojt.totalScore, f: `SUM(S${r}:T${r})` };
         nl['V' + r] = { t: 'n', v: (ojt.scorePct || 0) / 100, z: '0%' };
-        nl['W' + r] = { t: 's', v: ojt.qualificationStatus || 'Qualified' };
+        nl['W' + r] = { t: 's', v: sanitizeFormulaInjection(ojt.qualificationStatus || 'Qualified') };
       }
     }
   }
@@ -764,10 +775,10 @@ function updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees) {
       const ojt = ojtMap.get(empNoKey);
 
       es['A' + entryRow] = { t: 'n', v: entryRow - 2 };
-      es['B' + entryRow] = { t: 's', v: emp ? emp.empNo : rec.empNo };
-      es['C' + entryRow] = { t: 's', v: emp ? emp.name : rec.name };
-      es['D' + entryRow] = { t: 's', v: (emp ? emp.section : rec.section) || '' };
-      es['E' + entryRow] = { t: 's', v: rec.targetLevel || (emp ? emp.currentLevel : 'L') };
+      es['B' + entryRow] = { t: 's', v: sanitizeFormulaInjection(emp ? emp.empNo : rec.empNo) };
+      es['C' + entryRow] = { t: 's', v: sanitizeFormulaInjection(emp ? emp.name : rec.name) };
+      es['D' + entryRow] = { t: 's', v: sanitizeFormulaInjection((emp ? emp.section : rec.section) || '') };
+      es['E' + entryRow] = { t: 's', v: sanitizeFormulaInjection(rec.targetLevel || (emp ? emp.currentLevel : 'L')) };
       if (marks.s !== null) es['F' + entryRow] = { t: 'n', v: marks.s };
       if (marks.p !== null) es['G' + entryRow] = { t: 'n', v: marks.p };
       if (marks.q !== null) es['H' + entryRow] = { t: 'n', v: marks.q };
@@ -4729,5 +4740,6 @@ app.setKvWriteForbidden = (val) => {
 app.getKvWriteForbidden = () => isKvWriteForbidden;
 app.LUA_ATOMIC_RATE_LIMIT = LUA_ATOMIC_RATE_LIMIT;
 
+app._sanitizeFormulaInjection = sanitizeFormulaInjection;
 module.exports = app;
 

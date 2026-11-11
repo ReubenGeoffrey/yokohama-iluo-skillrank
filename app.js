@@ -3704,6 +3704,15 @@ function renderReportsCenter() {
   }
 }
 
+function sanitizeForCsv(val) {
+  if (val === undefined || val === null) return '';
+  const str = String(val);
+  if (/^[=+@\-\t\r]/.test(str)) {
+    return "'" + str;
+  }
+  return str;
+}
+
 function exportDataToCSV(dataArray, filename) {
   if (!dataArray || !dataArray.length) {
  showToast('No records available for export.');
@@ -3716,7 +3725,8 @@ function exportDataToCSV(dataArray, filename) {
   dataArray.forEach(row => {
     const vals = headers.map(h => {
       const val = row[h] === undefined || row[h] === null ? '' : String(row[h]);
-      return `"${val.replace(/"/g, '""')}"`;
+      const safeVal = sanitizeForCsv(val);
+      return `"${safeVal.replace(/"/g, '""')}"`;
     });
     rows.push(vals.join(','));
   });
