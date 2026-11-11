@@ -30,6 +30,23 @@ const STORAGE_KEY_OJT = 'yokohama_ojt_evaluations_v1';
 const STORAGE_KEY_CUSTOM_EMPLOYEES = 'yokohama_custom_employees_v2';
 const STORAGE_KEY_CUSTOM_QUESTIONS = 'yokohama_custom_questions_v1';
 
+// Baseline Data State (Loaded dynamically from authenticated backend APIs)
+var EMPLOYEES = typeof EMPLOYEES !== 'undefined' ? EMPLOYEES : [];
+var QUESTION_BANK = typeof QUESTION_BANK !== 'undefined' ? QUESTION_BANK : { L: [], U: [], O: [] };
+var DEFAULT_QUESTION_BANK = typeof DEFAULT_QUESTION_BANK !== 'undefined' ? DEFAULT_QUESTION_BANK : { L: [], U: [], O: [] };
+var LEVEL_RULES = typeof LEVEL_RULES !== 'undefined' ? LEVEL_RULES : {
+  "I": { "nextLevel": "L", "numQuestions": 20, "passingPct": 50, "timeLimitMinutes": 45 },
+  "L": { "nextLevel": "U", "numQuestions": 20, "passingPct": 50, "timeLimitMinutes": 45 },
+  "U": { "nextLevel": "O", "numQuestions": 30, "passingPct": 50, "timeLimitMinutes": 45 },
+  "O": { "nextLevel": "O", "numQuestions": 40, "passingPct": 50, "timeLimitMinutes": 45 }
+};
+if (typeof window !== 'undefined') {
+  window.EMPLOYEES = EMPLOYEES;
+  window.QUESTION_BANK = QUESTION_BANK;
+  window.DEFAULT_QUESTION_BANK = DEFAULT_QUESTION_BANK;
+  window.LEVEL_RULES = LEVEL_RULES;
+}
+
 // Global App State
 let currentUser = null; // { empNo, name, dept, section, doj, currentLevel, targetLevel }
 let activeExam = null; // { empNo, targetLevel, questions, currentIndex, responses, remainingSeconds, tabSwitchCount, isCompleted }
@@ -248,25 +265,12 @@ function getAuthHeaders(extraHeaders = {}) {
 
 function getStoredRecords() {
   try {
-    const seed = (typeof SEED_RECORDS !== 'undefined' && SEED_RECORDS && Object.keys(SEED_RECORDS).length > 0)
-      ? SEED_RECORDS
-      : ((typeof YOKOHAMA_SEED_RECORDS !== 'undefined' && YOKOHAMA_SEED_RECORDS && Object.keys(YOKOHAMA_SEED_RECORDS).length > 0)
-          ? YOKOHAMA_SEED_RECORDS
-          : {});
-
     const raw = localStorage.getItem(STORAGE_KEY_RECORDS);
     if (!raw) {
-      const initial = { ...seed };
-      localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(initial));
-      return initial;
+      localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify({}));
+      return {};
     }
-    const parsed = JSON.parse(raw) || {};
-    if (seed && Object.keys(seed).length > 500 && Object.keys(parsed).length < 500) {
-      const merged = { ...seed, ...parsed };
-      localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(merged));
-      return merged;
-    }
-    return parsed;
+    return JSON.parse(raw) || {};
   } catch (e) {
     return {};
   }
@@ -337,7 +341,7 @@ async function syncCloudOjtEvaluations() {
 
 async function syncCloudQuestions() {
   try {
-    const res = await fetchWithTimeout('/api/questions', {}, 4000);
+    const res = await fetchWithTimeout('/api/questions', { headers: getAuthHeaders(), credentials: 'include' }, 4000);
     const data = await res.json();
     if (data.success && data.questionBank) {
       ['L', 'U', 'O'].forEach(lvl => {
@@ -2931,9 +2935,9 @@ function deleteQuestion(qId) {
 // Cloud Sync for Employees & Security Settings
 async function syncCloudEmployees() {
   try {
-    const res = await fetchWithTimeout('/api/employees', {}, 3500);
+    const res = await fetchWithTimeout('/api/employees', { headers: getAuthHeaders(), credentials: 'include' }, 3500);
     const data = await res.json();
-    if (data.success && data.employees && Array.isArray(data.employees) && data.employees.length >= 283) {
+    if (data.success && data.employees && Array.isArray(data.employees) && data.employees.length > 0) {
       EMPLOYEES.length = 0;
       EMPLOYEES.push(...data.employees);
       try {

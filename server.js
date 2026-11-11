@@ -536,7 +536,7 @@ app.get('/api/csrf-token', (req, res) => {
   res.json({ success: true, csrfToken: token });
 });
 
-// Strict Allowlist of Public Static Assets
+// Strict Allowlist of Public Static Assets (Excludes data.js, seed_data.js, and raw data workbooks)
 const ALLOWED_STATIC_FILES = new Set([
   '/',
   '/index.html',
@@ -547,10 +547,8 @@ const ALLOWED_STATIC_FILES = new Set([
   '/management',
   '/management/',
   '/app.js',
-  '/data.js',
   '/styles.css',
   '/ojt_templates_data.js',
-  '/seed_data.js',
   '/docx_generator.js',
   '/report_html_generator.js',
   '/docx-preview.min.js',
@@ -563,9 +561,7 @@ const ALLOWED_STATIC_FILES = new Set([
   '/yokohama_logo.png',
   '/favicon.ico',
   '/favicon.png',
-  '/manifest.json',
-  '/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx',
-  encodeURI('/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx')
+  '/manifest.json'
 ]);
 
 // Static Security Middleware: Allowlist Only (Blocks /server.js, .env, .json, test files, configs)
@@ -787,8 +783,8 @@ function updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees) {
   }
 }
 
-// Explicit handler for official Master Production + QA Assessment Excel workbook
-app.get(['/api/download-master-excel', '/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx', encodeURI('/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx')], async (req, res) => {
+// Authorized handler for official Master Production + QA Assessment Excel workbook (Admin Only)
+app.get('/api/download-master-excel', requireAdminAuth, async (req, res) => {
   res.setHeader('Content-Disposition', 'attachment; filename="1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx"');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
@@ -830,13 +826,6 @@ app.get('/ojt_templates_data.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=3600');
   res.sendFile(path.join(__dirname, 'ojt_templates_data.js'));
-});
-
-// Explicit Seed Completed Records script handler
-app.get('/seed_data.js', (req, res) => {
-  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, max-age=3600');
-  res.sendFile(path.join(__dirname, 'seed_data.js'));
 });
 
 // Explicit docx-preview library script handler

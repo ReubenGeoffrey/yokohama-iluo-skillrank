@@ -437,7 +437,10 @@ test('GATE 12: Strict allowlist blocks direct access to server.js and internal a
     '/tests/gate.test.js',
     '/README.md',
     '/word_to_pdf.ps1',
-    '/custom_employees.json'
+    '/custom_employees.json',
+    '/data.js',
+    '/seed_data.js',
+    '/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx'
   ];
 
   for (const f of forbiddenFiles) {
@@ -446,7 +449,7 @@ test('GATE 12: Strict allowlist blocks direct access to server.js and internal a
   }
 
   // Public assets must be accessible (200)
-  const publicFiles = ['/index.html', '/app.js', '/data.js', '/styles.css'];
+  const publicFiles = ['/index.html', '/app.js', '/styles.css'];
   for (const pf of publicFiles) {
     const res = await fetch(`${baseUrl}${pf}`);
     assert.strictEqual(res.status, 200, `Public file ${pf} must be accessible with 200`);
