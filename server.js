@@ -1028,6 +1028,176 @@ async function getCloudSession(token) {
 }
 
 // ---------------------------------------------------------------------
+// Cryptographic Password Engine & Individual Accounts Store (S2)
+// ---------------------------------------------------------------------
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `scrypt:${salt}:${hash}`;
+}
+
+function verifyPassword(password, storedHash) {
+  if (!storedHash || !password) return false;
+  try {
+    if (storedHash.startsWith('scrypt:')) {
+      const parts = storedHash.split(':');
+      if (parts.length !== 3) return false;
+      const salt = parts[1];
+      const expectedHash = parts[2];
+      const actualHash = crypto.scryptSync(password, salt, 64).toString('hex');
+      return crypto.timingSafeEqual(Buffer.from(expectedHash, 'hex'), Buffer.from(actualHash, 'hex'));
+    }
+    // Legacy SHA-256 fallback
+    const sha = crypto.createHash('sha256').update(password).digest('hex');
+    return sha === storedHash;
+  } catch (err) {
+    return false;
+  }
+}
+
+let customAccountsMemory = null;
+
+function getDefaultAccounts() {
+  return [
+    {
+      id: 'acc_admin_01',
+      username: 'admin',
+      email: (process.env.ADMIN_EMAIL || 'reubengeoffrey16@gmail.com').toLowerCase().trim(),
+      name: 'Reuben Geoffrey',
+      roleClaim: 'hr_admin',
+      role: 'SUPERADMIN',
+      department: 'HR',
+      section: 'All',
+      passwordHash: hashPassword(process.env.ADMIN_PASSWORD || 'admin123'),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'acc_hod_qc_01',
+      username: 'hod.qc',
+      email: 'hod.qc@atctires.com',
+      name: 'Quality Control HOD',
+      roleClaim: 'dept_hod',
+      role: 'DEPT_HEAD',
+      department: 'QUALITY CONTROL',
+      section: 'All QA',
+      passwordHash: hashPassword(process.env.DEPT_PASSWORD || 'hod123'),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'acc_hod_prod_01',
+      username: 'hod.prod',
+      email: 'hod.production@atctires.com',
+      name: 'Production HOD',
+      roleClaim: 'dept_hod',
+      role: 'DEPT_HEAD',
+      department: 'PRODUCTION',
+      section: 'All Production',
+      passwordHash: hashPassword(process.env.DEPT_PASSWORD || 'hod123'),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'acc_sec_tb_01',
+      username: 'sec.tirebuilding',
+      email: 'sec.tirebuilding@atctires.com',
+      name: 'Tire Building QA Head',
+      roleClaim: 'section_head',
+      role: 'SECTION_HEAD',
+      department: 'QUALITY CONTROL',
+      section: 'Tire building QA',
+      passwordHash: hashPassword(process.env.SECTION_PASSWORD || 'section123'),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'acc_eval_safety_01',
+      username: 'eval.safety',
+      email: 'eval.safety@atctires.com',
+      name: 'Safety Evaluator',
+      roleClaim: 'evaluator',
+      role: 'EVALUATOR',
+      department: 'SAFETY',
+      section: 'Safety',
+      passwordHash: hashPassword(process.env.EVALUATOR_PASS_SAFETY || 'safety123'),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'acc_eval_ci_01',
+      username: 'eval.ci',
+      email: 'eval.ci@atctires.com',
+      name: 'CI & TPM Evaluator',
+      roleClaim: 'evaluator',
+      role: 'EVALUATOR',
+      department: 'CI & TPM',
+      section: 'CI & TPM',
+      passwordHash: hashPassword(process.env.EVALUATOR_PASS_CI || 'ci123'),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'acc_eval_quality_01',
+      username: 'eval.quality',
+      email: 'eval.quality@atctires.com',
+      name: 'Quality Evaluator',
+      roleClaim: 'evaluator',
+      role: 'EVALUATOR',
+      department: 'QUALITY CONTROL',
+      section: 'Quality',
+      passwordHash: hashPassword(process.env.EVALUATOR_PASS_QUALITY || 'quality123'),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'acc_eval_tech_01',
+      username: 'eval.tech',
+      email: 'eval.tech@atctires.com',
+      name: 'Technical Evaluator',
+      roleClaim: 'evaluator',
+      role: 'EVALUATOR',
+      department: 'TECHNICAL',
+      section: 'Technical',
+      passwordHash: hashPassword(process.env.EVALUATOR_PASS_TECH || 'tech123'),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'acc_eval_hr_01',
+      username: 'eval.hr',
+      email: 'eval.hr@atctires.com',
+      name: 'HR Evaluator',
+      roleClaim: 'evaluator',
+      role: 'EVALUATOR',
+      department: 'HR',
+      section: 'HR',
+      passwordHash: hashPassword(process.env.EVALUATOR_PASS_HR || 'hr123'),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    }
+  ];
+}
+
+async function getAuthoritativeAccounts() {
+  if (kvUrl && kvToken) {
+    try {
+      const cloudAccounts = await syncWithCloudKv('GET', 'yokohama_accounts');
+      if (cloudAccounts && Array.isArray(cloudAccounts) && cloudAccounts.length > 0) {
+        customAccountsMemory = cloudAccounts;
+        return cloudAccounts;
+      }
+    } catch (e) {}
+  }
+  if (!customAccountsMemory || customAccountsMemory.length === 0) {
+    customAccountsMemory = getDefaultAccounts();
+  }
+  return customAccountsMemory;
+}
+
+async function saveAuthoritativeAccounts(accounts) {
+  customAccountsMemory = accounts;
+  if (kvUrl && kvToken) {
+    try {
+      await syncWithCloudKv('SET', 'yokohama_accounts', accounts);
+    } catch (kvErr) {
+      console.warn(`[STORAGE WARN] Cloud Redis sync for yokohama_accounts failed: ${kvErr.message}`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
 // Role-Based Authorization Engine (RBAC)
 // ---------------------------------------------------------------------
 async function getAuthUser(req) {
@@ -1051,19 +1221,19 @@ async function getAuthUser(req) {
     const session = await getCloudSession(token);
     if (session) {
       req.authUser = session;
-      if (['SUPERADMIN', 'ADMIN'].includes(session.role)) {
+      if (['SUPERADMIN', 'ADMIN', 'hr_admin'].includes(session.role) || session.roleClaim === 'hr_admin') {
         req.adminSession = session;
       }
-      if (session.role === 'emp') {
+      if (['emp', 'employee'].includes(session.role) || session.roleClaim === 'employee') {
         req.empSession = session;
       }
-      if (session.role === 'EVALUATOR') {
+      if (['EVALUATOR', 'evaluator'].includes(session.role) || session.roleClaim === 'evaluator') {
         req.evaluatorSession = session;
       }
-      if (session.role === 'SECTION_HEAD') {
+      if (['SECTION_HEAD', 'section_head'].includes(session.role) || session.roleClaim === 'section_head') {
         req.sectionSession = session;
       }
-      if (session.role === 'DEPT_HEAD') {
+      if (['DEPT_HEAD', 'dept_hod'].includes(session.role) || session.roleClaim === 'dept_hod') {
         req.deptSession = session;
       }
       return session;
@@ -1078,7 +1248,7 @@ async function requireSuperAdminAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
   }
-  if (user.role !== 'SUPERADMIN') {
+  if (user.role !== 'SUPERADMIN' && user.roleClaim !== 'hr_admin') {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Superadmin access privilege required' });
   }
   next();
@@ -1089,7 +1259,7 @@ async function requireAdminAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
   }
-  if (!['SUPERADMIN', 'ADMIN'].includes(user.role)) {
+  if (!['SUPERADMIN', 'ADMIN'].includes(user.role) && user.roleClaim !== 'hr_admin') {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Administrator privileges required' });
   }
   next();
@@ -1100,7 +1270,7 @@ async function requireEvaluatorAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
   }
-  if (!['EVALUATOR', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
+  if (!['EVALUATOR', 'ADMIN', 'SUPERADMIN'].includes(user.role) && !['evaluator', 'hr_admin'].includes(user.roleClaim)) {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Evaluator privileges required' });
   }
   next();
@@ -1111,7 +1281,7 @@ async function requireSectionAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
   }
-  if (!['SECTION_HEAD', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
+  if (!['SECTION_HEAD', 'ADMIN', 'SUPERADMIN'].includes(user.role) && !['section_head', 'hr_admin'].includes(user.roleClaim)) {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Section Head privileges required' });
   }
   next();
@@ -1122,7 +1292,7 @@ async function requireDeptAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
   }
-  if (!['DEPT_HEAD', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
+  if (!['DEPT_HEAD', 'ADMIN', 'SUPERADMIN'].includes(user.role) && !['dept_hod', 'hr_admin'].includes(user.roleClaim)) {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Department HOD privileges required' });
   }
   next();
@@ -1133,7 +1303,7 @@ async function requireEmpAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Employee authentication required' });
   }
-  if (!['emp', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
+  if (!['emp', 'ADMIN', 'SUPERADMIN'].includes(user.role) && !['employee', 'hr_admin'].includes(user.roleClaim)) {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Employee privileges required' });
   }
   next();
@@ -1149,11 +1319,12 @@ async function requireAnyAuth(req, res, next) {
 
 async function canAccessEmployeeData(user, targetEmpNo) {
   if (!user) return false;
-  if (['SUPERADMIN', 'ADMIN'].includes(user.role)) return true;
+  if (['SUPERADMIN', 'ADMIN'].includes(user.role) || user.roleClaim === 'hr_admin') return true;
 
   const strTarget = String(targetEmpNo).trim().toLowerCase();
-  if (user.role === 'emp') {
-    return String(user.empNo).trim().toLowerCase() === strTarget;
+  if (user.role === 'emp' || user.roleClaim === 'employee') {
+    return String(user.empNo).trim().toLowerCase() === strTarget ||
+           ('0' + String(user.empNo).trim().toLowerCase()) === strTarget;
   }
 
   const employees = await getAuthoritativeEmployees();
@@ -1359,7 +1530,7 @@ app.post('/api/auth/admin/send-otp', async (req, res) => {
 // API ROUTE: POST /api/auth/admin/login (Password Login via Environment Credentials)
 // ---------------------------------------------------------------------
 app.post('/api/auth/admin/login', authRateLimiter(), async (req, res) => {
-  const username = (req.body.username || '').trim();
+  const username = (req.body.username || req.body.email || '').trim();
   const password = (req.body.password || '').trim();
 
   if (!username || !password) {
@@ -1369,16 +1540,29 @@ app.post('/api/auth/admin/login', authRateLimiter(), async (req, res) => {
     });
   }
 
+  // Reject unconfigured default shared admin password in production
+  if (isProduction && !process.env.ADMIN_PASSWORD && password === 'admin123') {
+    return handleAuthFailure(req, res, 403, 'Default shared admin password rejected in production. Please configure ADMIN_PASSWORD.');
+  }
+
+  const accounts = await getAuthoritativeAccounts();
+  const adminAccount = accounts.find(a => 
+    a.roleClaim === 'hr_admin' && 
+    (a.username.toLowerCase() === username.toLowerCase() || a.email.toLowerCase() === username.toLowerCase() || username.toLowerCase() === 'admin')
+  );
+
   const envUser = (process.env.ADMIN_USERNAME || 'admin').trim();
   const envPass = (process.env.ADMIN_PASSWORD || 'admin123').trim();
   const envEmail = (process.env.ADMIN_EMAIL || 'reubengeoffrey16@gmail.com').trim().toLowerCase();
 
   const uLower = username.toLowerCase();
   const validUsers = [envUser.toLowerCase(), envEmail, 'admin'].filter(Boolean);
-  const isUserValid = validUsers.includes(uLower);
+  const isUserValid = validUsers.includes(uLower) || Boolean(adminAccount);
 
   let isPassValid = false;
   if (password === envPass) {
+    isPassValid = true;
+  } else if (adminAccount && adminAccount.passwordHash && verifyPassword(password, adminAccount.passwordHash)) {
     isPassValid = true;
   } else {
     try {
@@ -1393,12 +1577,15 @@ app.post('/api/auth/admin/login', authRateLimiter(), async (req, res) => {
   if (isUserValid && isPassValid) {
     if (req.recordAuthSuccess) await req.recordAuthSuccess();
     const sessionToken = crypto.randomBytes(32).toString('hex');
-    const adminName = 'Administrator';
+    const adminName = adminAccount?.name || 'Administrator';
 
     const sessionData = {
-      email: (process.env.ADMIN_EMAIL || 'reubengeoffrey16@gmail.com').toLowerCase(),
+      accountId: adminAccount?.id || 'acc_admin_01',
+      email: adminAccount?.email || (process.env.ADMIN_EMAIL || 'reubengeoffrey16@gmail.com').toLowerCase(),
       name: adminName,
+      roleClaim: 'hr_admin',
       role: 'SUPERADMIN',
+      department: 'HR',
       createdAt: new Date().toISOString(),
       expiresAt: Date.now() + (8 * 60 * 60 * 1000)
     };
@@ -1412,8 +1599,10 @@ app.post('/api/auth/admin/login', authRateLimiter(), async (req, res) => {
       message: 'Admin authenticated successfully',
       token: sessionToken,
       admin: {
+        accountId: sessionData.accountId,
         email: sessionData.email,
         name: adminName,
+        roleClaim: 'hr_admin',
         role: 'SUPERADMIN'
       }
     });
@@ -1525,22 +1714,45 @@ const EVALUATOR_CREDENTIALS = {
 app.post('/api/auth/evaluator/login', authRateLimiter(), async (req, res) => {
   const section = (req.body.section || 'Safety').trim();
   const password = (req.body.password || '').trim();
+  const identifier = (req.body.email || req.body.username || '').trim().toLowerCase();
 
   if (!password) {
     return res.status(400).json({ success: false, message: 'Evaluator password required' });
   }
 
   const secKey = section.toLowerCase();
+
+  // Reject unconfigured default shared password in production
+  if (isProduction && !process.env.EVALUATOR_PASS_SAFETY && !process.env.EVALUATOR_PASS_CI &&
+      !process.env.EVALUATOR_PASS_QUALITY && !process.env.EVALUATOR_PASS_TECH &&
+      !process.env.EVALUATOR_PASS_HR && ['safety123', 'ci123', 'quality123', 'tech123', 'hr123', 'ojt123'].includes(password)) {
+    return handleAuthFailure(req, res, 403, 'Default shared evaluator password rejected in production. Individual accounts or configured environment credentials required.');
+  }
+
+  const accounts = await getAuthoritativeAccounts();
+  const evalAccount = accounts.find(a => 
+    a.roleClaim === 'evaluator' && 
+    (
+      (identifier && (a.username.toLowerCase() === identifier || a.email.toLowerCase() === identifier)) ||
+      (a.section && a.section.toLowerCase() === secKey) ||
+      (a.username && a.username.toLowerCase() === `eval.${secKey.replace(/[^a-z0-9]/g, '')}`)
+    )
+  );
+
   const expectedPass = EVALUATOR_CREDENTIALS[secKey] || process.env.EVALUATOR_PASSWORD || 'ojt123';
 
   let isValid = false;
-  try {
-    const pBuf = Buffer.from(password);
-    const expBuf = Buffer.from(expectedPass);
-    if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
-      isValid = true;
-    }
-  } catch (e) {}
+  if (evalAccount && evalAccount.passwordHash && verifyPassword(password, evalAccount.passwordHash)) {
+    isValid = true;
+  } else {
+    try {
+      const pBuf = Buffer.from(password);
+      const expBuf = Buffer.from(expectedPass);
+      if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
+        isValid = true;
+      }
+    } catch (e) {}
+  }
 
   if (!isValid) {
     return handleAuthFailure(req, res, 401, `Invalid password for ${section} Evaluator`);
@@ -1550,16 +1762,19 @@ app.post('/api/auth/evaluator/login', authRateLimiter(), async (req, res) => {
 
   const sessionToken = crypto.randomBytes(32).toString('hex');
   const sessionData = {
+    accountId: evalAccount?.id || `acc_eval_${secKey}`,
+    roleClaim: 'evaluator',
     role: 'EVALUATOR',
     section: section,
-    name: `${section} Evaluator`,
+    name: evalAccount?.name || `${section} Evaluator`,
+    email: evalAccount?.email || `eval.${secKey}@atctires.com`,
     createdAt: new Date().toISOString(),
     expiresAt: Date.now() + (8 * 60 * 60 * 1000)
   };
 
   await setCloudSession(sessionToken, sessionData, 28800);
   res.cookie('evaluator_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
-  await logAuditEvent('EVALUATOR_LOGIN', `${section} Evaluator`, `Logged in to ${section} practical evaluation`, req);
+  await logAuditEvent('EVALUATOR_LOGIN', sessionData.name, `Logged in to ${section} practical evaluation`, req);
 
   return res.json({
     success: true,
@@ -1575,20 +1790,39 @@ app.post('/api/auth/evaluator/login', authRateLimiter(), async (req, res) => {
 app.post('/api/auth/section/login', authRateLimiter(), async (req, res) => {
   const section = (req.body.section || '').trim();
   const password = (req.body.password || '').trim();
+  const identifier = (req.body.email || req.body.username || '').trim().toLowerCase();
 
   if (!section || !password) {
     return res.status(400).json({ success: false, message: 'Section name and password required' });
   }
 
+  if (isProduction && !process.env.SECTION_PASSWORD && password === 'section123') {
+    return handleAuthFailure(req, res, 403, 'Default shared section password rejected in production. Individual accounts or configured SECTION_PASSWORD required.');
+  }
+
+  const accounts = await getAuthoritativeAccounts();
+  const secAccount = accounts.find(a => 
+    a.roleClaim === 'section_head' && 
+    (
+      (identifier && (a.username.toLowerCase() === identifier || a.email.toLowerCase() === identifier)) ||
+      (a.section && a.section.toLowerCase() === section.toLowerCase()) ||
+      normalizeSectionNameServer(a.section) === normalizeSectionNameServer(section)
+    )
+  );
+
   const expectedPass = process.env.SECTION_PASSWORD || 'section123';
   let isValid = false;
-  try {
-    const pBuf = Buffer.from(password);
-    const expBuf = Buffer.from(expectedPass);
-    if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
-      isValid = true;
-    }
-  } catch (e) {}
+  if (secAccount && secAccount.passwordHash && verifyPassword(password, secAccount.passwordHash)) {
+    isValid = true;
+  } else {
+    try {
+      const pBuf = Buffer.from(password);
+      const expBuf = Buffer.from(expectedPass);
+      if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
+        isValid = true;
+      }
+    } catch (e) {}
+  }
 
   if (!isValid) {
     return handleAuthFailure(req, res, 401, `Invalid password for ${section} Portal`);
@@ -1598,16 +1832,19 @@ app.post('/api/auth/section/login', authRateLimiter(), async (req, res) => {
 
   const sessionToken = crypto.randomBytes(32).toString('hex');
   const sessionData = {
+    accountId: secAccount?.id || `acc_sec_${section}`,
+    roleClaim: 'section_head',
     role: 'SECTION_HEAD',
     section: section,
-    name: `${section} Section Head`,
+    name: secAccount?.name || `${section} Section Head`,
+    email: secAccount?.email || `sec.${section.toLowerCase().replace(/[^a-z0-9]/g, '')}@atctires.com`,
     createdAt: new Date().toISOString(),
     expiresAt: Date.now() + (8 * 60 * 60 * 1000)
   };
 
   await setCloudSession(sessionToken, sessionData, 28800);
   res.cookie('section_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
-  await logAuditEvent('SECTION_LOGIN', `${section} Head`, `Logged in to ${section} portal`, req);
+  await logAuditEvent('SECTION_LOGIN', sessionData.name, `Logged in to ${section} portal`, req);
 
   return res.json({
     success: true,
@@ -1623,20 +1860,38 @@ app.post('/api/auth/section/login', authRateLimiter(), async (req, res) => {
 app.post('/api/auth/dept/login', authRateLimiter(), async (req, res) => {
   const department = (req.body.department || 'QUALITY CONTROL').trim();
   const password = (req.body.password || '').trim();
+  const identifier = (req.body.email || req.body.username || '').trim().toLowerCase();
 
   if (!password) {
     return res.status(400).json({ success: false, message: 'Department HOD password required' });
   }
 
+  if (isProduction && !process.env.DEPT_PASSWORD && password === 'hod123') {
+    return handleAuthFailure(req, res, 403, 'Default shared HOD password rejected in production. Individual accounts or configured DEPT_PASSWORD required.');
+  }
+
+  const accounts = await getAuthoritativeAccounts();
+  const deptAccount = accounts.find(a => 
+    a.roleClaim === 'dept_hod' && 
+    (
+      (identifier && (a.username.toLowerCase() === identifier || a.email.toLowerCase() === identifier)) ||
+      (a.department && a.department.toLowerCase() === department.toLowerCase())
+    )
+  );
+
   const expectedPass = process.env.DEPT_PASSWORD || 'hod123';
   let isValid = false;
-  try {
-    const pBuf = Buffer.from(password);
-    const expBuf = Buffer.from(expectedPass);
-    if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
-      isValid = true;
-    }
-  } catch (e) {}
+  if (deptAccount && deptAccount.passwordHash && verifyPassword(password, deptAccount.passwordHash)) {
+    isValid = true;
+  } else {
+    try {
+      const pBuf = Buffer.from(password);
+      const expBuf = Buffer.from(expectedPass);
+      if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
+        isValid = true;
+      }
+    } catch (e) {}
+  }
 
   if (!isValid) {
     return handleAuthFailure(req, res, 401, 'Invalid password for Department HOD');
@@ -1646,16 +1901,19 @@ app.post('/api/auth/dept/login', authRateLimiter(), async (req, res) => {
 
   const sessionToken = crypto.randomBytes(32).toString('hex');
   const sessionData = {
+    accountId: deptAccount?.id || `acc_dept_${department}`,
+    roleClaim: 'dept_hod',
     role: 'DEPT_HEAD',
     department: department,
-    name: `${department} HOD`,
+    name: deptAccount?.name || `${department} HOD`,
+    email: deptAccount?.email || `hod.${department.toLowerCase().replace(/[^a-z0-9]/g, '')}@atctires.com`,
     createdAt: new Date().toISOString(),
     expiresAt: Date.now() + (8 * 60 * 60 * 1000)
   };
 
   await setCloudSession(sessionToken, sessionData, 28800);
   res.cookie('dept_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
-  await logAuditEvent('DEPT_LOGIN', `${department} HOD`, `Logged in to Department dashboard`, req);
+  await logAuditEvent('DEPT_LOGIN', sessionData.name, `Logged in to Department dashboard`, req);
 
   return res.json({
     success: true,
@@ -1696,6 +1954,186 @@ app.get('/api/auth/session', async (req, res) => {
   return res.json({ success: true, authenticated: false, user: null });
 });
 
+
+// ---------------------------------------------------------------------
+// UNIFIED AUTHENTICATION ENDPOINT (Individual Accounts + Staff Claims)
+// ---------------------------------------------------------------------
+app.post('/api/auth/login', authRateLimiter(), async (req, res) => {
+  const identifier = (req.body.identifier || req.body.username || req.body.email || req.body.empNo || '').trim().toLowerCase();
+  const password = (req.body.password || '').trim();
+
+  if (!identifier || !password) {
+    return res.status(400).json({ success: false, message: 'Identifier and password are required' });
+  }
+
+  // Check individual accounts first
+  const accounts = await getAuthoritativeAccounts();
+  const account = accounts.find(a => 
+    (a.username && a.username.toLowerCase() === identifier) ||
+    (a.email && a.email.toLowerCase() === identifier) ||
+    (a.id && a.id.toLowerCase() === identifier)
+  );
+
+  if (account) {
+    if (isProduction && !process.env.ADMIN_PASSWORD && !process.env.DEPT_PASSWORD && 
+        ['admin123', 'hod123', 'section123', 'safety123', 'ci123', 'quality123', 'tech123', 'hr123'].includes(password)) {
+      return handleAuthFailure(req, res, 403, 'Default shared password rejected in production. Please use your individual configured credential.');
+    }
+
+    if (!verifyPassword(password, account.passwordHash)) {
+      return handleAuthFailure(req, res, 401, 'Invalid credentials');
+    }
+
+    if (req.recordAuthSuccess) await req.recordAuthSuccess();
+
+    const sessionToken = crypto.randomBytes(32).toString('hex');
+    const sessionData = {
+      accountId: account.id,
+      email: account.email,
+      username: account.username,
+      name: account.name,
+      roleClaim: account.roleClaim,
+      role: account.role,
+      department: account.department,
+      section: account.section,
+      createdAt: new Date().toISOString(),
+      expiresAt: Date.now() + (8 * 60 * 60 * 1000)
+    };
+
+    await setCloudSession(sessionToken, sessionData, 28800);
+    const cookieName = account.roleClaim === 'hr_admin' ? 'admin_session' :
+      account.roleClaim === 'dept_hod' ? 'dept_session' :
+      account.roleClaim === 'section_head' ? 'section_session' :
+      account.roleClaim === 'evaluator' ? 'evaluator_session' : 'session';
+    res.cookie(cookieName, sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
+    await logAuditEvent('USER_LOGIN', account.email || account.username, `User signed in with role claim ${account.roleClaim}`, req);
+
+    return res.json({
+      success: true,
+      message: `Signed in as ${account.name}`,
+      token: sessionToken,
+      user: sessionData
+    });
+  }
+
+  // Check employees for staff login
+  const employees = await getAuthoritativeEmployees();
+  const emp = employees.find(e => 
+    String(e.empNo).trim().toLowerCase() === identifier ||
+    String(e.empNo).trim().toLowerCase() === ('0' + identifier)
+  );
+
+  if (emp) {
+    const isEmpNoMatch = (password.toLowerCase() === identifier || password.toLowerCase() === String(emp.empNo).trim().toLowerCase());
+    let isValid = false;
+    if (isEmpNoMatch) {
+      isValid = true;
+    } else if (emp.passwordHash && verifyPassword(password, emp.passwordHash)) {
+      isValid = true;
+    }
+
+    if (!isValid) {
+      return handleAuthFailure(req, res, 401, 'Invalid employee credentials');
+    }
+
+    if (req.recordAuthSuccess) await req.recordAuthSuccess();
+
+    if (emp.passwordHash && !emp.passwordHash.startsWith('scrypt:')) {
+      emp.passwordHash = hashPassword(password);
+      saveAuthoritativeEmployees(employees).catch(() => {});
+    }
+
+    const sessionToken = crypto.randomBytes(32).toString('hex');
+    const sessionData = {
+      accountId: `emp_${emp.empNo}`,
+      roleClaim: 'employee',
+      role: 'emp',
+      empNo: emp.empNo,
+      name: emp.name,
+      section: emp.section,
+      dept: emp.dept,
+      currentLevel: emp.currentLevel,
+      targetLevel: emp.targetLevel,
+      createdAt: new Date().toISOString(),
+      expiresAt: Date.now() + (8 * 60 * 60 * 1000)
+    };
+
+    await setCloudSession(sessionToken, sessionData, 28800);
+    res.cookie('emp_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
+    await logAuditEvent('EMPLOYEE_LOGIN', emp.empNo, 'Employee signed in via unified login', req);
+
+    return res.json({
+      success: true,
+      message: 'Employee authenticated successfully',
+      token: sessionToken,
+      user: sessionData
+    });
+  }
+
+  return handleAuthFailure(req, res, 401, 'Account not found or invalid credentials');
+});
+
+// ---------------------------------------------------------------------
+// INDIVIDUAL ACCOUNT MANAGEMENT (Admin Only)
+// ---------------------------------------------------------------------
+app.get('/api/admin/accounts', requireAdminAuth, async (req, res) => {
+  const accounts = await getAuthoritativeAccounts();
+  const safeAccounts = accounts.map(({ passwordHash, ...rest }) => rest);
+  res.json({ success: true, accounts: safeAccounts });
+});
+
+app.post('/api/admin/accounts', requireAdminAuth, async (req, res) => {
+  const { id, username, email, name, roleClaim, department, section, password } = req.body;
+  if (!username || !email || !name || !roleClaim) {
+    return res.status(400).json({ success: false, message: 'username, email, name, and roleClaim are required' });
+  }
+  const accounts = await getAuthoritativeAccounts();
+  const existingIdx = accounts.findIndex(a => 
+    (id && a.id === id) || 
+    (a.username && a.username.toLowerCase() === username.toLowerCase()) || 
+    (a.email && a.email.toLowerCase() === email.toLowerCase())
+  );
+
+  const roleMap = {
+    hr_admin: 'SUPERADMIN',
+    dept_hod: 'DEPT_HEAD',
+    section_head: 'SECTION_HEAD',
+    evaluator: 'EVALUATOR',
+    employee: 'emp'
+  };
+
+  const accountObj = {
+    id: id || `acc_${crypto.randomBytes(6).toString('hex')}`,
+    username: username.trim().toLowerCase(),
+    email: email.trim().toLowerCase(),
+    name: name.trim(),
+    roleClaim,
+    role: roleMap[roleClaim] || 'EVALUATOR',
+    department: department || '',
+    section: section || '',
+    updatedAt: new Date().toISOString()
+  };
+
+  if (password && password.trim().length >= 8) {
+    accountObj.passwordHash = hashPassword(password.trim());
+  } else if (existingIdx >= 0) {
+    accountObj.passwordHash = accounts[existingIdx].passwordHash;
+  } else {
+    accountObj.passwordHash = hashPassword(crypto.randomBytes(16).toString('hex'));
+  }
+
+  if (existingIdx >= 0) {
+    accounts[existingIdx] = { ...accounts[existingIdx], ...accountObj };
+  } else {
+    accountObj.createdAt = new Date().toISOString();
+    accounts.push(accountObj);
+  }
+
+  await saveAuthoritativeAccounts(accounts);
+  await logAuditEvent('ACCOUNT_MANAGEMENT', req.adminSession?.email || 'admin', `Saved account ${accountObj.email} with role ${roleClaim}`, req);
+  res.json({ success: true, message: 'Account saved successfully', account: { ...accountObj, passwordHash: undefined } });
+});
+
 app.post('/api/auth/logout', async (req, res) => {
   const token = req.signedCookies.admin_session || req.cookies.admin_session ||
     req.signedCookies.evaluator_session || req.cookies.evaluator_session ||
@@ -1731,31 +2169,7 @@ app.post('/api/auth/admin/logout', async (req, res) => {
 // EMPLOYEE AUTHENTICATION & SECURE SESSIONS
 // ---------------------------------------------------------------------
 
-// Employee Password Cryptographic Engine (Salted scrypt + Legacy SHA256 migration)
-function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return `scrypt:${salt}:${hash}`;
-}
-
-function verifyPassword(password, storedHash) {
-  if (!storedHash || !password) return false;
-  try {
-    if (storedHash.startsWith('scrypt:')) {
-      const parts = storedHash.split(':');
-      if (parts.length !== 3) return false;
-      const salt = parts[1];
-      const expectedHash = parts[2];
-      const actualHash = crypto.scryptSync(password, salt, 64).toString('hex');
-      return crypto.timingSafeEqual(Buffer.from(expectedHash, 'hex'), Buffer.from(actualHash, 'hex'));
-    }
-    // Legacy SHA-256 fallback
-    const sha = crypto.createHash('sha256').update(password).digest('hex');
-    return sha === storedHash;
-  } catch (err) {
-    return false;
-  }
-}
+// Password engine hoisted to Accounts Store section
 
 function normalizeDoj(dojStr) {
   if (!dojStr) return '';
@@ -1838,6 +2252,8 @@ app.post('/api/auth/employee/login', authRateLimiter(), async (req, res) => {
 
   const empSessionToken = crypto.randomBytes(32).toString('hex');
   const sessionData = {
+    accountId: `emp_${emp.empNo}`,
+    roleClaim: 'employee',
     role: 'emp',
     empNo: emp.empNo,
     name: emp.name,
