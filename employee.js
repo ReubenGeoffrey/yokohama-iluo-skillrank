@@ -16,9 +16,13 @@
     let fn = window;
     let parent = window;
     for (const part of parts) {
-      if (!fn) break;
+      if (!fn || part === '__proto__' || part === 'constructor' || part === 'prototype') return;
       parent = fn;
-      fn = fn[part];
+      if (Object.prototype.hasOwnProperty.call(parent, part) || part in parent) {
+        fn = parent[part];
+      } else {
+        return;
+      }
     }
 
     if (typeof fn !== 'function') return;
@@ -47,7 +51,7 @@
     try {
       fn.apply(parent, args);
     } catch (err) {
-      console.error('Error executing CSP action [' + expr + ']:', err);
+      console.error('Error executing CSP action:', expr, err);
     }
   }
 
@@ -703,6 +707,8 @@ function renderActiveQuestion() {
   const index = empState.currentQIndex;
   if (!questions || index >= questions.length) return;
 
+  renderQuestionPalette();
+
   const q = questions[index];
   setText('quizProgressText', `Question ${index + 1} of ${questions.length}`);
   setText('qNumberBadge', `Q${index + 1}`);
@@ -1067,3 +1073,40 @@ function setupTabSwitchDetection() {
     }
   });
 }
+
+
+
+function renderQuestionPalette() {
+  const grid = document.getElementById('questionPaletteGrid');
+  if (!grid || !empState.examQuestions) return;
+
+  const total = empState.examQuestions.length;
+  let buttonsHtml = '';
+
+  for (let i = 0; i < total; i++) {
+    const q = empState.examQuestions[i];
+    const isAnswered = empState.userAnswers[q.id] !== undefined;
+    const isCurrent = i === empState.currentQIndex;
+
+    let style = 'width: 36px; height: 36px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.15s ease; border: 1.5px solid #CBD5E1;';
+    if (isCurrent) {
+      style += ' background: #005B9E; color: #FFFFFF; border-color: #003D6B; box-shadow: 0 0 0 2px rgba(0,91,158,0.3);';
+    } else if (isAnswered) {
+      style += ' background: #ECFDF5; color: #065F46; border-color: #10B981;';
+    } else {
+      style += ' background: #F8FAFC; color: #64748B; border-color: #E2E8F0;';
+    }
+
+    buttonsHtml += `<button type="button" class="palette-btn" style="${style}" onclick="jumpToExamQuestion(${i})" aria-label="Jump to Question ${i + 1}">${i + 1}</button>`;
+  }
+
+  grid.innerHTML = buttonsHtml;
+}
+
+function jumpToExamQuestion(targetIndex) {
+  if (!empState.examQuestions || targetIndex < 0 || targetIndex >= empState.examQuestions.length) return;
+  empState.currentQIndex = targetIndex;
+  renderActiveQuestion();
+}
+window.jumpToExamQuestion = jumpToExamQuestion;
+window.renderQuestionPalette = renderQuestionPalette;

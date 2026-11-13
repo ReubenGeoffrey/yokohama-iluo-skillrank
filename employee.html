@@ -3,8 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Yokohama ILUO &bull; Employee Skill Assessment Portal</title>
+  <title>Yokohama • ATC Tires — Employee Skill Assessment Portal</title>
   <link rel="icon" type="image/png" href="atg_logo.png">
+  <link rel="apple-touch-icon" href="atg_logo.png">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0F172A">
   <link rel="stylesheet" href="styles.css">
   <style>
     /* Employee Portal Specific Enhancements */
@@ -104,7 +107,7 @@
   <header class="navbar">
     <div class="brand-section">
       <div class="brand-logo">
-        <img src="atg_logo.png" alt="Yokohama ATG Logo" class="brand-app-logo">
+        <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" class="brand-app-logo" width="38" height="38">
         <span>ATC TIRES</span>
       </div>
       <span class="brand-badge">ILUO</span>
@@ -129,7 +132,7 @@
       <div class="login-wrapper" style="max-width: 440px; margin: 40px auto 0;">
         <div class="login-card" style="background: white; border-radius: 16px; box-shadow: var(--shadow-lg); overflow: hidden; border: 1px solid #E2E8F0;">
           <div class="login-header" style="background: linear-gradient(135deg, #003D6B 0%, #005B9E 100%); color: white; padding: 28px 24px; text-align: center;">
-            <img src="atg_logo.png" alt="App Logo" style="width: 58px; height: 58px; border-radius: 12px; margin-bottom: 12px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.25);">
+            <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" width="58" height="58" style="border-radius: 12px; margin-bottom: 12px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.25);">
             <h2 style="font-size: 1.4rem; font-weight: 800; margin: 0;">Employee Portal</h2>
             <p style="font-size: 0.85rem; opacity: 0.9; margin-top: 6px;">Sign in with your Employee ID to access your skill evaluations &amp; exams</p>
           </div>
@@ -336,6 +339,19 @@
             <span id="timerDisplay">45:00</span>
           </div>
         </div>
+      </div>
+
+            <!-- Question Palette Navigator (Feature 2) -->
+      <div class="question-palette-card" style="background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 14px 18px; margin-bottom: 16px; box-shadow: var(--shadow-sm);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+          <div style="font-size: 0.85rem; font-weight: 700; color: #0F172A;">Question Palette Navigator</div>
+          <div style="display: flex; gap: 10px; font-size: 0.75rem; font-weight: 600;">
+            <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #10B981; border-radius: 2px;"></span> Answered</span>
+            <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #CBD5E1; border-radius: 2px;"></span> Unvisited</span>
+            <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #005B9E; border-radius: 2px;"></span> Current</span>
+          </div>
+        </div>
+        <div class="palette-grid" id="questionPaletteGrid" style="display: flex; flex-wrap: wrap; gap: 6px;"></div>
       </div>
 
       <!-- Question Card -->
