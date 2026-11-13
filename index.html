@@ -18,7 +18,8 @@
   <header class="navbar" role="banner">
     <div class="navbar-left">
       <button type="button" class="header-brand-btn" onclick="navigateTo('/')" aria-label="Yokohama ATC Tires ILUO Portal Hub - Return to Home">
-        <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" class="brand-app-logo" width="38" height="38">
+        <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" class="brand-app-logo" width="38" height="38" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline-flex';">
+        <span class="brand-logo-fallback" style="display:none; width: 38px; height: 38px; font-size: 13px;" aria-hidden="true">ATG</span>
         <div class="brand-text-wrap">
           <div class="brand-name-row">
             <span class="brand-brand">YOKOHAMA</span>
@@ -61,7 +62,8 @@
     <!-- VIEW 0: Role-Based Portal Hub Landing (Management Portal) -->
     <section class="view-section active" id="viewPublicLanding">
       <div class="landing-hero-card">
-        <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" width="86" height="86" style="border-radius: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); object-fit: contain; background: white; border: 1px solid rgba(0,0,0,0.06);">
+        <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" width="86" height="86" style="border-radius: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); object-fit: contain; background: white; border: 1px solid rgba(0,0,0,0.06);" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline-flex';">
+        <span class="brand-logo-fallback" style="display:none; width: 86px; height: 86px; font-size: 28px; border-radius: 20px; margin: 0 auto 16px;" aria-hidden="true">ATG</span>
         <h1 class="landing-hub-title">Yokohama • ATC Tires</h1>
         <p class="landing-hub-subtitle">ILUO Skill Assessment, OJT Evaluation &amp; Plant Competency Portal</p>
       </div>
@@ -145,7 +147,8 @@
       <div class="login-wrapper" style="max-width: 440px; margin: 40px auto 0;">
         <div class="login-card" style="background: white; border-radius: 16px; box-shadow: var(--shadow-lg); overflow: hidden; border: 1px solid #E2E8F0;">
           <div class="login-header" style="background: linear-gradient(135deg, #003D6B 0%, #005B9E 100%); color: white; padding: 28px 24px; text-align: center;">
-            <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" width="58" height="58" style="border-radius: 12px; margin-bottom: 12px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.25);">
+            <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" width="58" height="58" style="border-radius: 12px; margin-bottom: 12px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.25);" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline-flex';">
+            <span class="brand-logo-fallback" style="display:none; width: 58px; height: 58px; font-size: 18px; margin: 0 auto 12px;" aria-hidden="true">ATG</span>
             <h2 style="font-size: 1.4rem; font-weight: 800; margin: 0;">Employee Portal</h2>
             <p style="font-size: 0.85rem; opacity: 0.9; margin-top: 6px;">Sign in with your Employee ID to access your skill evaluations &amp; exams</p>
           </div>
@@ -197,7 +200,8 @@
       <div class="login-wrapper" style="display: flex; justify-content: center; align-items: center; width: 100%; margin: 0 auto;">
         <div class="login-card" style="border: 2px solid #0F172A; margin: 0 auto;">
           <div class="login-header" style="background: linear-gradient(135deg, #0F172A 0%, #003D6B 100%);">
-            <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" width="58" height="58" style="border-radius: 12px; margin-bottom: 10px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+            <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" width="58" height="58" style="border-radius: 12px; margin-bottom: 10px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.3);" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline-flex';">
+            <span class="brand-logo-fallback" style="display:none; width: 58px; height: 58px; font-size: 18px; margin: 0 auto 10px;" aria-hidden="true">ATG</span>
             <div style="font-size: 0.75rem; background: var(--accent-red); color: white; display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 700; margin-bottom: 8px;">HR CONTROL CENTER</div>
             <h2>HR Login</h2>
             <p>Enter authorized credentials to access HR Control Center</p>
@@ -493,22 +497,22 @@
         <!-- Section & Category Question Marks Breakdown (4 Pillars: Safety, Process, Quality, CI & TPM) -->
         <div id="resSectionMarksGrid" style="max-width: 680px; margin: 0 auto 24px auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px;">
           <div style="background: #FEF2F2; border: 1.5px solid #FCA5A5; border-radius: 8px; padding: 12px; text-align: center;">
-            <div style="font-size: 0.72rem; font-weight: 700; color: #991B1B; text-transform: uppercase;">🦺 Safety</div>
+            <div style="font-size: 0.72rem; font-weight: 700; color: #991B1B; text-transform: uppercase;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Safety</div>
             <div id="resSafetyMark" style="font-size: 1.2rem; font-weight: 800; color: #DC2626; margin-top: 4px;">-</div>
             <div style="font-size: 0.7rem; color: #7F1D1D;">Section Mark</div>
           </div>
           <div style="background: #ECFDF5; border: 1.5px solid #A7F3D0; border-radius: 8px; padding: 12px; text-align: center;">
-            <div style="font-size: 0.72rem; font-weight: 700; color: #065F46; text-transform: uppercase;">🔄 Process</div>
+            <div style="font-size: 0.72rem; font-weight: 700; color: #065F46; text-transform: uppercase;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Process</div>
             <div id="resProcessMark" style="font-size: 1.2rem; font-weight: 800; color: #059669; margin-top: 4px;">-</div>
             <div style="font-size: 0.7rem; color: #047857;">Section Mark</div>
           </div>
           <div style="background: #F0F9FF; border: 1.5px solid #BAE6FD; border-radius: 8px; padding: 12px; text-align: center;">
-            <div style="font-size: 0.72rem; font-weight: 700; color: #075985; text-transform: uppercase;">⚙️ Quality</div>
+            <div style="font-size: 0.72rem; font-weight: 700; color: #075985; text-transform: uppercase;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Quality</div>
             <div id="resQualityMark" style="font-size: 1.2rem; font-weight: 800; color: #0284C7; margin-top: 4px;">-</div>
             <div style="font-size: 0.7rem; color: #0369A1;">Section Mark</div>
           </div>
           <div style="background: #FFFBEB; border: 1.5px solid #FDE68A; border-radius: 8px; padding: 12px; text-align: center;">
-            <div style="font-size: 0.72rem; font-weight: 700; color: #92400E; text-transform: uppercase;">💡 CI &amp; TPM</div>
+            <div style="font-size: 0.72rem; font-weight: 700; color: #92400E; text-transform: uppercase;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.76.76 1.23 1.52 1.41 2.5"/></svg>CI &amp; TPM</div>
             <div id="resCiTpmMark" style="font-size: 1.2rem; font-weight: 800; color: #D97706; margin-top: 4px;">-</div>
             <div style="font-size: 0.7rem; color: #78350F;">Section Mark</div>
           </div>
@@ -523,7 +527,7 @@
             <div style="font-size: 0.82rem; color: #15803D; line-height: 1.4;">Your exam marks are submitted. Your practical Skill Assessment evaluation will be conducted and scored by your Section Supervisor / Admin.</div>
           </div>
           <div style="background: #DCFCE7; color: #166534; font-weight: 800; font-size: 0.82rem; padding: 8px 16px; border-radius: 6px; border: 1px solid #86EFAC; white-space: nowrap;">
-            🔒 Section &amp; Admin Scored
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Section &amp; Admin Scored
           </div>
         </div>
 
@@ -553,7 +557,8 @@
       <div class="login-wrapper" id="sectionLoginWrapper" style="display: flex; justify-content: center; align-items: center; width: 100%; margin: 0 auto;">
         <div class="login-card" style="border-top: 4px solid #0284C7; margin: 0 auto;">
           <div class="login-header" style="background: linear-gradient(135deg, #0284C7 0%, #003D6B 100%);">
-            <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" style="width: 58px; height: 58px; border-radius: 12px; margin-bottom: 10px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.2);" width="58" height="58">
+            <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" style="width: 58px; height: 58px; border-radius: 12px; margin-bottom: 10px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.2);" width="58" height="58" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline-flex';">
+            <span class="brand-logo-fallback" style="display:none; width: 58px; height: 58px; font-size: 18px; margin: 0 auto 10px;" aria-hidden="true">ATG</span>
             <h2>Section Portal Sign In</h2>
             <p>Select your QA Section to access employee roster &amp; ILUO metrics</p>
           </div>
@@ -625,7 +630,7 @@
         <div style="background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; padding: 20px 24px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; box-shadow: var(--shadow-sm);">
           <div>
             <div style="display: flex; align-items: center; gap: 10px;">
-              <span style="font-size: 1.8rem;">🏢</span>
+              <span style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; background: #E0F2FE; border-radius: 10px;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#003D6B" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="9" y1="22" x2="9" y2="22.01"/><line x1="9" y1="6" x2="9" y2="6.01"/><line x1="15" y1="6" x2="15" y2="6.01"/><line x1="9" y1="10" x2="9" y2="10.01"/><line x1="15" y1="10" x2="15" y2="10.01"/><line x1="9" y1="14" x2="9" y2="14.01"/><line x1="15" y1="14" x2="15" y2="14.01"/><line x1="9" y1="18" x2="9" y2="18.01"/><line x1="15" y1="18" x2="15" y2="18.01"/></svg></span>
               <div>
                 <h2 style="margin: 0; color: var(--primary-dark); font-size: 1.4rem;" id="secDashboardTitle">Tire building QA</h2>
                 <div style="font-size: 0.85rem; color: var(--text-muted);">Quality Assurance Section &bull; Department: QUALITY CONTROL</div>
@@ -677,10 +682,16 @@
               <span id="secShowingCountLabel" class="showing-counter-badge tabular-nums">Showing 0 of 0 employees</span>
             </div>
             <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-              <button type="button" class="btn-secondary" style="font-size: 0.82rem; padding: 8px 14px; font-weight: 700; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px;" onclick="openCompetencyHeatmap(currentActiveSection)">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                Competency Heatmap
-              </button>
+              <div class="view-mode-toggle-group" role="group" aria-label="Section View Mode">
+                <button type="button" class="view-mode-btn active" id="btnSecViewTable" onclick="setSectionViewMode('table')" aria-pressed="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                  Table View
+                </button>
+                <button type="button" class="view-mode-btn" id="btnSecViewMatrix" onclick="setSectionViewMode('matrix')" aria-pressed="false">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                  Matrix View
+                </button>
+              </div>
               <input type="text" id="secEmpSearchInput" class="form-control" placeholder="Search by name or emp ID..." aria-label="Search employee by name or emp ID" style="min-width: 220px; font-size: 0.88rem; padding: 9px 14px; border-radius: 8px;" oninput="filterSectionTable()">
               <select id="secLevelFilter" class="form-control" aria-label="Filter by Assessment Level" style="min-width: 175px; font-size: 0.88rem; padding: 9px 14px; border-radius: 8px; font-weight: 600;" onchange="filterSectionTable()">
                 <option value="ALL">All Levels</option>
@@ -692,6 +703,7 @@
             </div>
           </div>
 
+          <div id="secTableContainer">
           <div class="data-table-wrapper" style="overflow-x: auto; border: 1px solid #E2E8F0; border-radius: 10px;">
             <table class="data-table" style="width: 100%; min-width: 980px; border-collapse: separate; border-spacing: 0;">
               <thead>
@@ -709,12 +721,14 @@
               </tbody>
             </table>
           </div>
+          </div>
+          <div id="secMatrixContainer" style="display: none;"></div>
         </div>
 
         <!-- Section Training Requirements (Full Width) -->
         <div class="dashboard-table-card" style="background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; border-left: 4px solid #F59E0B; padding: 24px; margin-bottom: 28px; box-shadow: var(--shadow-sm); width: 100%; box-sizing: border-box;">
           <h3 style="margin-top: 0; color: #B45309; font-size: 1.15rem; display: flex; align-items: center; gap: 8px; font-weight: 800;">
-            <span>⚠️</span> Section Training &amp; Re-assessment Requirements
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Section Training &amp; Re-assessment Requirements
           </h3>
           <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 14px;">
             The following employees require scheduled training, re-assessment, or skill level up-gradation:
@@ -732,7 +746,8 @@
       <div class="login-wrapper" id="deptLoginWrapper" style="display: flex; justify-content: center; align-items: center; width: 100%; margin: 0 auto;">
         <div class="login-card" style="border-top: 4px solid #8B5CF6; margin: 0 auto;">
           <div class="login-header" style="background: linear-gradient(135deg, #6D28D9 0%, #003D6B 100%);">
-            <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" style="width: 58px; height: 58px; border-radius: 12px; margin-bottom: 10px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.2);" width="58" height="58">
+            <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" style="width: 58px; height: 58px; border-radius: 12px; margin-bottom: 10px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.2);" width="58" height="58" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline-flex';">
+            <span class="brand-logo-fallback" style="display:none; width: 58px; height: 58px; font-size: 18px; margin: 0 auto 10px;" aria-hidden="true">ATG</span>
             <h2>Department / HOD Sign In</h2>
             <p>Production &amp; Quality Control &bull; Executive ILUO Overview</p>
           </div>
@@ -741,8 +756,8 @@
               <div class="form-group">
                 <label for="deptSelectInput">Select Department</label>
                 <select id="deptSelectInput" class="form-control" style="font-weight: 700; background: #FFFFFF; font-size: 0.95rem; padding: 10px 14px; border: 1.5px solid #CBD5E1; border-radius: 8px;">
-                  <option value="PRODUCTION" selected>🏭 PRODUCTION</option>
-                  <option value="QUALITY CONTROL">🔬 QUALITY CONTROL</option>
+                  <option value="PRODUCTION" selected>PRODUCTION</option>
+                  <option value="QUALITY CONTROL">QUALITY CONTROL</option>
                 </select>
               </div>
               <div class="form-group">
@@ -769,7 +784,7 @@
         <div style="background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; padding: 20px 24px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; box-shadow: var(--shadow-sm);">
           <div>
             <div style="display: flex; align-items: center; gap: 10px;">
-              <span style="font-size: 1.8rem;">🏛️</span>
+              <span style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; background: #EDE9FE; border-radius: 10px;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6D28D9" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><line x1="2" y1="22" x2="22" y2="22"/><line x1="2" y1="2" x2="22" y2="2"/><polygon points="12 2 2 7 22 7 12 2"/><line x1="4" y1="7" x2="4" y2="22"/><line x1="9" y1="7" x2="9" y2="22"/><line x1="15" y1="7" x2="15" y2="22"/><line x1="20" y1="7" x2="20" y2="22"/></svg></span>
               <div>
                 <h2 id="deptDashboardTitle" style="margin: 0; color: var(--primary-dark); font-size: 1.4rem;">Department HOD Executive Dashboard</h2>
                 <div id="deptDashboardSubtitle" style="font-size: 0.85rem; color: var(--text-muted);">ATC Tires &bull; Overall ILUO Skill Matrices &amp; Section Analytics</div>
@@ -784,7 +799,7 @@
         <!-- Department Total ILUO Metrics -->
         <div class="iluo-card-grid">
           <div class="iluo-metric-card">
-            <div class="iluo-metric-icon" style="background: #003D6B;">👥</div>
+            <div class="iluo-metric-icon" style="background: #003D6B; color: white;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
             <div>
               <div class="iluo-metric-val" id="deptTotalStaff">0</div>
               <div class="iluo-metric-label" id="deptStaffLabel">Total Department Headcount</div>
@@ -822,9 +837,22 @@
 
         <!-- Section-Wise Summary Table (Full Width & Spacious) -->
         <div class="dashboard-table-card" style="background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; padding: 24px; margin-bottom: 28px; box-shadow: var(--shadow-sm); width: 100%; box-sizing: border-box;">
-          <h3 style="margin-top: 0; color: var(--primary-dark); font-size: 1.2rem; margin-bottom: 20px; font-weight: 800;">
-            Section-Wise ILUO Distribution &amp; Assessment Completion Summary
-          </h3>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 16px;">
+            <h3 style="margin: 0; color: var(--primary-dark); font-size: 1.2rem; font-weight: 800;">
+              Section-Wise ILUO Distribution &amp; Assessment Completion Summary
+            </h3>
+            <div class="view-mode-toggle-group" role="group" aria-label="Department View Mode">
+              <button type="button" class="view-mode-btn active" id="btnDeptViewTable" onclick="setDeptViewMode('table')" aria-pressed="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                Summary Table
+              </button>
+              <button type="button" class="view-mode-btn" id="btnDeptViewMatrix" onclick="setDeptViewMode('matrix')" aria-pressed="false">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                Competency Heatmap
+              </button>
+            </div>
+          </div>
+          <div id="deptTableContainer">
           <div class="data-table-wrapper" style="overflow-x: auto; border: 1px solid #E2E8F0; border-radius: 10px;">
             <table class="data-table" style="width: 100%; min-width: 980px; border-collapse: separate; border-spacing: 0;">
               <thead>
@@ -846,12 +874,14 @@
               </tbody>
             </table>
           </div>
+          </div>
+          <div id="deptMatrixContainer" style="display: none;"></div>
         </div>
 
         <!-- Department Training Requirements & Gap Analysis (Full Width) -->
         <div class="dashboard-table-card" style="background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; border-left: 4px solid #8B5CF6; padding: 24px; margin-bottom: 28px; box-shadow: var(--shadow-sm); width: 100%; box-sizing: border-box;">
           <h3 style="margin-top: 0; color: #6D28D9; font-size: 1.15rem; display: flex; align-items: center; gap: 8px; font-weight: 800;">
-            <span>🎯</span> Department Skill Gap &amp; Training Action Plan
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>Department Skill Gap &amp; Training Action Plan
           </h3>
           <div id="deptTrainingPlanContainer">
             <!-- Populated dynamically -->
@@ -866,7 +896,8 @@
       <div class="login-wrapper" id="ojtLoginWrapper" style="display: flex; justify-content: center; align-items: center; width: 100%; max-width: 920px; margin: 30px auto;">
         <div class="login-card" style="border-top: 4px solid #059669; max-width: 100%; margin: 0 auto;">
           <div class="login-header" style="background: linear-gradient(135deg, #059669 0%, #003D6B 100%);">
-            <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" style="width: 58px; height: 58px; border-radius: 12px; margin-bottom: 10px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.2);" width="58" height="58">
+            <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" style="width: 58px; height: 58px; border-radius: 12px; margin-bottom: 10px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.2);" width="58" height="58" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline-flex';">
+            <span class="brand-logo-fallback" style="display:none; width: 58px; height: 58px; font-size: 18px; margin: 0 auto 10px;" aria-hidden="true">ATG</span>
             <h2>Skill Assessment Portal Sign In</h2>
             <p>Select your Evaluation Section below to access Practical Skill evaluations &amp; checkpoints</p>
           </div>
@@ -874,31 +905,31 @@
             <!-- 5 Interactive Section Cards -->
             <div class="ojt-sections-grid">
               <button type="button" class="ojt-section-btn active" id="ojtSecBtnSafety" onclick="selectOjtLoginSection('Safety')">
-                <div class="ojt-sec-icon">🦺</div>
+                <div class="ojt-sec-icon" style="display: flex; align-items: center; justify-content: center; color: #047857;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
                 <div class="ojt-sec-title">Safety</div>
                 <div class="ojt-sec-desc">Hazard identification, PPE &amp; emergency protocols</div>
                 <div class="ojt-sec-action">Select Section &rarr;</div>
               </button>
               <button type="button" class="ojt-section-btn" id="ojtSecBtnCi" onclick="selectOjtLoginSection('CI & TPM')">
-                <div class="ojt-sec-icon">⚙️</div>
+                <div class="ojt-sec-icon" style="display: flex; align-items: center; justify-content: center; color: #0284C7;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
                 <div class="ojt-sec-title">CI &amp; TPM</div>
                 <div class="ojt-sec-desc">Continuous improvement, 5S &amp; autonomous maintenance</div>
                 <div class="ojt-sec-action">Select Section &rarr;</div>
               </button>
               <button type="button" class="ojt-section-btn" id="ojtSecBtnQuality" onclick="selectOjtLoginSection('Quality')">
-                <div class="ojt-sec-icon">🎯</div>
+                <div class="ojt-sec-icon" style="display: flex; align-items: center; justify-content: center; color: #B45309;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
                 <div class="ojt-sec-title">Quality</div>
                 <div class="ojt-sec-desc">Visual defect detection, standards &amp; compliance</div>
                 <div class="ojt-sec-action">Select Section &rarr;</div>
               </button>
               <button type="button" class="ojt-section-btn" id="ojtSecBtnTechnical" onclick="selectOjtLoginSection('Technical')">
-                <div class="ojt-sec-icon">🔧</div>
+                <div class="ojt-sec-icon" style="display: flex; align-items: center; justify-content: center; color: #7C3AED;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
                 <div class="ojt-sec-title">Technical</div>
                 <div class="ojt-sec-desc">Machine operation, parameters &amp; tooling mastery</div>
                 <div class="ojt-sec-action">Select Section &rarr;</div>
               </button>
               <button type="button" class="ojt-section-btn" id="ojtSecBtnHr" onclick="selectOjtLoginSection('HR')">
-                <div class="ojt-sec-icon">👥</div>
+                <div class="ojt-sec-icon" style="display: flex; align-items: center; justify-content: center; color: #0F172A;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
                 <div class="ojt-sec-title">HR</div>
                 <div class="ojt-sec-desc">Competency tracking &amp; official skill authorization</div>
                 <div class="ojt-sec-action">Select Section &rarr;</div>
@@ -911,7 +942,7 @@
               <div class="form-group" style="margin-bottom: 14px;">
                 <label style="font-weight: 700; color: #0F172A; display: flex; align-items: center; justify-content: space-between;">
                   <span>Selected Section:</span>
-                  <span id="ojtSelectedSectionLabel" style="color: #059669; font-weight: 800; font-size: 0.95rem;">🦺 Safety Section</span>
+                  <span id="ojtSelectedSectionLabel" style="color: #059669; font-weight: 800; font-size: 0.95rem;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Safety Section</span>
                 </label>
               </div>
               <div class="form-group" style="margin-bottom: 18px;">
@@ -938,7 +969,7 @@
         <div style="background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; padding: 20px 24px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; box-shadow: var(--shadow-sm);">
           <div>
             <div style="display: flex; align-items: center; gap: 10px;">
-              <span style="font-size: 1.8rem;" id="ojtActiveSectionIcon">🦺</span>
+              <span id="ojtActiveSectionIcon" style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; background: #DCFCE7; border-radius: 10px; color: #047857;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
               <div>
                 <h2 style="margin: 0; color: var(--primary-dark); font-size: 1.4rem;" id="ojtActiveSectionTitle">Safety Section Skill Assessment Center</h2>
                 <div style="font-size: 0.85rem; color: var(--text-muted);">Practical On-the-Job Training &bull; Quality Control Department</div>
@@ -982,7 +1013,7 @@
               </div>
               <div style="min-width: 200px;">
                 <select id="ojtQcSectionFilter" class="form-control" aria-label="Filter by QC Section" style="width: 100%; font-size: 0.88rem; padding: 10px 14px; border-radius: 8px; font-weight: 600;" onchange="renderOjtDashboardTable()">
-                  <option value="ALL">🏢 All QC Sections</option>
+                  <option value="ALL">All QC Sections</option>
                   <option value="Final Finish QA">Final Finish QA</option>
                   <option value="Tire Building QA">Tire Building QA</option>
                   <option value="Tire Curing QA">Tire Curing QA</option>
@@ -995,7 +1026,7 @@
               </div>
               <div style="min-width: 175px;">
                 <select id="ojtLevelFilter" class="form-control" style="width: 100%; font-size: 0.88rem; padding: 10px 14px; border-radius: 8px; font-weight: 600;" onchange="renderOjtDashboardTable()">
-                  <option value="ALL">🎯 All Assessment Levels</option>
+                  <option value="ALL">All Assessment Levels</option>
                   <option value="L">Level L (Assessment: I → L)</option>
                   <option value="U">Level U (Assessment: L → U)</option>
                   <option value="O">Level O (Assessment: U → O)</option>
@@ -1038,13 +1069,31 @@
 
     <!-- VIEW 8: CONTROL CENTER WRAPPER (/control-center/*) -->
     <section class="view-section" id="viewControlCenterWrapper">
+      <!-- Mobile Sidebar Toggle Bar (Visible below 1024px) -->
+      <div class="admin-mobile-bar" id="adminMobileBar">
+        <button type="button" class="btn-admin-mobile-menu" id="btnAdminMobileToggle" onclick="toggleAdminSidebar()" aria-expanded="false" aria-controls="adminSidebar" aria-label="Toggle Control Center Navigation Menu">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          <span>Control Center Menu</span>
+        </button>
+        <span class="admin-mobile-active-label" id="adminMobileActiveLabel">Dashboard</span>
+      </div>
+
+      <!-- Backdrop Overlay for Mobile Sidebar -->
+      <div class="admin-sidebar-backdrop" id="adminSidebarBackdrop" onclick="closeAdminSidebar()" aria-hidden="true"></div>
+
       <div class="control-center-layout">
 
         <!-- Sidebar Navigation -->
-        <aside class="admin-sidebar">
-          <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin-bottom: 12px; background: rgba(255,255,255,0.08); border-radius: 8px;">
-            <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" style="width: 32px; height: 32px; border-radius: 6px; background: white; object-fit: contain; flex-shrink: 0;" width="32" height="32">
-            <div style="font-size: 0.85rem; font-weight: 800; color: white; letter-spacing: 0.5px;">ATC TIRES</div>
+        <aside class="admin-sidebar" id="adminSidebar">
+          <div class="admin-sidebar-header" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; margin-bottom: 12px; background: rgba(255,255,255,0.08); border-radius: 8px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" style="width: 32px; height: 32px; border-radius: 6px; background: white; object-fit: contain; flex-shrink: 0;" width="32" height="32" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline-flex';">
+              <span class="brand-logo-fallback" style="display:none; width: 32px; height: 32px; font-size: 11px;" aria-hidden="true">ATG</span>
+              <div style="font-size: 0.85rem; font-weight: 800; color: white; letter-spacing: 0.5px;">ATC TIRES</div>
+            </div>
+            <button type="button" class="btn-sidebar-close" onclick="closeAdminSidebar()" aria-label="Close Navigation Sidebar">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
           </div>
           <div class="sidebar-title">CONTROL CENTER</div>
           <a href="#/control-center/dashboard" class="sidebar-link" id="navCtrlDashboard" onclick="navigateTo('/control-center/dashboard'); return false;" tabindex="0">
@@ -1106,7 +1155,7 @@
               </div>
               <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                 <button type="button" class="btn-secondary" onclick="switchControlView('exams')" style="font-size: 0.82rem; padding: 7px 12px; border-radius: 6px;" title="Open Dedicated Exam Reset Management Center">
-                  🔄 Exam Reset Management Center
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Exam Reset Management Center
                 </button>
               </div>
             </div>
@@ -1208,7 +1257,7 @@
                     </span>
                   </div>
                   <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 3px;">
-                    Associate scores breakdown by section category: 🦺 Safety, 🔄 Process, ⚙️ Quality, and 💡 CI &amp; TPM
+                    Associate scores breakdown by section category: Safety, Process, Quality, and CI &amp; TPM
                   </div>
                 </div>
 
@@ -1217,22 +1266,22 @@
                   <!-- View Mode Pills -->
                   <div class="chart-pill-group">
                     <button type="button" class="chart-btn-pill active" id="btnPillTopOverall" onclick="setCategoryBarMode('top-overall')">
-                      🏆 Top Performers
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>Top Performers
                     </button>
                     <button type="button" class="chart-btn-pill" id="btnPillSafety" onclick="setCategoryBarMode('top-safety')">
-                      🦺 Top Safety
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Top Safety
                     </button>
                     <button type="button" class="chart-btn-pill" id="btnPillProcess" onclick="setCategoryBarMode('top-process')">
-                      🔄 Top Process
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Top Process
                     </button>
                     <button type="button" class="chart-btn-pill" id="btnPillQuality" onclick="setCategoryBarMode('top-quality')">
-                      ⚙️ Top Quality
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Top Quality
                     </button>
                     <button type="button" class="chart-btn-pill" id="btnPillCiTpm" onclick="setCategoryBarMode('top-citpm')">
-                      💡 Top CI &amp; TPM
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.76.76 1.23 1.52 1.41 2.5"/></svg>Top CI &amp; TPM
                     </button>
                     <button type="button" class="chart-btn-pill" id="btnPillSecAvg" onclick="setCategoryBarMode('section-avg')">
-                      📊 Section Averages
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Section Averages
                     </button>
                   </div>
 
@@ -1313,13 +1362,13 @@
               <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <input type="file" id="docxFileInput" accept=".docx,.xlsx,.xls,.json" multiple style="display: none;" onchange="handleQuestionFileUpload(event)">
                 <button class="btn-primary" style="padding: 8px 16px; font-size: 0.9rem; background: #0284C7; border-color: #0284C7;" onclick="document.getElementById('docxFileInput').click()">
-                  📁 Upload Questions (.docx / .xlsx / .json)
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>Upload Questions (.docx / .xlsx / .json)
                 </button>
                 <button class="btn-primary" style="padding: 8px 16px; font-size: 0.9rem;" onclick="openAddQuestionModal()">
-                  ➕ Add Question
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Question
                 </button>
                 <button class="btn-secondary" style="padding: 8px 16px; font-size: 0.9rem; color: var(--accent-red); border-color: #FECDD3; display: inline-flex; align-items: center; gap: 6px;" onclick="openClearQuestionsModal()">
-                  🗑️ Clear Questions (Section / Level)
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Clear Questions (Section / Level)
                 </button>
               </div>
             </div>
@@ -1349,7 +1398,7 @@
                 <div style="font-size: 0.85rem; color: var(--text-muted); align-self: center; display: inline-flex; align-items: center; gap: 8px;">
                   <span>Total <strong id="qCountText">0</strong> questions</span>
                   <button type="button" class="btn-secondary" id="btnClearFilteredQs" style="display: none; padding: 4px 10px; font-size: 0.78rem; color: var(--accent-red); border-color: #FECDD3;" onclick="clearCurrentFilteredQuestions()">
-                    🗑️ Clear Filtered (<span id="btnFilteredCount">0</span>)
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Clear Filtered (<span id="btnFilteredCount">0</span>)
                   </button>
                 </div>
               </div>
@@ -1413,7 +1462,7 @@
               <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; border-bottom: 1px solid #DBEAFE; padding-bottom: 14px;">
                 <div>
                   <h3 style="color: #0369A1; margin: 0; font-size: 1.18rem; display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 1.3rem;">📅</span> Dedicated Exam Scheduling Center
+                    <span style="display: inline-flex; align-items: center; margin-right: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>Dedicated Exam Scheduling Center
                   </h3>
                   <div style="font-size: 0.84rem; color: #64748B; margin-top: 4px;">
                     Schedule official ILUO assessments for an entire QA Section or an individual employee with automatic re-take unlocking
@@ -1421,10 +1470,10 @@
                 </div>
                 <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                   <button type="button" class="btn-primary" onclick="switchExamScheduleMode('section')" id="btnSchedModeSec" style="background: #0284C7; border-color: #0284C7; font-size: 0.82rem; font-weight: 700; padding: 7px 14px; border-radius: 6px;">
-                    🏢 Section Exam
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#003D6B" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="9" y1="22" x2="9" y2="22.01"/><line x1="9" y1="6" x2="9" y2="6.01"/><line x1="15" y1="6" x2="15" y2="6.01"/><line x1="9" y1="10" x2="9" y2="10.01"/><line x1="15" y1="10" x2="15" y2="10.01"/><line x1="9" y1="14" x2="9" y2="14.01"/><line x1="15" y1="14" x2="15" y2="14.01"/><line x1="9" y1="18" x2="9" y2="18.01"/><line x1="15" y1="18" x2="15" y2="18.01"/></svg>Section Exam
                   </button>
                   <button type="button" class="btn-primary" onclick="switchExamScheduleMode('individual')" id="btnSchedModeInd" style="background: #4F46E5; border-color: #4F46E5; font-size: 0.82rem; font-weight: 700; padding: 7px 14px; border-radius: 6px;">
-                    👤 Individual Employee
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Individual Employee
                   </button>
                 </div>
               </div>
@@ -1436,7 +1485,7 @@
                 <div id="panelSchedSection" style="background: white; border: 1.5px solid #BAE6FD; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                   <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
                     <div style="font-weight: 800; color: #0369A1; font-size: 1rem; display: flex; align-items: center; gap: 6px;">
-                      <span>🏢</span> Schedule Section Exam (Bulk)
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#003D6B" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="9" y1="22" x2="9" y2="22.01"/><line x1="9" y1="6" x2="9" y2="6.01"/><line x1="15" y1="6" x2="15" y2="6.01"/><line x1="9" y1="10" x2="9" y2="10.01"/><line x1="15" y1="10" x2="15" y2="10.01"/><line x1="9" y1="14" x2="9" y2="14.01"/><line x1="15" y1="14" x2="15" y2="14.01"/><line x1="9" y1="18" x2="9" y2="18.01"/><line x1="15" y1="18" x2="15" y2="18.01"/></svg>Schedule Section Exam (Bulk)
                     </div>
                     <span style="font-size: 0.72rem; font-weight: 700; background: #E0F2FE; color: #0369A1; padding: 2px 8px; border-radius: 4px;">Entire Section Roster</span>
                   </div>
@@ -1480,7 +1529,7 @@
                   </div>
 
                   <button type="button" class="btn-primary" onclick="scheduleSectionExam()" style="width: 100%; background: #0284C7; border-color: #0284C7; font-weight: 700; font-size: 0.88rem; padding: 10px; border-radius: 6px; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                    <span>📅 Schedule Exam for Entire Section</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>Schedule Exam for Entire Section</span>
                   </button>
                 </div>
 
@@ -1488,7 +1537,7 @@
                 <div id="panelSchedIndividual" style="background: white; border: 1.5px solid #C7D2FE; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                   <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
                     <div style="font-weight: 800; color: #3730A3; font-size: 1rem; display: flex; align-items: center; gap: 6px;">
-                      <span>👤</span> Schedule Individual Employee Exam
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Schedule Individual Employee Exam
                     </div>
                     <span style="font-size: 0.72rem; font-weight: 700; background: #EEF2FF; color: #3730A3; padding: 2px 8px; border-radius: 4px;">Single Candidate</span>
                   </div>
@@ -1525,7 +1574,7 @@
                   </div>
 
                   <button type="button" class="btn-primary" onclick="scheduleIndividualEmployeeExam()" style="width: 100%; background: #4F46E5; border-color: #4F46E5; font-weight: 700; font-size: 0.88rem; padding: 10px; border-radius: 6px; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                    <span>📅 Schedule Employee Exam &amp; Unlock</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>Schedule Employee Exam &amp; Unlock</span>
                   </button>
                 </div>
 
@@ -1535,7 +1584,7 @@
               <div style="margin-top: 24px; background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 18px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px;">
                   <div style="font-weight: 700; color: #0F172A; font-size: 0.95rem; display: flex; align-items: center; gap: 8px;">
-                    <span>📋</span> Active Scheduled Exams Monitor
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>Active Scheduled Exams Monitor
                     <span id="scheduledExamsCountBadge" style="background: #DBEAFE; color: #1E40AF; font-size: 0.74rem; padding: 2px 8px; border-radius: 12px; font-weight: 800;">0 Scheduled</span>
                   </div>
                   <div style="display: flex; gap: 8px; align-items: center;">
@@ -1571,7 +1620,7 @@
               <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; border-bottom: 1px solid #FFE4E6; padding-bottom: 14px;">
                 <div>
                   <h3 style="color: #991B1B; margin: 0; font-size: 1.15rem; display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 1.25rem;">🔄</span> Dedicated Exam Reset Management Center
+                    <span style="display: inline-flex; align-items: center; margin-right: 6px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>Dedicated Exam Reset Management Center
                   </h3>
                   <div style="font-size: 0.84rem; color: #64748B; margin-top: 4px;">
                     Reset assessment records by specific Section, Department, or Global for fresh candidate assessments
@@ -1579,7 +1628,7 @@
                 </div>
                 <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                   <button type="button" class="btn-primary" onclick="makeZeroFinishExam()" style="background: #DC2626; border-color: #DC2626; font-size: 0.82rem; font-weight: 700; padding: 7px 14px; border-radius: 6px;" title="Reset all employee exams to Not Started">
-                    ⚠️ Reset All Exams (0 Finished)
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Reset All Exams (0 Finished)
                   </button>
                 </div>
               </div>
@@ -1589,7 +1638,7 @@
                 <!-- CARD 1: Reset By Section -->
                 <div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                   <div style="font-weight: 700; color: #0F172A; font-size: 0.95rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-                    <span>🏢</span> Reset Exams By Section
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#003D6B" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="9" y1="22" x2="9" y2="22.01"/><line x1="9" y1="6" x2="9" y2="6.01"/><line x1="15" y1="6" x2="15" y2="6.01"/><line x1="9" y1="10" x2="9" y2="10.01"/><line x1="15" y1="10" x2="15" y2="10.01"/><line x1="9" y1="14" x2="9" y2="14.01"/><line x1="15" y1="14" x2="15" y2="14.01"/><line x1="9" y1="18" x2="9" y2="18.01"/><line x1="15" y1="18" x2="15" y2="18.01"/></svg>Reset Exams By Section
                   </div>
                   <div style="font-size: 0.8rem; color: #64748B; margin-bottom: 14px;">
                     Select any QA section to reset only its candidates back to "Not Started".
@@ -1614,14 +1663,14 @@
                   </div>
 
                   <button type="button" class="btn-primary" onclick="triggerAdminSecReset()" style="width: 100%; background: #E11D48; border-color: #E11D48; font-weight: 700; font-size: 0.86rem; padding: 9px; border-radius: 6px;">
-                    🔄 Reset Selected Section Exams
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Reset Selected Section Exams
                   </button>
                 </div>
 
                 <!-- CARD 2: Reset By Department -->
                 <div style="background: white; border: 1px solid #E2E8F0; border-radius: 8px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                   <div style="font-weight: 700; color: #0F172A; font-size: 0.95rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-                    <span>🏛️</span> Reset Exams By Department
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6D28D9" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><line x1="2" y1="22" x2="22" y2="22"/><line x1="2" y1="2" x2="22" y2="2"/><polygon points="12 2 2 7 22 7 12 2"/><line x1="4" y1="7" x2="4" y2="22"/><line x1="9" y1="7" x2="9" y2="22"/><line x1="15" y1="7" x2="15" y2="22"/><line x1="20" y1="7" x2="20" y2="22"/></svg>Reset Exams By Department
                   </div>
                   <div style="font-size: 0.8rem; color: #64748B; margin-bottom: 14px;">
                     Select any plant department to reset only its candidates back to "Not Started".
@@ -1644,7 +1693,7 @@
                   </div>
 
                   <button type="button" class="btn-primary" onclick="triggerAdminDeptReset()" style="width: 100%; background: #9333EA; border-color: #9333EA; font-weight: 700; font-size: 0.86rem; padding: 9px; border-radius: 6px;">
-                    🔄 Reset Selected Department Exams
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Reset Selected Department Exams
                   </button>
                 </div>
 
@@ -1660,7 +1709,7 @@
                 <div style="font-size: 0.85rem; color: var(--text-muted);">Manage employee database (Add, Edit, Delete, Search)</div>
               </div>
               <button class="btn-primary" style="padding: 10px 18px; font-size: 0.88rem; display: flex; align-items: center; gap: 8px;" onclick="openAddEmpModal()">
-                <span>➕ Add New Employee</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>Add New Employee</span>
               </button>
             </div>
 
@@ -1708,7 +1757,7 @@
                   <span>Export Section Excel (.xlsx)</span>
                 </button>
                 <button class="btn-secondary" style="padding: 8px 16px; font-size: 0.88rem; color: #DC2626; border-color: #FECDD3; display: flex; align-items: center; gap: 8px;" onclick="resetCurrentActiveSectionExams()" title="Reset all candidate exams for this section">
-                  <span>🔄 Reset Section Exams</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>Reset Section Exams</span>
                 </button>
               </div>
             </div>
@@ -2202,7 +2251,7 @@
     <div style="background: #FFFFFF; border-radius: 16px; max-width: 900px; width: 100%; margin: 30px auto; padding: 24px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3); max-height: 90vh; overflow-y: auto;">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #E2E8F0; padding-bottom: 14px; margin-bottom: 20px;">
         <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="font-size: 1.6rem;">📖</span>
+          <span style="display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; background: #E0F2FE; border-radius: 8px; color: #003D6B;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>
           <h3 style="margin: 0; color: var(--primary-dark); font-size: 1.3rem;">ATC Tires: ILUO Definitions &amp; Induction SOP</h3>
         </div>
         <button onclick="closeSopModal()" style="background: none; border: none; font-size: 1.6rem; cursor: pointer; color: #64748B;">&times;</button>
@@ -2211,7 +2260,7 @@
       <!-- ILUO Definitions Infographic -->
       <div style="margin-bottom: 28px;">
         <h4 style="color: #005B9E; margin-bottom: 12px; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
-          <span>🎯</span> Official Definition of ILUO
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>Official Definition of ILUO
         </h4>
         <div style="text-align: center; background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 8px; padding: 12px;">
           <img src="assets/image8.png" alt="Definition of ILUO" loading="lazy" style="max-width: 100%; height: auto; border-radius: 6px;" onerror="this.onerror=null; this.src='assets/image5.png'">
@@ -2221,7 +2270,7 @@
       <!-- SOP Flowchart -->
       <div>
         <h4 style="color: #005B9E; margin-bottom: 12px; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
-          <span>📋</span> SOP for Induction Training &amp; Skill Development Process
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>SOP for Induction Training &amp; Skill Development Process
         </h4>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
           <div style="background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 8px; padding: 10px; text-align: center;">
@@ -2245,7 +2294,7 @@
   <div class="modal-overlay" id="modalAddEditQuestion" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.75); z-index: 99999; overflow-y: auto; padding: 20px; align-items: center; justify-content: center; opacity: 1; pointer-events: auto;">
     <div class="security-modal-box" style="max-width: 620px; text-align: left; background: #FFFFFF; border-radius: 12px; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.25); margin: 30px auto; max-height: 90vh; overflow-y: auto;">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
-        <h3 id="modalQTitle" style="margin: 0; color: var(--primary-dark);">➕ Add New Question</h3>
+        <h3 id="modalQTitle" style="margin: 0; color: var(--primary-dark);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add New Question</h3>
         <button onclick="closeQModal()" style="background: none; border: none; font-size: 1.4rem; cursor: pointer; color: var(--text-muted);">&times;</button>
       </div>
 
@@ -2331,7 +2380,7 @@
     <div class="security-modal-box" style="max-width: 580px; width: 100%; text-align: left; background: #FFFFFF; border-radius: 12px; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.25); margin: 30px auto; max-height: 90vh; overflow-y: auto;">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #EF4444; padding-bottom: 12px; margin-bottom: 16px;">
         <h3 style="margin: 0; color: #DC2626; display: flex; align-items: center; gap: 8px;">
-          <span>🗑️</span> Clear Questions by Section &amp; Level
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Clear Questions by Section &amp; Level
         </h3>
         <button onclick="closeClearQuestionsModal()" style="background: none; border: none; font-size: 1.4rem; cursor: pointer; color: var(--text-muted);">&times;</button>
       </div>
@@ -2345,7 +2394,7 @@
         <div>
           <label style="font-weight: 700; font-size: 0.85rem; display: block; margin-bottom: 4px; color: var(--text-dark);">QC Section:</label>
           <select id="clearModalSection" class="form-control" onchange="updateClearModalImpact()">
-            <option value="ALL">🌐 All QC Sections</option>
+            <option value="ALL">All QC Sections</option>
             <option value="Final Finish QA">Final Finish QA</option>
             <option value="Tire Building QA">Tire Building QA</option>
             <option value="Tire Curing QA">Tire Curing QA</option>
@@ -2360,7 +2409,7 @@
         <div>
           <label style="font-weight: 700; font-size: 0.85rem; display: block; margin-bottom: 4px; color: var(--text-dark);">Skill Level:</label>
           <select id="clearModalLevel" class="form-control" onchange="updateClearModalImpact()">
-            <option value="ALL">🎯 All Levels (L, U, O)</option>
+            <option value="ALL">All Levels (L, U, O)</option>
             <option value="L">L Level</option>
             <option value="U">U Level</option>
             <option value="O">O Level</option>
@@ -2381,17 +2430,17 @@
       <!-- Action Buttons -->
       <div style="display: flex; flex-direction: column; gap: 10px;">
         <button type="button" class="btn-primary" id="btnConfirmClearSelected" style="background: #DC2626; border-color: #DC2626; padding: 10px 16px; font-weight: 700; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;" onclick="confirmExecuteClear()">
-          <span>🗑️ Delete Matching Questions</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><span>Delete Matching Questions</span>
         </button>
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 14px; border-top: 1px solid #E2E8F0; flex-wrap: wrap; gap: 10px;">
           <button type="button" class="btn-secondary" style="font-size: 0.82rem; color: #0284C7; border-color: #BAE6FD;" onclick="restoreDefaultQuestionsBank()" title="Restore factory default master questions">
-            🔄 Restore Default Questions
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Restore Default Questions
           </button>
           <div style="display: flex; gap: 8px;">
             <button type="button" class="btn-reset" onclick="closeClearQuestionsModal()">Cancel</button>
             <button type="button" class="btn-secondary" style="font-size: 0.82rem; color: #B91C1C; border-color: #FECDD3;" onclick="confirmClearAllQuestionsBank()">
-              ⚠️ Clear All Questions
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Clear All Questions
             </button>
           </div>
         </div>
@@ -2403,7 +2452,7 @@
   <div class="modal-overlay" id="modalAddEditEmployee" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.75); z-index: 99999; overflow-y: auto; padding: 20px; align-items: center; justify-content: center; opacity: 1; pointer-events: auto;">
     <div class="security-modal-box" style="max-width: 580px; text-align: left; background: #FFFFFF; border-radius: 12px; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.25); margin: 30px auto; max-height: 90vh; overflow-y: auto;">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
-        <h3 id="modalEmpTitle" style="margin: 0; color: var(--primary-dark);">➕ Add New Employee</h3>
+        <h3 id="modalEmpTitle" style="margin: 0; color: var(--primary-dark);"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add New Employee</h3>
         <button onclick="closeEmpModal()" style="background: none; border: none; font-size: 1.4rem; cursor: pointer; color: var(--text-muted);">&times;</button>
       </div>
 

@@ -1999,6 +1999,11 @@ function showResultView(record, isImmediateCompletion = false) {
 function showControlCenterSubView(subName) {
   showView('viewControlCenterWrapper');
 
+  // Update mobile drawer active label and auto-close sidebar on mobile
+  const mobileLabel = document.getElementById('adminMobileActiveLabel');
+  if (mobileLabel) mobileLabel.textContent = capitalize(subName);
+  if (typeof closeAdminSidebar === 'function') closeAdminSidebar();
+
   // Normalize alias
   if (subName === 'export') subName = 'reports';
   if (subName === 'training-requirements' || subName === 'training-requirement') subName = 'training';
@@ -9047,3 +9052,239 @@ window.changeSecPage = changeSecPage;
 window.toggleSelectAllSecEmps = toggleSelectAllSecEmps;
 window.getSelectedSecEmpNos = getSelectedSecEmpNos;
 window.scheduleTrainingActionPlan = scheduleTrainingActionPlan;
+
+
+// --------------------------------------------------------------------------
+// HR CONTROL CENTER MOBILE DRAWER (Phase 2, Task 5)
+// --------------------------------------------------------------------------
+function toggleAdminSidebar() {
+  const sidebar = document.getElementById('adminSidebar');
+  const backdrop = document.getElementById('adminSidebarBackdrop');
+  const toggleBtn = document.getElementById('btnAdminMobileToggle');
+  if (!sidebar) return;
+  const isOpen = sidebar.classList.contains('mobile-open');
+  if (isOpen) {
+    closeAdminSidebar();
+  } else {
+    sidebar.classList.add('mobile-open');
+    if (backdrop) backdrop.classList.add('open');
+    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
+  }
+}
+
+function closeAdminSidebar() {
+  const sidebar = document.getElementById('adminSidebar');
+  const backdrop = document.getElementById('adminSidebarBackdrop');
+  const toggleBtn = document.getElementById('btnAdminMobileToggle');
+  if (sidebar) sidebar.classList.remove('mobile-open');
+  if (backdrop) backdrop.classList.remove('open');
+  if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
+}
+
+// --------------------------------------------------------------------------
+// INLINE COMPETENCY MATRIX & SEGMENTED VIEW TOGGLES (Phase 3, Task 1)
+// --------------------------------------------------------------------------
+function generateCompetencyHeatmapTableOnly(sectionName) {
+  const sec = sectionName || currentActiveSection || 'Tire Building QA';
+  const emps = (typeof EMPLOYEES !== 'undefined') ? EMPLOYEES.filter(e => {
+    const s = (e.section || '').toLowerCase();
+    return s.includes(sec.toLowerCase()) || sec.toLowerCase().includes(s);
+  }) : [];
+
+  const workstations = [
+    { id: 'st1', name: 'Raw Material & Setup Station' },
+    { id: 'st2', name: 'Primary Assembly & Core Machine Bay' },
+    { id: 'st3', name: 'In-Process Precision Inspection Bay' },
+    { id: 'st4', name: 'High-Speed Testing & Dynamic Rig' },
+    { id: 'st5', name: 'Final Certification & Containment Dock' }
+  ];
+
+  let rowsHtml = '';
+  workstations.forEach((ws, idx) => {
+    const wsEmps = emps.filter((_, i) => (i % workstations.length) === idx);
+    const uAndOCount = wsEmps.filter(e => e.currentLevel === 'U' || e.currentLevel === 'O').length;
+    const isSpof = uAndOCount < 2;
+
+    const opBadges = wsEmps.map(e => `
+      <span class="iluo-badge iluo-badge-${(e.currentLevel || 'I').toLowerCase()}" style="margin: 2px;" title="${e.name} (${e.empNo}) - Level ${e.currentLevel}">
+        ${e.currentLevel || 'I'}
+      </span>
+    `).join('') || '<span style="color: #94A3B8; font-size: 0.8rem;">No assigned operators</span>';
+
+    rowsHtml += `
+      <tr>
+        <td class="heatmap-station-th">
+          <strong>${ws.name}</strong>
+          ${isSpof ? '<br><span class="spof-warning-badge"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 3px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> SPOF Alert: &lt; 2 Level U/O Certified</span>' : ''}
+        </td>
+        <td><strong class="tabular-nums" style="font-size: 1rem; color: #0F172A;">${wsEmps.length}</strong></td>
+        <td><span class="tabular-nums" style="color: #64748B; font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'I').length}</span></td>
+        <td><span class="tabular-nums" style="color: #B45309; font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'L').length}</span></td>
+        <td><span class="tabular-nums" style="color: #1D4ED8; font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'U').length}</span></td>
+        <td><span class="tabular-nums" style="color: #047857; font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'O').length}</span></td>
+        <td style="text-align: left; padding: 10px 14px;">${opBadges}</td>
+      </tr>
+    `;
+  });
+
+  return `
+    <div class="competency-heatmap-container">
+      <table class="heatmap-table">
+        <thead>
+          <tr style="background: #F8FAFC;">
+            <th style="text-align: left;">Workstation / Line Process</th>
+            <th>Total Ops</th>
+            <th>Level I</th>
+            <th>Level L</th>
+            <th>Level U</th>
+            <th>Level O</th>
+            <th style="text-align: left;">Certified Operator Quadrants</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function generateCompetencyHeatmapHtml(sectionName) {
+  const sec = sectionName || currentActiveSection || 'Tire Building QA';
+  const emps = (typeof EMPLOYEES !== 'undefined') ? EMPLOYEES.filter(e => {
+    const s = (e.section || '').toLowerCase();
+    return s.includes(sec.toLowerCase()) || sec.toLowerCase().includes(s);
+  }) : [];
+
+  return `
+    <div style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+      <div style="font-size: 0.95rem; font-weight: 700; color: #0F172A;">
+        Section: <span style="color: #005B9E;">${sec}</span> (${emps.length} Active Operators)
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <span class="iluo-badge iluo-badge-i">I: Induction</span>
+        <span class="iluo-badge iluo-badge-l">L: Learner</span>
+        <span class="iluo-badge iluo-badge-u">U: Executor</span>
+        <span class="iluo-badge iluo-badge-o">O: Expert</span>
+      </div>
+    </div>
+    ${generateCompetencyHeatmapTableOnly(sec)}
+  `;
+}
+
+function setSectionViewMode(mode) {
+  const tableCont = document.getElementById('secTableContainer');
+  const matrixCont = document.getElementById('secMatrixContainer');
+  const btnTable = document.getElementById('btnSecViewTable');
+  const btnMatrix = document.getElementById('btnSecViewMatrix');
+
+  if (mode === 'matrix') {
+    if (tableCont) tableCont.style.display = 'none';
+    if (matrixCont) {
+      matrixCont.style.display = 'block';
+      renderInlineSectionMatrix(currentActiveSection);
+    }
+    if (btnTable) { btnTable.classList.remove('active'); btnTable.setAttribute('aria-pressed', 'false'); }
+    if (btnMatrix) { btnMatrix.classList.add('active'); btnMatrix.setAttribute('aria-pressed', 'true'); }
+  } else {
+    if (tableCont) tableCont.style.display = 'block';
+    if (matrixCont) matrixCont.style.display = 'none';
+    if (btnTable) { btnTable.classList.add('active'); btnTable.setAttribute('aria-pressed', 'true'); }
+    if (btnMatrix) { btnMatrix.classList.remove('active'); btnMatrix.setAttribute('aria-pressed', 'false'); }
+  }
+}
+
+function renderInlineSectionMatrix(sectionName) {
+  const container = document.getElementById('secMatrixContainer');
+  if (!container) return;
+  const sec = sectionName || currentActiveSection || 'Tire Building QA';
+  container.innerHTML = generateCompetencyHeatmapHtml(sec);
+}
+
+function setDeptViewMode(mode) {
+  const tableCont = document.getElementById('deptTableContainer');
+  const matrixCont = document.getElementById('deptMatrixContainer');
+  const btnTable = document.getElementById('btnDeptViewTable');
+  const btnMatrix = document.getElementById('btnDeptViewMatrix');
+
+  if (mode === 'matrix') {
+    if (tableCont) tableCont.style.display = 'none';
+    if (matrixCont) {
+      matrixCont.style.display = 'block';
+      renderInlineDeptMatrix();
+    }
+    if (btnTable) { btnTable.classList.remove('active'); btnTable.setAttribute('aria-pressed', 'false'); }
+    if (btnMatrix) { btnMatrix.classList.add('active'); btnMatrix.setAttribute('aria-pressed', 'true'); }
+  } else {
+    if (tableCont) tableCont.style.display = 'block';
+    if (matrixCont) matrixCont.style.display = 'none';
+    if (btnTable) { btnTable.classList.add('active'); btnTable.setAttribute('aria-pressed', 'true'); }
+    if (btnMatrix) { btnMatrix.classList.remove('active'); btnMatrix.setAttribute('aria-pressed', 'false'); }
+  }
+}
+
+function renderInlineDeptMatrix() {
+  const container = document.getElementById('deptMatrixContainer');
+  if (!container) return;
+  const dept = currentActiveDept || 'QUALITY CONTROL';
+  const sections = (typeof QA_SECTIONS_LIST !== 'undefined') ? QA_SECTIONS_LIST.filter(s => {
+    if (dept === 'PRODUCTION') return (s.dept || s.department || '').toUpperCase() === 'PRODUCTION';
+    return (s.dept || s.department || '').toUpperCase() === 'QUALITY CONTROL' || !s.dept;
+  }) : [];
+
+  let deptMatrixHtml = `
+    <div style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+      <div style="font-size: 0.95rem; font-weight: 700; color: #0F172A;">
+        Department: <span style="color: #6D28D9;">${dept}</span> (${sections.length} Plant Sections Monitored)
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <span class="iluo-badge iluo-badge-i">I: Induction</span>
+        <span class="iluo-badge iluo-badge-l">L: Learner</span>
+        <span class="iluo-badge iluo-badge-u">U: Executor</span>
+        <span class="iluo-badge iluo-badge-o">O: Expert</span>
+      </div>
+    </div>
+  `;
+
+  sections.forEach(secObj => {
+    deptMatrixHtml += `
+      <div style="margin-top: 16px; margin-bottom: 20px; border: 1px solid #E2E8F0; border-radius: 8px; padding: 16px; background: #FAFAFA;">
+        <h4 style="margin: 0 0 10px 0; color: #003D6B; font-size: 1rem; font-weight: 800;">Section: ${secObj.name}</h4>
+        ${generateCompetencyHeatmapTableOnly(secObj.name)}
+      </div>
+    `;
+  });
+
+  container.innerHTML = deptMatrixHtml;
+}
+
+// --------------------------------------------------------------------------
+// GLOBAL ESCAPE KEY DISMISSAL HANDLER (Acceptance Criteria)
+// --------------------------------------------------------------------------
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    // 1. Mobile admin sidebar
+    if (typeof closeAdminSidebar === 'function') closeAdminSidebar();
+    // 2. OJT rubric drawer
+    const rubricDrawer = document.getElementById('ojtRubricDrawer');
+    if (rubricDrawer && rubricDrawer.classList.contains('open')) {
+      if (typeof closeRubricDrawerDirect === 'function') closeRubricDrawerDirect();
+    }
+    // 3. Modals
+    const modalsToClose = [
+      'competencyHeatmapModal',
+      'auditExportModal',
+      'examReviewModal',
+      'sopModal',
+      'questionModal',
+      'employeeModal',
+      'clearQuestionsModal'
+    ];
+    modalsToClose.forEach(id => {
+      const m = document.getElementById(id);
+      if (m && m.style.display !== 'none') {
+        m.style.display = 'none';
+      }
+    });
+  }
+});

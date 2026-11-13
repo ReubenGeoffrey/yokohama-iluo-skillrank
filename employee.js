@@ -1110,3 +1110,20 @@ function jumpToExamQuestion(targetIndex) {
 }
 window.jumpToExamQuestion = jumpToExamQuestion;
 window.renderQuestionPalette = renderQuestionPalette;
+
+
+// Global ESC key listener to dismiss open modals/overlays (Acceptance Criteria)
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const sopModal = document.getElementById('sopModal');
+    if (sopModal && sopModal.style.display !== 'none') {
+      if (typeof closeSopModal === 'function') closeSopModal();
+      else sopModal.style.display = 'none';
+    }
+    const sigModal = document.getElementById('signatureModal');
+    if (sigModal && sigModal.style.display !== 'none') {
+      if (typeof closeSignatureModal === 'function') closeSignatureModal();
+      else sigModal.style.display = 'none';
+    }
+  }
+});
