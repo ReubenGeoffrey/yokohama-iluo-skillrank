@@ -30,7 +30,6 @@ assessment_records*.json
 custom_employees*.json
 ojt_evaluations*.json
 custom_settings*.json
-public_operators.js
 
 # Vercel Deployment Cache
 .vercel
