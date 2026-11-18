@@ -1,5 +1,5 @@
 // =====================================================================
-// YOKOHAMA OFFICIAL ASSESSMENT & OJT REPORT HTML GENERATOR
+// OFFICIAL ASSESSMENT & OJT REPORT HTML GENERATOR
 // Pixel-perfect A4 printable layout matching official Word (.docx) format
 // =====================================================================
 
@@ -731,10 +731,10 @@ function generateDepartmentSummaryHtml(options = {}) {
           <span style="font-size: 8.5px; font-weight: 400; color: #64748B; display: block;">${escapeHtml(sec.name)}</span>
         </td>
         <td style="text-align: center; font-weight: 700; padding: 5px 4px; font-variant-numeric: tabular-nums;">${sTotal}</td>
-        <td style="text-align: center; padding: 5px 4px; font-variant-numeric: tabular-nums; color: #475569;">${sI}</td>
-        <td style="text-align: center; padding: 5px 4px; font-variant-numeric: tabular-nums; color: #475569;">${sL}</td>
-        <td style="text-align: center; padding: 5px 4px; font-variant-numeric: tabular-nums; color: #059669; font-weight: 600;">${sU}</td>
-        <td style="text-align: center; padding: 5px 4px; font-variant-numeric: tabular-nums; color: #7C3AED; font-weight: 700;">${sO}</td>
+        <td style="text-align: center; padding: 5px 4px; font-variant-numeric: tabular-nums; color: #334155; font-weight: 600;">${sI}</td>
+        <td style="text-align: center; padding: 5px 4px; font-variant-numeric: tabular-nums; color: #92400E; font-weight: 600;">${sL}</td>
+        <td style="text-align: center; padding: 5px 4px; font-variant-numeric: tabular-nums; color: #1E40AF; font-weight: 600;">${sU}</td>
+        <td style="text-align: center; padding: 5px 4px; font-variant-numeric: tabular-nums; color: #14532D; font-weight: 700;">${sO}</td>
         <td style="text-align: center; padding: 5px 4px; font-variant-numeric: tabular-nums; color: #0284C7; font-weight: 600;">${sExam} / ${sTotal}</td>
         <td style="text-align: center; padding: 5px 4px; font-variant-numeric: tabular-nums; color: #059669; font-weight: 600;">${sOjt} / ${sTotal}</td>
         <td style="text-align: center; padding: 5px 4px; font-variant-numeric: tabular-nums; color: #1E40AF; font-weight: 700;">${sBoth} / ${sTotal}</td>
@@ -756,7 +756,7 @@ function generateDepartmentSummaryHtml(options = {}) {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Yokohama • ATC Tires — Department Summary Report (${escapeHtml(deptTitle)})</title>
+  <title>ATC Tires — Department Summary Report (${escapeHtml(deptTitle)})</title>
   <style>
     @page {
       size: A4 landscape;
@@ -920,14 +920,14 @@ function generateDepartmentSummaryHtml(options = {}) {
 <body>
 
   <div class="report-page">
-    <!-- Official Yokohama / ATC Header -->
+    <!-- Official ATC Tires Header -->
     <table class="header-table">
       <tr>
         <td style="width: 160px;">
-          ${logoBase64 ? `<img src="${logoBase64}" alt="Yokohama ATC Tires" style="height: 42px; max-width: 155px; object-fit: contain;">` : `<div style="font-size: 18px; font-weight: 900; color: #D32F2F; letter-spacing: 1px;">YOKOHAMA<br><span style="color: #003D6B; font-size: 12px;">ATC TIRES</span></div>`}
+          ${logoBase64 ? `<img src="${logoBase64}" alt="ATC Tires" style="height: 42px; max-width: 155px; object-fit: contain;">` : `<div style="font-size: 18px; font-weight: 900; color: #003D6B; letter-spacing: 1px;">ATC TIRES</div>`}
         </td>
         <td style="text-align: center;">
-          <div style="font-size: 15px; font-weight: 900; color: #0F172A; letter-spacing: 0.5px;">ATC TIRES PVT. LTD. &bull; YOKOHAMA GROUP</div>
+          <div style="font-size: 15px; font-weight: 900; color: #0F172A; letter-spacing: 0.5px;">ATC TIRES PVT. LTD.</div>
           <div style="font-size: 9.5px; font-weight: 700; color: #D32F2F; letter-spacing: 0.8px; margin-top: 1px;">
             PLANT COMPETENCY &amp; VERIFICATION SYSTEM &bull; ISO 9001:2015 &amp; IATF 16949 COMPLIANT
           </div>
@@ -937,7 +937,7 @@ function generateDepartmentSummaryHtml(options = {}) {
         </td>
         <td style="width: 200px; text-align: right; font-size: 8.5px; line-height: 1.4;">
           <div style="background: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 4px; padding: 5px 8px; text-align: left; display: inline-block;">
-            <div><strong>DOC REF:</strong> YOKO/ATC/ILUO-${deptRef}/2026</div>
+            <div><strong>DOC REF:</strong> ATC/ILUO-${deptRef}/2026</div>
             <div><strong>IATF REV:</strong> 04 (Automotive Standard)</div>
             <div><strong>DATE:</strong> ${escapeHtml(generatedDate)}</div>
             <div><strong>SHIFT:</strong> ${escapeHtml(shift)}</div>
@@ -976,20 +976,20 @@ function generateDepartmentSummaryHtml(options = {}) {
         ILUO Competency Breakdown:
       </div>
       <div style="display: flex; gap: 12px; align-items: center;">
-        <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px; font-weight: 700; color: #DC2626;">
-          <span style="width: 14px; height: 14px; border-radius: 3px; background: #FEE2E2; color: #DC2626; display: inline-flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 800;">I</span>
+        <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px; font-weight: 700; color: #334155;">
+          <span style="width: 14px; height: 14px; border-radius: 3px; background: #F1F5F9; color: #334155; border: 1px solid #94A3B8; display: inline-flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 800;">I</span>
           Beginner: <strong>${countI}</strong> (${totalEmps > 0 ? Math.round((countI/totalEmps)*100) : 0}%)
         </span>
-        <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px; font-weight: 700; color: #D97706;">
-          <span style="width: 14px; height: 14px; border-radius: 3px; background: #FEF3C7; color: #D97706; display: inline-flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 800;">L</span>
+        <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px; font-weight: 700; color: #92400E;">
+          <span style="width: 14px; height: 14px; border-radius: 3px; background: #FEF3C7; color: #92400E; border: 1px solid #F59E0B; display: inline-flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 800;">L</span>
           Learner: <strong>${countL}</strong> (${totalEmps > 0 ? Math.round((countL/totalEmps)*100) : 0}%)
         </span>
-        <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px; font-weight: 700; color: #059669;">
-          <span style="width: 14px; height: 14px; border-radius: 3px; background: #DCFCE7; color: #059669; display: inline-flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 800;">U</span>
+        <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px; font-weight: 700; color: #1E40AF;">
+          <span style="width: 14px; height: 14px; border-radius: 3px; background: #DBEAFE; color: #1E40AF; border: 1px solid #3B82F6; display: inline-flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 800;">U</span>
           Executor: <strong>${countU}</strong> (${totalEmps > 0 ? Math.round((countU/totalEmps)*100) : 0}%)
         </span>
-        <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px; font-weight: 700; color: #7C3AED;">
-          <span style="width: 14px; height: 14px; border-radius: 3px; background: #EDE9FE; color: #7C3AED; display: inline-flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 800;">O</span>
+        <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px; font-weight: 700; color: #14532D;">
+          <span style="width: 14px; height: 14px; border-radius: 3px; background: #DCFCE7; color: #14532D; border: 1px solid #10B981; display: inline-flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 800;">O</span>
           Expert: <strong>${countO}</strong> (${totalEmps > 0 ? Math.round((countO/totalEmps)*100) : 0}%)
         </span>
       </div>
@@ -1083,7 +1083,7 @@ function generateDepartmentSummaryHtml(options = {}) {
 
     <!-- Footer Bar -->
     <div class="footer-bar">
-      <span>ATC TIRES PVT. LTD. &bull; YOKOHAMA GROUP &bull; PLANT COMPETENCY SYSTEM</span>
+      <span>ATC TIRES PVT. LTD. &bull; PLANT COMPETENCY SYSTEM</span>
       <span>AUTOMOTIVE TIRE MANUFACTURING &bull; CONFIDENTIAL &amp; PROPRIETARY</span>
       <span>ISO 9001:2015 &bull; IATF 16949 COMPLIANT REPORT</span>
     </div>

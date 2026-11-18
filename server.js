@@ -658,9 +658,9 @@ app.get(['/favicon.ico', '/favicon.png'], (req, res) => {
 app.get('/manifest.json', (req, res) => {
   res.setHeader('Content-Type', 'application/manifest+json');
   res.json({
-    name: "Yokohama ILUO Skill Assessment",
-    short_name: "Yokohama ILUO",
-    description: "Official Plant Skill Qualification & Analytics Portal for Yokohama ATC Tires",
+    name: "ATC Tires ILUO Skill Assessment",
+    short_name: "ATC Tires ILUO",
+    description: "Official Plant Skill Qualification & Analytics Portal for ATC Tires",
     start_url: "/",
     display: "standalone",
     background_color: "#0B1120",

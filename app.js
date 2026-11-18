@@ -2538,6 +2538,21 @@ function filterModalEmployees(type) {
   });
 }
 
+// Canonical ILUO Level & Status Color Systems (Matching CSS Variables)
+const ILUO_LEVEL_COLORS = {
+  I: { text: '#334155', bg: '#F1F5F9', border: '#94A3B8', chart: '#64748B' },
+  L: { text: '#92400E', bg: '#FEF3C7', border: '#F59E0B', chart: '#D97706' },
+  U: { text: '#1E40AF', bg: '#DBEAFE', border: '#3B82F6', chart: '#2563EB' },
+  O: { text: '#14532D', bg: '#DCFCE7', border: '#10B981', chart: '#059669' }
+};
+
+const SYSTEM_STATUS_COLORS = {
+  passed: { text: '#166534', bg: '#DCFCE7', border: '#86EFAC', chart: '#059669' },
+  pending: { text: '#92400E', bg: '#FEF3C7', border: '#FCD34D', chart: '#D97706' },
+  failed: { text: '#991B1B', bg: '#FEE2E2', border: '#FCA5A5', chart: '#DC2626' },
+  inProgress: { text: '#1E40AF', bg: '#DBEAFE', border: '#93C5FD', chart: '#2563EB' }
+};
+
 function renderPieChart(completed, inProgress, notStarted) {
   const canvas = document.getElementById('completionPieChart');
   if (!canvas || typeof Chart === 'undefined') return;
@@ -2554,7 +2569,11 @@ function renderPieChart(completed, inProgress, notStarted) {
         labels: ['Completed', 'In Progress', 'Not Attempted'],
         datasets: [{
           data: [completed, inProgress, notStarted],
-          backgroundColor: ['#10B981', '#F59E0B', '#94A3B8']
+          backgroundColor: [
+            SYSTEM_STATUS_COLORS.passed.chart,
+            SYSTEM_STATUS_COLORS.inProgress.chart,
+            SYSTEM_STATUS_COLORS.pending.chart
+          ]
         }]
       },
       options: {
@@ -2597,7 +2616,12 @@ function renderBarChart(records) {
         datasets: [{
           label: 'Employee Count',
           data: [iCount, lCount, uCount, oCount],
-          backgroundColor: ['#3B82F6', '#F59E0B', '#10B981', '#E31B23']
+          backgroundColor: [
+            ILUO_LEVEL_COLORS.I.chart,
+            ILUO_LEVEL_COLORS.L.chart,
+            ILUO_LEVEL_COLORS.U.chart,
+            ILUO_LEVEL_COLORS.O.chart
+          ]
         }]
       },
       options: {
@@ -3680,7 +3704,7 @@ let _browserLogoBase64Cache = null;
 async function getBrowserLogoBase64() {
   if (_browserLogoBase64Cache !== null) return _browserLogoBase64Cache;
   try {
-    const resp = await fetch('yokohama_logo.png');
+    const resp = await fetch('atg_logo.png');
     if (resp.ok) {
       const blob = await resp.blob();
       return new Promise((resolve) => {
@@ -3772,7 +3796,7 @@ async function generateAndDownloadClientSidePdf(empNo, recordData = null) {
   const reportHtml = window.generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmpl, logoBase64);
 
   const safeEmpName = (emp.name || empNo).replace(/[\s\\/]+/g, '_');
-  const filename = `Yokohama_ILUO_Report_${empNo}_${safeEmpName}.pdf`;
+  const filename = `ATC_ILUO_Report_${empNo}_${safeEmpName}.pdf`;
 
   const opt = {
     margin: [6, 8, 6, 8],
@@ -3828,7 +3852,7 @@ async function downloadEmployeePDF(empNo) {
       if (contentType.includes('application/pdf') || res.url.endsWith('.pdf')) {
         const blob = await res.blob();
         const contentDisp = res.headers.get('Content-Disposition') || '';
-        let filename = `Yokohama_ILUO_Report_${empNo}.pdf`;
+        let filename = `ATC_ILUO_Report_${empNo}.pdf`;
         const fnMatch = contentDisp.match(/filename="?([^"]+)"?/);
         if (fnMatch && fnMatch[1]) {
           filename = fnMatch[1];
@@ -3906,7 +3930,7 @@ async function buildDepartmentSummaryHtmlData(deptOverride) {
   const now = new Date();
   const generatedDate = now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
   const dateFileStr = now.toISOString().slice(0, 10);
-  const filename = `Yokohama_ATC_${deptSlug}_Department_Summary_${dateFileStr}.pdf`;
+  const filename = `ATC_${deptSlug}_Department_Summary_${dateFileStr}.pdf`;
 
   const html = window.generateDepartmentSummaryHtml({
     dept,
@@ -4028,7 +4052,7 @@ async function downloadEmployeeDocx(empNo) {
     if (res && res.ok) {
       const blob = await res.blob();
       const contentDisp = res.headers.get('Content-Disposition') || '';
-      let filename = `Yokohama_ILUO_Report_${empNo}.docx`;
+      let filename = `ATC_ILUO_Report_${empNo}.docx`;
       const fnMatch = contentDisp.match(/filename="?([^"]+)"?/);
       if (fnMatch && fnMatch[1]) {
         filename = fnMatch[1];
@@ -4130,7 +4154,7 @@ async function buildClientSideDocxBlob(empNo, recordData) {
   });
 
   const safeName = (emp.name || empNo).replace(/[\s\\/]+/g, '_');
-  const filename = `Yokohama_ILUO_Report_${empNo}_${safeName}.docx`;
+  const filename = `ATC_ILUO_Report_${empNo}_${safeName}.docx`;
 
   return { blob, emp, filename };
 }
@@ -4907,7 +4931,7 @@ function exportAdminExcel() {
 
 function exportAdminCSV() {
   const exportData = getAdminExportDataset();
-  const filename = `Yokohama_ILUO_QA_Assessment_Report_${new Date().toISOString().split('T')[0]}.csv`;
+  const filename = `ATC_ILUO_QA_Assessment_Report_${new Date().toISOString().split('T')[0]}.csv`;
   exportDataToCSV(exportData, filename);
  showToast('Master CSV report downloaded successfully!');
 }
@@ -4943,7 +4967,7 @@ function exportFullQuestionBankExcel() {
     });
   });
 
-  const filename = `Yokohama_QA_Question_Bank_Master_${new Date().toISOString().split('T')[0]}`;
+  const filename = `ATC_QA_Question_Bank_Master_${new Date().toISOString().split('T')[0]}`;
   try {
     if (typeof XLSX !== 'undefined') {
       const workbook = XLSX.utils.book_new();
@@ -6041,7 +6065,7 @@ function exportCurrentSectionExcel(targetSecKey) {
   }));
 
   const cleanTitle = currentSec.title.replace(/[^a-zA-Z0-9]/g, '_');
-  const filename = `Yokohama_${cleanTitle}_Report_${new Date().toISOString().split('T')[0]}`;
+  const filename = `ATC_${cleanTitle}_Report_${new Date().toISOString().split('T')[0]}`;
 
   try {
     if (typeof XLSX !== 'undefined') {
@@ -6095,7 +6119,7 @@ function exportCurrentSectionCSV(targetSecKey) {
   }) : [{ "Notice": `No registered employees under ${currentSec.title}.` }];
 
   const cleanTitle = currentSec.title.replace(/[^a-zA-Z0-9]/g, '_');
-  const filename = `Yokohama_${cleanTitle}_Report_${new Date().toISOString().split('T')[0]}.csv`;
+  const filename = `ATC_${cleanTitle}_Report_${new Date().toISOString().split('T')[0]}.csv`;
   exportDataToCSV(empData, filename);
  showToast(`${currentSec.title} CSV report downloaded successfully!`);
 }
@@ -6491,7 +6515,7 @@ function exportTrainingPlanExcel() {
     "Scheduled Target Date": item.scheduledDate || ""
   }));
 
-  const filename = `Yokohama_ILUO_Training_Requirements_Plan_${new Date().toISOString().split('T')[0]}`;
+  const filename = `ATC_ILUO_Training_Requirements_Plan_${new Date().toISOString().split('T')[0]}`;
 
   try {
     if (typeof XLSX !== 'undefined') {
@@ -7812,7 +7836,7 @@ function downloadCurrentOjtExcel() {
   const isQual = (radioYes && radioYes.checked) || (pct >= 70);
 
   const cleanName = emp.name.replace(/[^a-zA-Z0-9]/g, '_');
-  const filename = `Yokohama_OJT_${tmpl.id}_${emp.empNo}_${cleanName}`;
+  const filename = `ATC_OJT_${tmpl.id}_${emp.empNo}_${cleanName}`;
 
   try {
     if (typeof XLSX !== 'undefined' && tmpl.base64) {
@@ -7926,7 +7950,7 @@ async function downloadCurrentOjtDocx() {
       });
 
       const cleanName = emp.name.replace(/[^a-zA-Z0-9]/g, '_');
-      const filename = `Yokohama_OJT_${tmpl.id}_${emp.empNo}_${cleanName}.docx`;
+      const filename = `ATC_OJT_${tmpl.id}_${emp.empNo}_${cleanName}.docx`;
 
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -9153,7 +9177,7 @@ function openCompetencyHeatmap(sectionName) {
       <span class="iluo-badge iluo-badge-${(e.currentLevel || 'I').toLowerCase()}" style="margin: 2px;" title="${e.name} (${e.empNo}) - Level ${e.currentLevel}">
         ${e.currentLevel || 'I'}
       </span>
-    `).join('') || '<span style="color: #94A3B8; font-size: 0.8rem;">No assigned operators</span>';
+    `).join('') || '<span style="color: var(--text-subtle); font-size: 0.8rem;">No assigned operators</span>';
 
     rowsHtml += `
       <tr>
@@ -9161,11 +9185,11 @@ function openCompetencyHeatmap(sectionName) {
           <strong>${ws.name}</strong>
           ${isSpof ? '<br><span class="spof-warning-badge">⚠️ SPOF Alert: &lt; 2 Level U/O Certified</span>' : ''}
         </td>
-        <td><strong class="tabular-nums" style="font-size: 1rem; color: #0F172A;">${wsEmps.length}</strong></td>
-        <td><span class="tabular-nums" style="color: #64748B; font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'I').length}</span></td>
-        <td><span class="tabular-nums" style="color: #B45309; font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'L').length}</span></td>
-        <td><span class="tabular-nums" style="color: #1D4ED8; font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'U').length}</span></td>
-        <td><span class="tabular-nums" style="color: #047857; font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'O').length}</span></td>
+        <td><strong class="tabular-nums" style="font-size: 1rem; color: var(--text-main);">${wsEmps.length}</strong></td>
+        <td><span class="tabular-nums" style="color: var(--level-i-color); font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'I').length}</span></td>
+        <td><span class="tabular-nums" style="color: var(--level-l-color); font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'L').length}</span></td>
+        <td><span class="tabular-nums" style="color: var(--level-u-color); font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'U').length}</span></td>
+        <td><span class="tabular-nums" style="color: var(--level-o-color); font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'O').length}</span></td>
         <td style="text-align: left; padding: 10px 14px;">${opBadges}</td>
       </tr>
     `;
@@ -9496,7 +9520,7 @@ function generateCompetencyHeatmapTableOnly(sectionName) {
       <span class="iluo-badge iluo-badge-${(e.currentLevel || 'I').toLowerCase()}" style="margin: 2px;" title="${e.name} (${e.empNo}) - Level ${e.currentLevel}">
         ${e.currentLevel || 'I'}
       </span>
-    `).join('') || '<span style="color: #94A3B8; font-size: 0.8rem;">No assigned operators</span>';
+    `).join('') || '<span style="color: var(--text-subtle); font-size: 0.8rem;">No assigned operators</span>';
 
     rowsHtml += `
       <tr>
@@ -9504,11 +9528,11 @@ function generateCompetencyHeatmapTableOnly(sectionName) {
           <strong>${ws.name}</strong>
           ${isSpof ? '<br><span class="spof-warning-badge"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 3px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> SPOF Alert: &lt; 2 Level U/O Certified</span>' : ''}
         </td>
-        <td><strong class="tabular-nums" style="font-size: 1rem; color: #0F172A;">${wsEmps.length}</strong></td>
-        <td><span class="tabular-nums" style="color: #64748B; font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'I').length}</span></td>
-        <td><span class="tabular-nums" style="color: #B45309; font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'L').length}</span></td>
-        <td><span class="tabular-nums" style="color: #1D4ED8; font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'U').length}</span></td>
-        <td><span class="tabular-nums" style="color: #047857; font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'O').length}</span></td>
+        <td><strong class="tabular-nums" style="font-size: 1rem; color: var(--text-main);">${wsEmps.length}</strong></td>
+        <td><span class="tabular-nums" style="color: var(--level-i-color); font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'I').length}</span></td>
+        <td><span class="tabular-nums" style="color: var(--level-l-color); font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'L').length}</span></td>
+        <td><span class="tabular-nums" style="color: var(--level-u-color); font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'U').length}</span></td>
+        <td><span class="tabular-nums" style="color: var(--level-o-color); font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'O').length}</span></td>
         <td style="text-align: left; padding: 10px 14px;">${opBadges}</td>
       </tr>
     `;

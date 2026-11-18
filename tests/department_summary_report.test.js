@@ -135,7 +135,7 @@ describe('DEPARTMENT REPORT SUMMARY TESTS', () => {
 
     const html = await res.text();
     assert.ok(html.includes('EXECUTIVE DEPARTMENT COMPETENCY SUMMARY REPORT'), 'Must contain executive report heading');
-    assert.ok(html.includes('YOKOHAMA GROUP'), 'Must contain Yokohama group branding');
+    assert.ok(html.includes('ATC TIRES PVT. LTD.'), 'Must contain ATC Tires branding');
     assert.ok(html.includes('TOTAL ('), 'Must contain summary table with grand totals');
     assert.ok(html.includes('Prepared &amp; Verified By'), 'Must contain sign-off block');
   });
