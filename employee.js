@@ -1,3 +1,119 @@
+// ---------------------------------------------------------------------
+// Strict Content Security Policy (CSP) Programmatic Event Delegator (Task 2.4)
+// Eliminates inline event handler execution without using unsafe-eval
+// ---------------------------------------------------------------------
+(function() {
+  if (typeof window === 'undefined') return;
+
+  function safeExecuteAction(expr, el, e) {
+    if (!expr || typeof expr !== 'string') return;
+    const match = expr.match(/^([a-zA-Z0-9_$.]+)(?:\((.*)\))?$/);
+    if (!match) return;
+    const fnPath = match[1];
+    const argsRaw = match[2];
+
+    const parts = fnPath.split('.');
+    let fn = window;
+    let parent = window;
+    for (const part of parts) {
+      if (!fn || part === '__proto__' || part === 'constructor' || part === 'prototype') return;
+      parent = fn;
+      if (Object.prototype.hasOwnProperty.call(parent, part) || part in parent) {
+        fn = parent[part];
+      } else {
+        return;
+      }
+    }
+
+    if (typeof fn !== 'function') return;
+
+    let args = [];
+    if (argsRaw && argsRaw.trim().length > 0) {
+      args = argsRaw.split(',').map(s => {
+        s = s.trim();
+        if (s === 'event' || s === 'e') return e;
+        if (s === 'this') return el;
+        if (s === 'true') return true;
+        if (s === 'false') return false;
+        if (s === 'null') return null;
+        if (!isNaN(s) && s !== '') return Number(s);
+        if ((s.startsWith("'") && s.endsWith("'")) || (s.startsWith('"') && s.endsWith('"'))) {
+          return s.slice(1, -1);
+        }
+        const foundEl = document.getElementById(s);
+        if (foundEl) return foundEl;
+        return s;
+      });
+    } else if (expr.includes('(event)')) {
+      args = [e];
+    }
+
+    try {
+      fn.apply(parent, args);
+    } catch (err) {
+      console.error('Error executing CSP action:', expr, err);
+    }
+  }
+
+  document.addEventListener('click', function(e) {
+    const el = e.target.closest('[data-click], [onclick]');
+    if (!el) return;
+    const expr = el.getAttribute('data-click') || el.getAttribute('onclick');
+    if (expr) {
+      safeExecuteAction(expr, el, e);
+    }
+  }, false);
+
+  document.addEventListener('change', function(e) {
+    const el = e.target.closest('[data-change], [onchange]');
+    if (!el) return;
+    const expr = el.getAttribute('data-change') || el.getAttribute('onchange');
+    if (expr) {
+      safeExecuteAction(expr, el, e);
+    }
+  }, false);
+
+  document.addEventListener('submit', function(e) {
+    const el = e.target.closest('[data-submit], [onsubmit]');
+    if (!el) return;
+    const expr = el.getAttribute('data-submit') || el.getAttribute('onsubmit');
+    if (expr) {
+      e.preventDefault();
+      safeExecuteAction(expr, el, e);
+    }
+  }, false);
+})();
+
+
+let empAutosaveTimer = null;
+function triggerEmployeeAutosave() {
+  if (!empState || !empState.employee) return;
+  if (empAutosaveTimer) clearTimeout(empAutosaveTimer);
+  empAutosaveTimer = setTimeout(async () => {
+    try {
+      const res = await fetch('/api/exam/autosave', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({
+          empNo: empState.employee.empNo,
+          responses: empState.userAnswers,
+          currentIndex: empState.currentQIndex,
+          tabSwitchCount: empState.tabSwitches || 0
+        })
+      });
+      const data = await res.json();
+      if (data && data.autoSubmitted) {
+        if (empState.examTimerInterval) clearInterval(empState.examTimerInterval);
+        showToast('Assessment auto-terminated due to exceeding tab switch limit.', 'error');
+        if (data.record) {
+          showResultView(data.record);
+        }
+      }
+    } catch (e) {}
+  }, 400);
+}
+
 
 let clientCsrfToken = '';
 
@@ -530,10 +646,18 @@ async function startEmployeeExam() {
     if (data.success && data.activeExam) {
       empState.exam = data.activeExam;
       empState.examQuestions = data.activeExam.questions || [];
-      empState.currentQIndex = 0;
-      empState.userAnswers = {};
-      empState.tabSwitches = 0;
-      empState.timeRemainingSec = (data.activeExam.durationMinutes || 45) * 60;
+      if (data.isResumed) {
+        empState.currentQIndex = data.activeExam.currentIndex || 0;
+        empState.userAnswers = data.activeExam.responses || {};
+        empState.tabSwitches = data.activeExam.tabSwitchCount || 0;
+        empState.timeRemainingSec = data.activeExam.remainingSeconds || (45 * 60);
+        showToast('Resumed active assessment from server session.', 'info');
+      } else {
+        empState.currentQIndex = 0;
+        empState.userAnswers = {};
+        empState.tabSwitches = 0;
+        empState.timeRemainingSec = (data.activeExam.durationMinutes || 45) * 60;
+      }
 
       setText('tabSwitchCountDisplay', '0 / 3');
       startExamTimer();
@@ -583,6 +707,8 @@ function renderActiveQuestion() {
   const index = empState.currentQIndex;
   if (!questions || index >= questions.length) return;
 
+  renderQuestionPalette();
+
   const q = questions[index];
   setText('quizProgressText', `Question ${index + 1} of ${questions.length}`);
   setText('qNumberBadge', `Q${index + 1}`);
@@ -631,6 +757,7 @@ function renderActiveQuestion() {
     item.onclick = (e) => {
       radio.checked = true;
       empState.userAnswers[q.id] = optKey;
+      triggerEmployeeAutosave();
       if (btnNext) btnNext.disabled = false;
       document.querySelectorAll('#optionsContainer .option-item').forEach(el => {
         el.classList.remove('selected');
@@ -937,6 +1064,7 @@ function setupTabSwitchDetection() {
     if (document.hidden && empState.examTimerInterval) {
       empState.tabSwitches++;
       setText('tabSwitchCountDisplay', `${empState.tabSwitches} / 3`);
+        triggerEmployeeAutosave();
       if (empState.tabSwitches >= 3) {
         showToast('Maximum tab switches exceeded. Exam logged.', 'error');
       } else {
@@ -945,3 +1073,57 @@ function setupTabSwitchDetection() {
     }
   });
 }
+
+
+
+function renderQuestionPalette() {
+  const grid = document.getElementById('questionPaletteGrid');
+  if (!grid || !empState.examQuestions) return;
+
+  const total = empState.examQuestions.length;
+  let buttonsHtml = '';
+
+  for (let i = 0; i < total; i++) {
+    const q = empState.examQuestions[i];
+    const isAnswered = empState.userAnswers[q.id] !== undefined;
+    const isCurrent = i === empState.currentQIndex;
+
+    let style = 'width: 36px; height: 36px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.15s ease; border: 1.5px solid #CBD5E1;';
+    if (isCurrent) {
+      style += ' background: #005B9E; color: #FFFFFF; border-color: #003D6B; box-shadow: 0 0 0 2px rgba(0,91,158,0.3);';
+    } else if (isAnswered) {
+      style += ' background: #ECFDF5; color: #065F46; border-color: #10B981;';
+    } else {
+      style += ' background: #F8FAFC; color: #64748B; border-color: #E2E8F0;';
+    }
+
+    buttonsHtml += `<button type="button" class="palette-btn" style="${style}" onclick="jumpToExamQuestion(${i})" aria-label="Jump to Question ${i + 1}">${i + 1}</button>`;
+  }
+
+  grid.innerHTML = buttonsHtml;
+}
+
+function jumpToExamQuestion(targetIndex) {
+  if (!empState.examQuestions || targetIndex < 0 || targetIndex >= empState.examQuestions.length) return;
+  empState.currentQIndex = targetIndex;
+  renderActiveQuestion();
+}
+window.jumpToExamQuestion = jumpToExamQuestion;
+window.renderQuestionPalette = renderQuestionPalette;
+
+
+// Global ESC key listener to dismiss open modals/overlays (Acceptance Criteria)
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const sopModal = document.getElementById('sopModal');
+    if (sopModal && sopModal.style.display !== 'none') {
+      if (typeof closeSopModal === 'function') closeSopModal();
+      else sopModal.style.display = 'none';
+    }
+    const sigModal = document.getElementById('signatureModal');
+    if (sigModal && sigModal.style.display !== 'none') {
+      if (typeof closeSignatureModal === 'function') closeSignatureModal();
+      else sigModal.style.display = 'none';
+    }
+  }
+});

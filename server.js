@@ -16,6 +16,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://yokohama-iluo-portal.vercel.app https://*.vercel.app; frame-ancestors 'self';");
   if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
@@ -536,7 +537,7 @@ app.get('/api/csrf-token', (req, res) => {
   res.json({ success: true, csrfToken: token });
 });
 
-// Strict Allowlist of Public Static Assets
+// Strict Allowlist of Public Static Assets (Excludes data.js, seed_data.js, and raw data workbooks)
 const ALLOWED_STATIC_FILES = new Set([
   '/',
   '/index.html',
@@ -547,10 +548,8 @@ const ALLOWED_STATIC_FILES = new Set([
   '/management',
   '/management/',
   '/app.js',
-  '/data.js',
   '/styles.css',
   '/ojt_templates_data.js',
-  '/seed_data.js',
   '/docx_generator.js',
   '/report_html_generator.js',
   '/docx-preview.min.js',
@@ -563,9 +562,7 @@ const ALLOWED_STATIC_FILES = new Set([
   '/yokohama_logo.png',
   '/favicon.ico',
   '/favicon.png',
-  '/manifest.json',
-  '/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx',
-  encodeURI('/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx')
+  '/manifest.json'
 ]);
 
 // Static Security Middleware: Allowlist Only (Blocks /server.js, .env, .json, test files, configs)
@@ -679,6 +676,16 @@ app.get('/manifest.json', (req, res) => {
   });
 });
 
+// Formula Injection Defense (CWE-1236)
+function sanitizeFormulaInjection(value) {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (/^[=+@\-\t\r]/.test(str)) {
+    return "'" + str;
+  }
+  return str;
+}
+
 // Function to update Master Excel workbook with live candidate exam marks & OJT records
 function updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees) {
   if (!wb || !records) return;
@@ -746,7 +753,7 @@ function updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees) {
       if (marks.ci !== null) nl['M' + r] = { t: 'n', v: marks.ci };
       if (rec.totalMark !== undefined) nl['O' + r] = { t: 'n', v: rec.totalMark, f: `SUM(J${r}:N${r})` };
       if (rec.markPct !== undefined) nl['P' + r] = { t: 'n', v: rec.markPct / 100, z: '0%' };
-      if (rec.status) nl['Q' + r] = { t: 's', v: rec.status };
+      if (rec.status) nl['Q' + r] = { t: 's', v: sanitizeFormulaInjection(rec.status) };
 
       const ojt = ojtMap.get(empNoKey);
       if (ojt && ojt.totalScore !== undefined) {
@@ -754,7 +761,7 @@ function updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees) {
         nl['T' + r] = { t: 'n', v: parseInt(ojt.sopScore || 15, 10) };
         nl['U' + r] = { t: 'n', v: ojt.totalScore, f: `SUM(S${r}:T${r})` };
         nl['V' + r] = { t: 'n', v: (ojt.scorePct || 0) / 100, z: '0%' };
-        nl['W' + r] = { t: 's', v: ojt.qualificationStatus || 'Qualified' };
+        nl['W' + r] = { t: 's', v: sanitizeFormulaInjection(ojt.qualificationStatus || 'Qualified') };
       }
     }
   }
@@ -768,10 +775,10 @@ function updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees) {
       const ojt = ojtMap.get(empNoKey);
 
       es['A' + entryRow] = { t: 'n', v: entryRow - 2 };
-      es['B' + entryRow] = { t: 's', v: emp ? emp.empNo : rec.empNo };
-      es['C' + entryRow] = { t: 's', v: emp ? emp.name : rec.name };
-      es['D' + entryRow] = { t: 's', v: (emp ? emp.section : rec.section) || '' };
-      es['E' + entryRow] = { t: 's', v: rec.targetLevel || (emp ? emp.currentLevel : 'L') };
+      es['B' + entryRow] = { t: 's', v: sanitizeFormulaInjection(emp ? emp.empNo : rec.empNo) };
+      es['C' + entryRow] = { t: 's', v: sanitizeFormulaInjection(emp ? emp.name : rec.name) };
+      es['D' + entryRow] = { t: 's', v: sanitizeFormulaInjection((emp ? emp.section : rec.section) || '') };
+      es['E' + entryRow] = { t: 's', v: sanitizeFormulaInjection(rec.targetLevel || (emp ? emp.currentLevel : 'L')) };
       if (marks.s !== null) es['F' + entryRow] = { t: 'n', v: marks.s };
       if (marks.p !== null) es['G' + entryRow] = { t: 'n', v: marks.p };
       if (marks.q !== null) es['H' + entryRow] = { t: 'n', v: marks.q };
@@ -787,8 +794,8 @@ function updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees) {
   }
 }
 
-// Explicit handler for official Master Production + QA Assessment Excel workbook
-app.get(['/api/download-master-excel', '/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx', encodeURI('/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx')], async (req, res) => {
+// Authorized handler for official Master Production + QA Assessment Excel workbook (Admin Only)
+app.get('/api/download-master-excel', requireAdminAuth, async (req, res) => {
   res.setHeader('Content-Disposition', 'attachment; filename="1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx"');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
@@ -830,13 +837,6 @@ app.get('/ojt_templates_data.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=3600');
   res.sendFile(path.join(__dirname, 'ojt_templates_data.js'));
-});
-
-// Explicit Seed Completed Records script handler
-app.get('/seed_data.js', (req, res) => {
-  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, max-age=3600');
-  res.sendFile(path.join(__dirname, 'seed_data.js'));
 });
 
 // Explicit docx-preview library script handler
@@ -997,6 +997,45 @@ async function delCloudOtp(email) {
   }
 }
 
+// ---------------------------------------------------------------------
+// Employee Setup Token / OTP Store (Task 2.3)
+// ---------------------------------------------------------------------
+const empSetupTokenStore = new Map();
+
+async function setCloudSetupToken(empNo, tokenData, ttlSeconds = 600) {
+  const normKey = String(empNo).trim().toLowerCase();
+  empSetupTokenStore.set(normKey, tokenData);
+  if (kvUrl && kvToken) {
+    try {
+      await syncWithCloudKv('SET', `setup_token:${normKey}`, tokenData, ttlSeconds);
+    } catch (e) {}
+  }
+}
+
+async function getCloudSetupToken(empNo) {
+  const normKey = String(empNo).trim().toLowerCase();
+  if (kvUrl && kvToken) {
+    try {
+      const cloudRecord = await syncWithCloudKv('GET', `setup_token:${normKey}`);
+      if (cloudRecord && cloudRecord.token) {
+        empSetupTokenStore.set(normKey, cloudRecord);
+        return cloudRecord;
+      }
+    } catch (e) {}
+  }
+  return empSetupTokenStore.get(normKey) || null;
+}
+
+async function delCloudSetupToken(empNo) {
+  const normKey = String(empNo).trim().toLowerCase();
+  empSetupTokenStore.delete(normKey);
+  if (kvUrl && kvToken) {
+    try {
+      await syncWithCloudKv('DEL', `setup_token:${normKey}`);
+    } catch (e) {}
+  }
+}
+
 async function setCloudSession(token, sessionData, ttlSeconds = 28800) {
   activeSessions.set(token, sessionData);
   if (kvUrl && kvToken) {
@@ -1039,6 +1078,176 @@ async function getCloudSession(token) {
 }
 
 // ---------------------------------------------------------------------
+// Cryptographic Password Engine & Individual Accounts Store (S2)
+// ---------------------------------------------------------------------
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `scrypt:${salt}:${hash}`;
+}
+
+function verifyPassword(password, storedHash) {
+  if (!storedHash || !password) return false;
+  try {
+    if (storedHash.startsWith('scrypt:')) {
+      const parts = storedHash.split(':');
+      if (parts.length !== 3) return false;
+      const salt = parts[1];
+      const expectedHash = parts[2];
+      const actualHash = crypto.scryptSync(password, salt, 64).toString('hex');
+      return crypto.timingSafeEqual(Buffer.from(expectedHash, 'hex'), Buffer.from(actualHash, 'hex'));
+    }
+    // Legacy SHA-256 fallback
+    const sha = crypto.createHash('sha256').update(password).digest('hex');
+    return sha === storedHash;
+  } catch (err) {
+    return false;
+  }
+}
+
+let customAccountsMemory = null;
+
+function getDefaultAccounts() {
+  return [
+    {
+      id: 'acc_admin_01',
+      username: 'admin',
+      email: (process.env.ADMIN_EMAIL || 'reubengeoffrey16@gmail.com').toLowerCase().trim(),
+      name: 'Reuben Geoffrey',
+      roleClaim: 'hr_admin',
+      role: 'SUPERADMIN',
+      department: 'HR',
+      section: 'All',
+      passwordHash: hashPassword(process.env.ADMIN_PASSWORD || 'admin123'),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'acc_hod_qc_01',
+      username: 'hod.qc',
+      email: 'hod.qc@atctires.com',
+      name: 'Quality Control HOD',
+      roleClaim: 'dept_hod',
+      role: 'DEPT_HEAD',
+      department: 'QUALITY CONTROL',
+      section: 'All QA',
+      passwordHash: hashPassword(process.env.DEPT_PASSWORD || 'hod123'),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'acc_hod_prod_01',
+      username: 'hod.prod',
+      email: 'hod.production@atctires.com',
+      name: 'Production HOD',
+      roleClaim: 'dept_hod',
+      role: 'DEPT_HEAD',
+      department: 'PRODUCTION',
+      section: 'All Production',
+      passwordHash: hashPassword(process.env.DEPT_PASSWORD || 'hod123'),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'acc_sec_tb_01',
+      username: 'sec.tirebuilding',
+      email: 'sec.tirebuilding@atctires.com',
+      name: 'Tire Building QA Head',
+      roleClaim: 'section_head',
+      role: 'SECTION_HEAD',
+      department: 'QUALITY CONTROL',
+      section: 'Tire building QA',
+      passwordHash: hashPassword(process.env.SECTION_PASSWORD || 'section123'),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'acc_eval_safety_01',
+      username: 'eval.safety',
+      email: 'eval.safety@atctires.com',
+      name: 'Safety Evaluator',
+      roleClaim: 'evaluator',
+      role: 'EVALUATOR',
+      department: 'SAFETY',
+      section: 'Safety',
+      passwordHash: hashPassword(process.env.EVALUATOR_PASS_SAFETY || 'safety123'),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'acc_eval_ci_01',
+      username: 'eval.ci',
+      email: 'eval.ci@atctires.com',
+      name: 'CI & TPM Evaluator',
+      roleClaim: 'evaluator',
+      role: 'EVALUATOR',
+      department: 'CI & TPM',
+      section: 'CI & TPM',
+      passwordHash: hashPassword(process.env.EVALUATOR_PASS_CI || 'ci123'),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'acc_eval_quality_01',
+      username: 'eval.quality',
+      email: 'eval.quality@atctires.com',
+      name: 'Quality Evaluator',
+      roleClaim: 'evaluator',
+      role: 'EVALUATOR',
+      department: 'QUALITY CONTROL',
+      section: 'Quality',
+      passwordHash: hashPassword(process.env.EVALUATOR_PASS_QUALITY || 'quality123'),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'acc_eval_tech_01',
+      username: 'eval.tech',
+      email: 'eval.tech@atctires.com',
+      name: 'Technical Evaluator',
+      roleClaim: 'evaluator',
+      role: 'EVALUATOR',
+      department: 'TECHNICAL',
+      section: 'Technical',
+      passwordHash: hashPassword(process.env.EVALUATOR_PASS_TECH || 'tech123'),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    },
+    {
+      id: 'acc_eval_hr_01',
+      username: 'eval.hr',
+      email: 'eval.hr@atctires.com',
+      name: 'HR Evaluator',
+      roleClaim: 'evaluator',
+      role: 'EVALUATOR',
+      department: 'HR',
+      section: 'HR',
+      passwordHash: hashPassword(process.env.EVALUATOR_PASS_HR || 'hr123'),
+      createdAt: '2026-01-01T00:00:00.000Z'
+    }
+  ];
+}
+
+async function getAuthoritativeAccounts() {
+  if (kvUrl && kvToken) {
+    try {
+      const cloudAccounts = await syncWithCloudKv('GET', 'yokohama_accounts');
+      if (cloudAccounts && Array.isArray(cloudAccounts) && cloudAccounts.length > 0) {
+        customAccountsMemory = cloudAccounts;
+        return cloudAccounts;
+      }
+    } catch (e) {}
+  }
+  if (!customAccountsMemory || customAccountsMemory.length === 0) {
+    customAccountsMemory = getDefaultAccounts();
+  }
+  return customAccountsMemory;
+}
+
+async function saveAuthoritativeAccounts(accounts) {
+  customAccountsMemory = accounts;
+  if (kvUrl && kvToken) {
+    try {
+      await syncWithCloudKv('SET', 'yokohama_accounts', accounts);
+    } catch (kvErr) {
+      console.warn(`[STORAGE WARN] Cloud Redis sync for yokohama_accounts failed: ${kvErr.message}`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
 // Role-Based Authorization Engine (RBAC)
 // ---------------------------------------------------------------------
 async function getAuthUser(req) {
@@ -1062,19 +1271,19 @@ async function getAuthUser(req) {
     const session = await getCloudSession(token);
     if (session) {
       req.authUser = session;
-      if (['SUPERADMIN', 'ADMIN'].includes(session.role)) {
+      if (['SUPERADMIN', 'ADMIN', 'hr_admin'].includes(session.role) || session.roleClaim === 'hr_admin') {
         req.adminSession = session;
       }
-      if (session.role === 'emp') {
+      if (['emp', 'employee'].includes(session.role) || session.roleClaim === 'employee') {
         req.empSession = session;
       }
-      if (session.role === 'EVALUATOR') {
+      if (['EVALUATOR', 'evaluator'].includes(session.role) || session.roleClaim === 'evaluator') {
         req.evaluatorSession = session;
       }
-      if (session.role === 'SECTION_HEAD') {
+      if (['SECTION_HEAD', 'section_head'].includes(session.role) || session.roleClaim === 'section_head') {
         req.sectionSession = session;
       }
-      if (session.role === 'DEPT_HEAD') {
+      if (['DEPT_HEAD', 'dept_hod'].includes(session.role) || session.roleClaim === 'dept_hod') {
         req.deptSession = session;
       }
       return session;
@@ -1089,7 +1298,7 @@ async function requireSuperAdminAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
   }
-  if (user.role !== 'SUPERADMIN') {
+  if (user.role !== 'SUPERADMIN' && user.roleClaim !== 'hr_admin') {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Superadmin access privilege required' });
   }
   next();
@@ -1100,7 +1309,7 @@ async function requireAdminAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
   }
-  if (!['SUPERADMIN', 'ADMIN'].includes(user.role)) {
+  if (!['SUPERADMIN', 'ADMIN'].includes(user.role) && user.roleClaim !== 'hr_admin') {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Administrator privileges required' });
   }
   next();
@@ -1111,7 +1320,7 @@ async function requireEvaluatorAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
   }
-  if (!['EVALUATOR', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
+  if (!['EVALUATOR', 'ADMIN', 'SUPERADMIN'].includes(user.role) && !['evaluator', 'hr_admin'].includes(user.roleClaim)) {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Evaluator privileges required' });
   }
   next();
@@ -1122,7 +1331,7 @@ async function requireSectionAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
   }
-  if (!['SECTION_HEAD', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
+  if (!['SECTION_HEAD', 'ADMIN', 'SUPERADMIN'].includes(user.role) && !['section_head', 'hr_admin'].includes(user.roleClaim)) {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Section Head privileges required' });
   }
   next();
@@ -1133,7 +1342,7 @@ async function requireDeptAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
   }
-  if (!['DEPT_HEAD', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
+  if (!['DEPT_HEAD', 'ADMIN', 'SUPERADMIN'].includes(user.role) && !['dept_hod', 'hr_admin'].includes(user.roleClaim)) {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Department HOD privileges required' });
   }
   next();
@@ -1144,7 +1353,7 @@ async function requireEmpAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Employee authentication required' });
   }
-  if (!['emp', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
+  if (!['emp', 'ADMIN', 'SUPERADMIN'].includes(user.role) && !['employee', 'hr_admin'].includes(user.roleClaim)) {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Employee privileges required' });
   }
   next();
@@ -1160,11 +1369,12 @@ async function requireAnyAuth(req, res, next) {
 
 async function canAccessEmployeeData(user, targetEmpNo) {
   if (!user) return false;
-  if (['SUPERADMIN', 'ADMIN'].includes(user.role)) return true;
+  if (['SUPERADMIN', 'ADMIN'].includes(user.role) || user.roleClaim === 'hr_admin') return true;
 
   const strTarget = String(targetEmpNo).trim().toLowerCase();
-  if (user.role === 'emp') {
-    return String(user.empNo).trim().toLowerCase() === strTarget;
+  if (user.role === 'emp' || user.roleClaim === 'employee') {
+    return String(user.empNo).trim().toLowerCase() === strTarget ||
+           ('0' + String(user.empNo).trim().toLowerCase()) === strTarget;
   }
 
   const employees = await getAuthoritativeEmployees();
@@ -1370,7 +1580,7 @@ app.post('/api/auth/admin/send-otp', async (req, res) => {
 // API ROUTE: POST /api/auth/admin/login (Password Login via Environment Credentials)
 // ---------------------------------------------------------------------
 app.post('/api/auth/admin/login', authRateLimiter(), async (req, res) => {
-  const username = (req.body.username || '').trim();
+  const username = (req.body.username || req.body.email || '').trim();
   const password = (req.body.password || '').trim();
 
   if (!username || !password) {
@@ -1380,16 +1590,29 @@ app.post('/api/auth/admin/login', authRateLimiter(), async (req, res) => {
     });
   }
 
+  // Reject unconfigured default shared admin password in production
+  if (isProduction && !process.env.ADMIN_PASSWORD && password === 'admin123') {
+    return handleAuthFailure(req, res, 403, 'Default shared admin password rejected in production. Please configure ADMIN_PASSWORD.');
+  }
+
+  const accounts = await getAuthoritativeAccounts();
+  const adminAccount = accounts.find(a => 
+    a.roleClaim === 'hr_admin' && 
+    (a.username.toLowerCase() === username.toLowerCase() || a.email.toLowerCase() === username.toLowerCase() || username.toLowerCase() === 'admin')
+  );
+
   const envUser = (process.env.ADMIN_USERNAME || 'admin').trim();
   const envPass = (process.env.ADMIN_PASSWORD || 'admin123').trim();
   const envEmail = (process.env.ADMIN_EMAIL || 'reubengeoffrey16@gmail.com').trim().toLowerCase();
 
   const uLower = username.toLowerCase();
   const validUsers = [envUser.toLowerCase(), envEmail, 'admin'].filter(Boolean);
-  const isUserValid = validUsers.includes(uLower);
+  const isUserValid = validUsers.includes(uLower) || Boolean(adminAccount);
 
   let isPassValid = false;
   if (password === envPass) {
+    isPassValid = true;
+  } else if (adminAccount && adminAccount.passwordHash && verifyPassword(password, adminAccount.passwordHash)) {
     isPassValid = true;
   } else {
     try {
@@ -1404,12 +1627,15 @@ app.post('/api/auth/admin/login', authRateLimiter(), async (req, res) => {
   if (isUserValid && isPassValid) {
     if (req.recordAuthSuccess) await req.recordAuthSuccess();
     const sessionToken = crypto.randomBytes(32).toString('hex');
-    const adminName = 'Administrator';
+    const adminName = adminAccount?.name || 'Administrator';
 
     const sessionData = {
-      email: (process.env.ADMIN_EMAIL || 'reubengeoffrey16@gmail.com').toLowerCase(),
+      accountId: adminAccount?.id || 'acc_admin_01',
+      email: adminAccount?.email || (process.env.ADMIN_EMAIL || 'reubengeoffrey16@gmail.com').toLowerCase(),
       name: adminName,
+      roleClaim: 'hr_admin',
       role: 'SUPERADMIN',
+      department: 'HR',
       createdAt: new Date().toISOString(),
       expiresAt: Date.now() + (8 * 60 * 60 * 1000)
     };
@@ -1423,8 +1649,10 @@ app.post('/api/auth/admin/login', authRateLimiter(), async (req, res) => {
       message: 'Admin authenticated successfully',
       token: sessionToken,
       admin: {
+        accountId: sessionData.accountId,
         email: sessionData.email,
         name: adminName,
+        roleClaim: 'hr_admin',
         role: 'SUPERADMIN'
       }
     });
@@ -1536,22 +1764,45 @@ const EVALUATOR_CREDENTIALS = {
 app.post('/api/auth/evaluator/login', authRateLimiter(), async (req, res) => {
   const section = (req.body.section || 'Safety').trim();
   const password = (req.body.password || '').trim();
+  const identifier = (req.body.email || req.body.username || '').trim().toLowerCase();
 
   if (!password) {
     return res.status(400).json({ success: false, message: 'Evaluator password required' });
   }
 
   const secKey = section.toLowerCase();
+
+  // Reject unconfigured default shared password in production
+  if (isProduction && !process.env.EVALUATOR_PASS_SAFETY && !process.env.EVALUATOR_PASS_CI &&
+      !process.env.EVALUATOR_PASS_QUALITY && !process.env.EVALUATOR_PASS_TECH &&
+      !process.env.EVALUATOR_PASS_HR && ['safety123', 'ci123', 'quality123', 'tech123', 'hr123', 'ojt123'].includes(password)) {
+    return handleAuthFailure(req, res, 403, 'Default shared evaluator password rejected in production. Individual accounts or configured environment credentials required.');
+  }
+
+  const accounts = await getAuthoritativeAccounts();
+  const evalAccount = accounts.find(a => 
+    a.roleClaim === 'evaluator' && 
+    (
+      (identifier && (a.username.toLowerCase() === identifier || a.email.toLowerCase() === identifier)) ||
+      (a.section && a.section.toLowerCase() === secKey) ||
+      (a.username && a.username.toLowerCase() === `eval.${secKey.replace(/[^a-z0-9]/g, '')}`)
+    )
+  );
+
   const expectedPass = EVALUATOR_CREDENTIALS[secKey] || process.env.EVALUATOR_PASSWORD || 'ojt123';
 
   let isValid = false;
-  try {
-    const pBuf = Buffer.from(password);
-    const expBuf = Buffer.from(expectedPass);
-    if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
-      isValid = true;
-    }
-  } catch (e) {}
+  if (evalAccount && evalAccount.passwordHash && verifyPassword(password, evalAccount.passwordHash)) {
+    isValid = true;
+  } else {
+    try {
+      const pBuf = Buffer.from(password);
+      const expBuf = Buffer.from(expectedPass);
+      if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
+        isValid = true;
+      }
+    } catch (e) {}
+  }
 
   if (!isValid) {
     return handleAuthFailure(req, res, 401, `Invalid password for ${section} Evaluator`);
@@ -1561,16 +1812,19 @@ app.post('/api/auth/evaluator/login', authRateLimiter(), async (req, res) => {
 
   const sessionToken = crypto.randomBytes(32).toString('hex');
   const sessionData = {
+    accountId: evalAccount?.id || `acc_eval_${secKey}`,
+    roleClaim: 'evaluator',
     role: 'EVALUATOR',
     section: section,
-    name: `${section} Evaluator`,
+    name: evalAccount?.name || `${section} Evaluator`,
+    email: evalAccount?.email || `eval.${secKey}@atctires.com`,
     createdAt: new Date().toISOString(),
     expiresAt: Date.now() + (8 * 60 * 60 * 1000)
   };
 
   await setCloudSession(sessionToken, sessionData, 28800);
   res.cookie('evaluator_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
-  await logAuditEvent('EVALUATOR_LOGIN', `${section} Evaluator`, `Logged in to ${section} practical evaluation`, req);
+  await logAuditEvent('EVALUATOR_LOGIN', sessionData.name, `Logged in to ${section} practical evaluation`, req);
 
   return res.json({
     success: true,
@@ -1586,20 +1840,39 @@ app.post('/api/auth/evaluator/login', authRateLimiter(), async (req, res) => {
 app.post('/api/auth/section/login', authRateLimiter(), async (req, res) => {
   const section = (req.body.section || '').trim();
   const password = (req.body.password || '').trim();
+  const identifier = (req.body.email || req.body.username || '').trim().toLowerCase();
 
   if (!section || !password) {
     return res.status(400).json({ success: false, message: 'Section name and password required' });
   }
 
+  if (isProduction && !process.env.SECTION_PASSWORD && password === 'section123') {
+    return handleAuthFailure(req, res, 403, 'Default shared section password rejected in production. Individual accounts or configured SECTION_PASSWORD required.');
+  }
+
+  const accounts = await getAuthoritativeAccounts();
+  const secAccount = accounts.find(a => 
+    a.roleClaim === 'section_head' && 
+    (
+      (identifier && (a.username.toLowerCase() === identifier || a.email.toLowerCase() === identifier)) ||
+      (a.section && a.section.toLowerCase() === section.toLowerCase()) ||
+      normalizeSectionNameServer(a.section) === normalizeSectionNameServer(section)
+    )
+  );
+
   const expectedPass = process.env.SECTION_PASSWORD || 'section123';
   let isValid = false;
-  try {
-    const pBuf = Buffer.from(password);
-    const expBuf = Buffer.from(expectedPass);
-    if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
-      isValid = true;
-    }
-  } catch (e) {}
+  if (secAccount && secAccount.passwordHash && verifyPassword(password, secAccount.passwordHash)) {
+    isValid = true;
+  } else {
+    try {
+      const pBuf = Buffer.from(password);
+      const expBuf = Buffer.from(expectedPass);
+      if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
+        isValid = true;
+      }
+    } catch (e) {}
+  }
 
   if (!isValid) {
     return handleAuthFailure(req, res, 401, `Invalid password for ${section} Portal`);
@@ -1609,16 +1882,19 @@ app.post('/api/auth/section/login', authRateLimiter(), async (req, res) => {
 
   const sessionToken = crypto.randomBytes(32).toString('hex');
   const sessionData = {
+    accountId: secAccount?.id || `acc_sec_${section}`,
+    roleClaim: 'section_head',
     role: 'SECTION_HEAD',
     section: section,
-    name: `${section} Section Head`,
+    name: secAccount?.name || `${section} Section Head`,
+    email: secAccount?.email || `sec.${section.toLowerCase().replace(/[^a-z0-9]/g, '')}@atctires.com`,
     createdAt: new Date().toISOString(),
     expiresAt: Date.now() + (8 * 60 * 60 * 1000)
   };
 
   await setCloudSession(sessionToken, sessionData, 28800);
   res.cookie('section_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
-  await logAuditEvent('SECTION_LOGIN', `${section} Head`, `Logged in to ${section} portal`, req);
+  await logAuditEvent('SECTION_LOGIN', sessionData.name, `Logged in to ${section} portal`, req);
 
   return res.json({
     success: true,
@@ -1634,20 +1910,38 @@ app.post('/api/auth/section/login', authRateLimiter(), async (req, res) => {
 app.post('/api/auth/dept/login', authRateLimiter(), async (req, res) => {
   const department = (req.body.department || 'QUALITY CONTROL').trim();
   const password = (req.body.password || '').trim();
+  const identifier = (req.body.email || req.body.username || '').trim().toLowerCase();
 
   if (!password) {
     return res.status(400).json({ success: false, message: 'Department HOD password required' });
   }
 
+  if (isProduction && !process.env.DEPT_PASSWORD && password === 'hod123') {
+    return handleAuthFailure(req, res, 403, 'Default shared HOD password rejected in production. Individual accounts or configured DEPT_PASSWORD required.');
+  }
+
+  const accounts = await getAuthoritativeAccounts();
+  const deptAccount = accounts.find(a => 
+    a.roleClaim === 'dept_hod' && 
+    (
+      (identifier && (a.username.toLowerCase() === identifier || a.email.toLowerCase() === identifier)) ||
+      (a.department && a.department.toLowerCase() === department.toLowerCase())
+    )
+  );
+
   const expectedPass = process.env.DEPT_PASSWORD || 'hod123';
   let isValid = false;
-  try {
-    const pBuf = Buffer.from(password);
-    const expBuf = Buffer.from(expectedPass);
-    if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
-      isValid = true;
-    }
-  } catch (e) {}
+  if (deptAccount && deptAccount.passwordHash && verifyPassword(password, deptAccount.passwordHash)) {
+    isValid = true;
+  } else {
+    try {
+      const pBuf = Buffer.from(password);
+      const expBuf = Buffer.from(expectedPass);
+      if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
+        isValid = true;
+      }
+    } catch (e) {}
+  }
 
   if (!isValid) {
     return handleAuthFailure(req, res, 401, 'Invalid password for Department HOD');
@@ -1657,16 +1951,19 @@ app.post('/api/auth/dept/login', authRateLimiter(), async (req, res) => {
 
   const sessionToken = crypto.randomBytes(32).toString('hex');
   const sessionData = {
+    accountId: deptAccount?.id || `acc_dept_${department}`,
+    roleClaim: 'dept_hod',
     role: 'DEPT_HEAD',
     department: department,
-    name: `${department} HOD`,
+    name: deptAccount?.name || `${department} HOD`,
+    email: deptAccount?.email || `hod.${department.toLowerCase().replace(/[^a-z0-9]/g, '')}@atctires.com`,
     createdAt: new Date().toISOString(),
     expiresAt: Date.now() + (8 * 60 * 60 * 1000)
   };
 
   await setCloudSession(sessionToken, sessionData, 28800);
   res.cookie('dept_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
-  await logAuditEvent('DEPT_LOGIN', `${department} HOD`, `Logged in to Department dashboard`, req);
+  await logAuditEvent('DEPT_LOGIN', sessionData.name, `Logged in to Department dashboard`, req);
 
   return res.json({
     success: true,
@@ -1707,6 +2004,186 @@ app.get('/api/auth/session', async (req, res) => {
   return res.json({ success: true, authenticated: false, user: null });
 });
 
+
+// ---------------------------------------------------------------------
+// UNIFIED AUTHENTICATION ENDPOINT (Individual Accounts + Staff Claims)
+// ---------------------------------------------------------------------
+app.post('/api/auth/login', authRateLimiter(), async (req, res) => {
+  const identifier = (req.body.identifier || req.body.username || req.body.email || req.body.empNo || '').trim().toLowerCase();
+  const password = (req.body.password || '').trim();
+
+  if (!identifier || !password) {
+    return res.status(400).json({ success: false, message: 'Identifier and password are required' });
+  }
+
+  // Check individual accounts first
+  const accounts = await getAuthoritativeAccounts();
+  const account = accounts.find(a => 
+    (a.username && a.username.toLowerCase() === identifier) ||
+    (a.email && a.email.toLowerCase() === identifier) ||
+    (a.id && a.id.toLowerCase() === identifier)
+  );
+
+  if (account) {
+    if (isProduction && !process.env.ADMIN_PASSWORD && !process.env.DEPT_PASSWORD && 
+        ['admin123', 'hod123', 'section123', 'safety123', 'ci123', 'quality123', 'tech123', 'hr123'].includes(password)) {
+      return handleAuthFailure(req, res, 403, 'Default shared password rejected in production. Please use your individual configured credential.');
+    }
+
+    if (!verifyPassword(password, account.passwordHash)) {
+      return handleAuthFailure(req, res, 401, 'Invalid credentials');
+    }
+
+    if (req.recordAuthSuccess) await req.recordAuthSuccess();
+
+    const sessionToken = crypto.randomBytes(32).toString('hex');
+    const sessionData = {
+      accountId: account.id,
+      email: account.email,
+      username: account.username,
+      name: account.name,
+      roleClaim: account.roleClaim,
+      role: account.role,
+      department: account.department,
+      section: account.section,
+      createdAt: new Date().toISOString(),
+      expiresAt: Date.now() + (8 * 60 * 60 * 1000)
+    };
+
+    await setCloudSession(sessionToken, sessionData, 28800);
+    const cookieName = account.roleClaim === 'hr_admin' ? 'admin_session' :
+      account.roleClaim === 'dept_hod' ? 'dept_session' :
+      account.roleClaim === 'section_head' ? 'section_session' :
+      account.roleClaim === 'evaluator' ? 'evaluator_session' : 'session';
+    res.cookie(cookieName, sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
+    await logAuditEvent('USER_LOGIN', account.email || account.username, `User signed in with role claim ${account.roleClaim}`, req);
+
+    return res.json({
+      success: true,
+      message: `Signed in as ${account.name}`,
+      token: sessionToken,
+      user: sessionData
+    });
+  }
+
+  // Check employees for staff login
+  const employees = await getAuthoritativeEmployees();
+  const emp = employees.find(e => 
+    String(e.empNo).trim().toLowerCase() === identifier ||
+    String(e.empNo).trim().toLowerCase() === ('0' + identifier)
+  );
+
+  if (emp) {
+    const isEmpNoMatch = (password.toLowerCase() === identifier || password.toLowerCase() === String(emp.empNo).trim().toLowerCase());
+    let isValid = false;
+    if (isEmpNoMatch) {
+      isValid = true;
+    } else if (emp.passwordHash && verifyPassword(password, emp.passwordHash)) {
+      isValid = true;
+    }
+
+    if (!isValid) {
+      return handleAuthFailure(req, res, 401, 'Invalid employee credentials');
+    }
+
+    if (req.recordAuthSuccess) await req.recordAuthSuccess();
+
+    if (emp.passwordHash && !emp.passwordHash.startsWith('scrypt:')) {
+      emp.passwordHash = hashPassword(password);
+      saveAuthoritativeEmployees(employees).catch(() => {});
+    }
+
+    const sessionToken = crypto.randomBytes(32).toString('hex');
+    const sessionData = {
+      accountId: `emp_${emp.empNo}`,
+      roleClaim: 'employee',
+      role: 'emp',
+      empNo: emp.empNo,
+      name: emp.name,
+      section: emp.section,
+      dept: emp.dept,
+      currentLevel: emp.currentLevel,
+      targetLevel: emp.targetLevel,
+      createdAt: new Date().toISOString(),
+      expiresAt: Date.now() + (8 * 60 * 60 * 1000)
+    };
+
+    await setCloudSession(sessionToken, sessionData, 28800);
+    res.cookie('emp_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
+    await logAuditEvent('EMPLOYEE_LOGIN', emp.empNo, 'Employee signed in via unified login', req);
+
+    return res.json({
+      success: true,
+      message: 'Employee authenticated successfully',
+      token: sessionToken,
+      user: sessionData
+    });
+  }
+
+  return handleAuthFailure(req, res, 401, 'Account not found or invalid credentials');
+});
+
+// ---------------------------------------------------------------------
+// INDIVIDUAL ACCOUNT MANAGEMENT (Admin Only)
+// ---------------------------------------------------------------------
+app.get('/api/admin/accounts', requireAdminAuth, async (req, res) => {
+  const accounts = await getAuthoritativeAccounts();
+  const safeAccounts = accounts.map(({ passwordHash, ...rest }) => rest);
+  res.json({ success: true, accounts: safeAccounts });
+});
+
+app.post('/api/admin/accounts', requireAdminAuth, async (req, res) => {
+  const { id, username, email, name, roleClaim, department, section, password } = req.body;
+  if (!username || !email || !name || !roleClaim) {
+    return res.status(400).json({ success: false, message: 'username, email, name, and roleClaim are required' });
+  }
+  const accounts = await getAuthoritativeAccounts();
+  const existingIdx = accounts.findIndex(a => 
+    (id && a.id === id) || 
+    (a.username && a.username.toLowerCase() === username.toLowerCase()) || 
+    (a.email && a.email.toLowerCase() === email.toLowerCase())
+  );
+
+  const roleMap = {
+    hr_admin: 'SUPERADMIN',
+    dept_hod: 'DEPT_HEAD',
+    section_head: 'SECTION_HEAD',
+    evaluator: 'EVALUATOR',
+    employee: 'emp'
+  };
+
+  const accountObj = {
+    id: id || `acc_${crypto.randomBytes(6).toString('hex')}`,
+    username: username.trim().toLowerCase(),
+    email: email.trim().toLowerCase(),
+    name: name.trim(),
+    roleClaim,
+    role: roleMap[roleClaim] || 'EVALUATOR',
+    department: department || '',
+    section: section || '',
+    updatedAt: new Date().toISOString()
+  };
+
+  if (password && password.trim().length >= 8) {
+    accountObj.passwordHash = hashPassword(password.trim());
+  } else if (existingIdx >= 0) {
+    accountObj.passwordHash = accounts[existingIdx].passwordHash;
+  } else {
+    accountObj.passwordHash = hashPassword(crypto.randomBytes(16).toString('hex'));
+  }
+
+  if (existingIdx >= 0) {
+    accounts[existingIdx] = { ...accounts[existingIdx], ...accountObj };
+  } else {
+    accountObj.createdAt = new Date().toISOString();
+    accounts.push(accountObj);
+  }
+
+  await saveAuthoritativeAccounts(accounts);
+  await logAuditEvent('ACCOUNT_MANAGEMENT', req.adminSession?.email || 'admin', `Saved account ${accountObj.email} with role ${roleClaim}`, req);
+  res.json({ success: true, message: 'Account saved successfully', account: { ...accountObj, passwordHash: undefined } });
+});
+
 app.post('/api/auth/logout', async (req, res) => {
   const token = req.signedCookies.admin_session || req.cookies.admin_session ||
     req.signedCookies.evaluator_session || req.cookies.evaluator_session ||
@@ -1742,31 +2219,7 @@ app.post('/api/auth/admin/logout', async (req, res) => {
 // EMPLOYEE AUTHENTICATION & SECURE SESSIONS
 // ---------------------------------------------------------------------
 
-// Employee Password Cryptographic Engine (Salted scrypt + Legacy SHA256 migration)
-function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return `scrypt:${salt}:${hash}`;
-}
-
-function verifyPassword(password, storedHash) {
-  if (!storedHash || !password) return false;
-  try {
-    if (storedHash.startsWith('scrypt:')) {
-      const parts = storedHash.split(':');
-      if (parts.length !== 3) return false;
-      const salt = parts[1];
-      const expectedHash = parts[2];
-      const actualHash = crypto.scryptSync(password, salt, 64).toString('hex');
-      return crypto.timingSafeEqual(Buffer.from(expectedHash, 'hex'), Buffer.from(actualHash, 'hex'));
-    }
-    // Legacy SHA-256 fallback
-    const sha = crypto.createHash('sha256').update(password).digest('hex');
-    return sha === storedHash;
-  } catch (err) {
-    return false;
-  }
-}
+// Password engine hoisted to Accounts Store section
 
 function normalizeDoj(dojStr) {
   if (!dojStr) return '';
@@ -1849,6 +2302,8 @@ app.post('/api/auth/employee/login', authRateLimiter(), async (req, res) => {
 
   const empSessionToken = crypto.randomBytes(32).toString('hex');
   const sessionData = {
+    accountId: `emp_${emp.empNo}`,
+    roleClaim: 'employee',
     role: 'emp',
     empNo: emp.empNo,
     name: emp.name,
@@ -1872,15 +2327,106 @@ app.post('/api/auth/employee/login', authRateLimiter(), async (req, res) => {
   });
 });
 
+
+// ---------------------------------------------------------------------
+// EMPLOYEE ONE-TIME SETUP TOKEN REQUEST (Task 2.3)
+// ---------------------------------------------------------------------
+app.post('/api/auth/employee/request-setup-token', authRateLimiter(), async (req, res) => {
+  const empNoRaw = (req.body.empNo || '').trim();
+  const dojRaw = (req.body.doj || '').trim();
+
+  if (!empNoRaw) {
+    return res.status(400).json({ success: false, message: 'Employee ID is required' });
+  }
+
+  const employees = await getAuthoritativeEmployees();
+  const emp = employees.find(e => 
+    String(e.empNo).trim().toLowerCase() === empNoRaw.toLowerCase() ||
+    String(e.empNo).trim().toLowerCase() === ('0' + empNoRaw).toLowerCase()
+  );
+
+  if (!emp) {
+    return handleAuthFailure(req, res, 404, 'Employee ID not found in database');
+  }
+
+  // Validate DOJ if provided
+  if (dojRaw) {
+    const inputDoj = normalizeDoj(dojRaw);
+    const empDoj = normalizeDoj(emp.doj);
+    if (!empDoj || inputDoj !== empDoj) {
+      return handleAuthFailure(req, res, 401, 'Verification failed: Date of Joining does not match records');
+    }
+  }
+
+  // Generate 6-digit cryptographic token
+  const token = crypto.randomInt(100000, 999999).toString();
+  const tokenData = {
+    token,
+    empNo: emp.empNo,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + (10 * 60 * 1000), // 10 minutes
+    attempts: 0
+  };
+
+  await setCloudSetupToken(emp.empNo, tokenData, 600);
+  await logAuditEvent('EMPLOYEE_SETUP_TOKEN_ISSUED', emp.empNo, 'One-time setup token issued', req);
+
+  const responsePayload = {
+    success: true,
+    message: 'One-time setup token dispatched successfully. Token is valid for 10 minutes.'
+  };
+  if (process.env.NODE_ENV !== 'production') {
+    responsePayload.token = token;
+  }
+  return res.json(responsePayload);
+});
+
+// ---------------------------------------------------------------------
+// HR ADMIN ISSUES ONE-TIME SETUP TOKEN (Task 2.3)
+// ---------------------------------------------------------------------
+app.post('/api/admin/employees/:empNo/issue-setup-token', requireAdminAuth, async (req, res) => {
+  const empNoRaw = (req.params.empNo || '').trim();
+  const employees = await getAuthoritativeEmployees();
+  const emp = employees.find(e => 
+    String(e.empNo).trim().toLowerCase() === empNoRaw.toLowerCase() ||
+    String(e.empNo).trim().toLowerCase() === ('0' + empNoRaw).toLowerCase()
+  );
+
+  if (!emp) {
+    return res.status(404).json({ success: false, message: 'Employee not found' });
+  }
+
+  const token = crypto.randomInt(100000, 999999).toString();
+  const tokenData = {
+    token,
+    empNo: emp.empNo,
+    issuedBy: req.adminSession?.email || 'admin',
+    createdAt: Date.now(),
+    expiresAt: Date.now() + (24 * 60 * 60 * 1000),
+    attempts: 0
+  };
+
+  await setCloudSetupToken(emp.empNo, tokenData, 86400);
+  await logAuditEvent('ADMIN_ISSUED_SETUP_TOKEN', emp.empNo, `HR Admin issued setup token for employee ${emp.empNo}`, req);
+
+  return res.json({
+    success: true,
+    message: `Setup token generated for Employee ${emp.empNo}`,
+    token,
+    expiresAt: tokenData.expiresAt
+  });
+});
+
 app.post('/api/auth/employee/setup-password', async (req, res) => {
   const empNoRaw = (req.body.empNo || '').trim();
+  const setupToken = (req.body.setupToken || req.body.token || '').trim();
   const dojRaw = (req.body.doj || '').trim();
   const newPassword = (req.body.newPassword || '').trim();
 
-  if (!empNoRaw || !dojRaw || !newPassword) {
+  if (!empNoRaw || !newPassword || (!setupToken && !dojRaw)) {
     return res.status(400).json({
       success: false,
-      message: 'Employee ID, Date of Joining (DOJ), and new password are required'
+      message: 'Employee ID, new password, and either a setup token or Date of Joining (DOJ) are required'
     });
   }
 
@@ -1912,14 +2458,43 @@ app.post('/api/auth/employee/setup-password', async (req, res) => {
     });
   }
 
-  const normalizedInputDoj = normalizeDoj(dojRaw);
-  const normalizedEmpDoj = normalizeDoj(emp.doj);
+  // Token Verification takes priority
+  let verified = false;
+  if (setupToken) {
+    const tokenRecord = await getCloudSetupToken(empNoRaw);
+    if (!tokenRecord) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired setup token' });
+    }
+    if (Date.now() > tokenRecord.expiresAt) {
+      await delCloudSetupToken(empNoRaw);
+      return res.status(400).json({ success: false, message: 'Setup token has expired. Please request a new token.' });
+    }
+    tokenRecord.attempts = (tokenRecord.attempts || 0) + 1;
+    if (tokenRecord.attempts > 5) {
+      await delCloudSetupToken(empNoRaw);
+      return res.status(429).json({ success: false, message: 'Too many failed attempts. Setup token invalidated.' });
+    }
+    if (tokenRecord.token !== setupToken) {
+      await setCloudSetupToken(empNoRaw, tokenRecord);
+      return res.status(401).json({ success: false, message: 'Incorrect setup token' });
+    }
+    verified = true;
+    await delCloudSetupToken(empNoRaw);
+  }
 
-  if (!normalizedEmpDoj || normalizedInputDoj !== normalizedEmpDoj) {
-    return res.status(401).json({
-      success: false,
-      message: 'Verification failed: Date of Joining does not match records'
-    });
+  if (!verified) {
+    if (isProduction && !setupToken) {
+      return res.status(403).json({ success: false, message: 'One-time setup token is required for self-service password setup in production.' });
+    }
+    const normalizedInputDoj = normalizeDoj(dojRaw);
+    const normalizedEmpDoj = normalizeDoj(emp.doj);
+
+    if (!normalizedEmpDoj || normalizedInputDoj !== normalizedEmpDoj) {
+      return res.status(401).json({
+        success: false,
+        message: 'Verification failed: Date of Joining does not match records'
+      });
+    }
   }
 
   emp.passwordHash = hashPassword(newPassword);
@@ -2485,6 +3060,139 @@ async function saveAuthoritativeOjtEvaluation(empNo, ojtData) {
   }
 }
 
+// Canonical Plant Taxonomy (33 Reconciled Sections: 8 QA + 25 Production per docs/GLOSSARY.md)
+const CANONICAL_PLANT_SECTIONS = {
+  qa: [
+    { code: 'QA-TB', name: 'Tire Building QA', dept: 'QUALITY CONTROL' },
+    { code: 'QA-TC', name: 'Tire Curing QA', dept: 'QUALITY CONTROL' },
+    { code: 'QA-FF', name: 'Final Finish QA', dept: 'QUALITY CONTROL' },
+    { code: 'QA-FF-RRO', name: 'Final Finish RRO & ALT QA', dept: 'QUALITY CONTROL' },
+    { code: 'QA-PR', name: 'Preparatory QA', dept: 'QUALITY CONTROL' },
+    { code: 'QA-ST', name: 'Solid Tire QA', dept: 'QUALITY CONTROL' },
+    { code: 'QA-WH', name: 'Warehouse QA', dept: 'QUALITY CONTROL' },
+    { code: 'QA-FID', name: 'FID Inspector QA', dept: 'QUALITY CONTROL' }
+  ],
+  production: [
+    { code: 'PR-MIX', name: 'Mixing', dept: 'PRODUCTION' },
+    { code: 'PR-4ROLL', name: '4 Roll Calender', dept: 'PRODUCTION' },
+    { code: 'PR-3ROLL', name: '3 Roll Calender P2', dept: 'PRODUCTION' },
+    { code: 'PR-EXT', name: 'Extruder', dept: 'PRODUCTION' },
+    { code: 'PR-BEAD', name: 'Bead Winding', dept: 'PRODUCTION' },
+    { code: 'PR-STEL', name: 'Steelastic', dept: 'PRODUCTION' },
+    { code: 'PR-TB1', name: 'Tyre Building P1', dept: 'PRODUCTION' },
+    { code: 'PR-TB2', name: 'Tyre Building P2', dept: 'PRODUCTION' },
+    { code: 'PR-TB3', name: 'Tyre Building P3', dept: 'PRODUCTION' },
+    { code: 'PR-BB1', name: 'Band Building P1', dept: 'PRODUCTION' },
+    { code: 'PR-BB2', name: 'Band Building P2', dept: 'PRODUCTION' },
+    { code: 'PR-BB3', name: 'Band Building P3', dept: 'PRODUCTION' },
+    { code: 'PR-TC', name: 'Tyre Curing Production', dept: 'PRODUCTION' },
+    { code: 'PR-BIAS1', name: 'Bias Cutting 1', dept: 'PRODUCTION' },
+    { code: 'PR-BIAS2', name: 'Bias Cutting 2', dept: 'PRODUCTION' },
+    { code: 'PR-BIAS4', name: 'Bias Cutting 4', dept: 'PRODUCTION' },
+    { code: 'PR-BIAS5', name: 'Bias Cutting 5', dept: 'PRODUCTION' },
+    { code: 'PR-AUTOB', name: 'Auto Bias Cutter', dept: 'PRODUCTION' },
+    { code: 'PR-SLIT', name: 'Slitting', dept: 'PRODUCTION' },
+    { code: 'PR-LINE', name: 'Liner Dressing', dept: 'PRODUCTION' },
+    { code: 'PR-SALV', name: 'Salvage', dept: 'PRODUCTION' },
+    { code: 'PR-RADM', name: 'Radial Marangoni', dept: 'PRODUCTION' },
+    { code: 'PR-BIASM', name: 'Bias Marangoni & Bestry', dept: 'PRODUCTION' },
+    { code: 'PR-YAN', name: 'Yanthai', dept: 'PRODUCTION' },
+    { code: 'PR-ST', name: 'Solid Tyre Production', dept: 'PRODUCTION' }
+  ]
+};
+
+// Canonical Assessment Configuration [PENDING HR CONFIRMATION]
+const ASSESSMENT_CONFIG = {
+  // Service-month transition eligibility thresholds
+  transitionMonths: {
+    'I->L': 0,    // Initial onboarding to Learner (0 to 1 month)
+    'L->U': 6,    // Minimum 6 months service before eligible for U
+    'U->O': 24    // Minimum 24 months service before eligible for O default [PENDING HR CONFIRMATION]
+  },
+  // Tiered Pass Mark Standards per Target Level
+  passMarks: {
+    'L': 50,  // Level L: >= 50%
+    'U': 60,  // Level U: >= 60%
+    'O': 75   // Level O: >= 75%
+  },
+  // OJT Practical Evaluation passing threshold
+  ojtPassPct: 70
+};
+
+function getActiveAssessmentConfig() {
+  if (customSettingsMemory && typeof customSettingsMemory === 'object') {
+    return {
+      transitionMonths: Object.assign({}, ASSESSMENT_CONFIG.transitionMonths, customSettingsMemory.transitionMonths || {}),
+      passMarks: Object.assign({}, ASSESSMENT_CONFIG.passMarks, customSettingsMemory.passMarks || {}),
+      ojtPassPct: customSettingsMemory.ojtPassPct !== undefined ? customSettingsMemory.ojtPassPct : ASSESSMENT_CONFIG.ojtPassPct
+    };
+  }
+  return ASSESSMENT_CONFIG;
+}
+
+// Pure Promotion Eligibility Function
+function calculateEligibleLevel(currentLevel, dojStr) {
+  const activeConfig = getActiveAssessmentConfig();
+  const config = activeConfig.transitionMonths;
+  if (!currentLevel || currentLevel === 'O') {
+    return currentLevel || 'I';
+  }
+
+  let months = 0;
+  if (dojStr && dojStr !== '-') {
+    let dojDate = null;
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dojStr)) {
+      const [d, m, y] = dojStr.split('/').map(Number);
+      dojDate = new Date(y, m - 1, d);
+    } else {
+      dojDate = new Date(dojStr);
+    }
+    if (!isNaN(dojDate.getTime())) {
+      const now = new Date();
+      months = (now.getFullYear() - dojDate.getFullYear()) * 12 + (now.getMonth() - dojDate.getMonth());
+      if (now.getDate() < dojDate.getDate()) {
+        months -= 1;
+      }
+      months = Math.max(0, months);
+    }
+  }
+
+  if (currentLevel === 'I') {
+    return 'L';
+  } else if (currentLevel === 'L') {
+    const minMonths = config['L->U'] !== undefined ? config['L->U'] : 6;
+    return months >= minMonths ? 'U' : 'L';
+  } else if (currentLevel === 'U') {
+    const minMonths = config['U->O'] !== undefined ? config['U->O'] : 24;
+    return months >= minMonths ? 'O' : 'U';
+  }
+
+  return currentLevel;
+}
+
+// Standalone Manufacturing Foundation Module Question Generator (Task 2.13)
+function getFoundationQuestionsServer(qBank, options = {}) {
+  const shouldRandomize = options && options.randomize === true;
+  const allQs = [...(qBank.L || []), ...(qBank.U || []), ...(qBank.O || [])];
+
+  const safety = allQs.filter(q => (q.category || '').toLowerCase().includes('safety'));
+  const ciTpm = allQs.filter(q => (q.category || '').toLowerCase().includes('ci') || (q.category || '').toLowerCase().includes('tpm'));
+  const quality = allQs.filter(q => (q.category || '').toLowerCase().includes('qa') || (q.category || '').toLowerCase().includes('quality'));
+
+  if (shouldRandomize) {
+    safety.sort(() => Math.random() - 0.5);
+    ciTpm.sort(() => Math.random() - 0.5);
+    quality.sort(() => Math.random() - 0.5);
+  }
+
+  const selected = [
+    ...safety.slice(0, 7),
+    ...ciTpm.slice(0, 7),
+    ...quality.slice(0, 6)
+  ];
+  return selected;
+}
+
 // Question & Exam Evaluation Helpers
 function normalizeSectionNameServer(sec) {
   let s = (sec || '').toLowerCase().trim().replace(/\s+/g, ' ');
@@ -2494,18 +3202,27 @@ function normalizeSectionNameServer(sec) {
   if (s.includes('curing')) return 'tire curing qa';
   if (s.includes('solid')) return 'solid tire qa';
   if (s.includes('preparatory')) return 'preparatory qa';
-  if (s.includes('fid')) return 'fid inspector qa';
-  if (s.includes('warehouse') || s.includes('data entry')) return 'warehouse qa';
+  if (s.includes('fid') || s.includes('data entry')) return 'fid inspector qa';
+  if (s.includes('warehouse')) return 'warehouse qa';
   if (s.includes('finish')) return 'final finish qa';
   return s;
 }
 
-function getQuestionsForSectionServer(allLevelQuestions, targetLevel, section) {
+function getQuestionsForSectionServer(allLevelQuestions, targetLevel, section, options = {}) {
   const reqCount = (targetLevel === 'O' ? 40 : (targetLevel === 'U' ? 30 : 20));
-  if (!section) return allLevelQuestions.slice(0, reqCount);
+  const shouldRandomize = options && options.randomize === true;
+
+  if (!section) {
+    const pool = [...allLevelQuestions];
+    if (shouldRandomize) pool.sort(() => Math.random() - 0.5);
+    return pool.slice(0, reqCount);
+  }
   const empSecNorm = normalizeSectionNameServer(section);
   const sectionQs = allLevelQuestions.filter(q => normalizeSectionNameServer(q.section) === empSecNorm);
-  if (sectionQs.length === 0) return allLevelQuestions.slice(0, reqCount);
+  if (sectionQs.length === 0) {
+    // Section bank not uploaded: locked to prevent unapproved promotion via borrowed questions
+    return [];
+  }
 
   const byCat = {};
   sectionQs.forEach(q => {
@@ -2514,29 +3231,46 @@ function getQuestionsForSectionServer(allLevelQuestions, targetLevel, section) {
     byCat[cat].push(q);
   });
   const cats = Object.keys(byCat);
-  if (cats.length <= 1) return sectionQs.slice(0, reqCount);
+  if (cats.length <= 1) {
+    const pool = [...sectionQs];
+    if (shouldRandomize) pool.sort(() => Math.random() - 0.5);
+    return pool.slice(0, reqCount);
+  }
 
   const baseTarget = Math.floor(reqCount / cats.length);
   const extraSlots = reqCount % cats.length;
   const selected = [];
   cats.forEach((cat, idx) => {
     const targetForCat = baseTarget + (idx < extraSlots ? 1 : 0);
-    selected.push(...byCat[cat].slice(0, targetForCat));
+    const catPool = [...byCat[cat]];
+    if (shouldRandomize) catPool.sort(() => Math.random() - 0.5);
+    selected.push(...catPool.slice(0, targetForCat));
   });
   if (selected.length < reqCount) {
     const selIds = new Set(selected.map(q => q.id));
     const remaining = sectionQs.filter(q => !selIds.has(q.id));
+    if (shouldRandomize) remaining.sort(() => Math.random() - 0.5);
     selected.push(...remaining.slice(0, reqCount - selected.length));
   }
-  return selected.slice(0, reqCount);
+
+  const result = selected.slice(0, reqCount);
+  if (shouldRandomize) result.sort(() => Math.random() - 0.5);
+  return result;
 }
 
 // Strip correctAnswer from questions payload before returning to employee client
-function sanitizeQuestionsForEmployee(questions) {
+function sanitizeQuestionsForEmployee(questions, randomizeOptions = true) {
   if (!Array.isArray(questions)) return [];
   return questions.map(q => {
-    const { correctAnswer, ...sanitized } = q;
-    return sanitized;
+    const { correctAnswer, options: opts, ...sanitized } = q;
+    let finalOptions = Array.isArray(opts) ? [...opts] : [];
+    if (randomizeOptions) {
+      finalOptions.sort(() => Math.random() - 0.5);
+    }
+    return {
+      ...sanitized,
+      options: finalOptions
+    };
   });
 }
 
@@ -2548,8 +3282,14 @@ async function scoreAssessmentServerSide(empNo, targetLevel, responses, section)
   const empSection = section || (emp && emp.section) || '';
 
   const qBank = await getAuthoritativeQuestions();
-  const allLevelQuestions = qBank[targetLevel] || qBank['L'] || [];
-  const questions = getQuestionsForSectionServer(allLevelQuestions, targetLevel, empSection);
+  let questions = [];
+  const isFoundation = targetLevel === 'FOUNDATION';
+  if (isFoundation) {
+    questions = getFoundationQuestionsServer(qBank);
+  } else {
+    const allLevelQuestions = qBank[targetLevel] || qBank['L'] || [];
+    questions = getQuestionsForSectionServer(allLevelQuestions, targetLevel, empSection);
+  }
 
   let correctCount = 0;
   let safetyMark = 0, safetyTotal = 0;
@@ -2596,15 +3336,9 @@ async function scoreAssessmentServerSide(empNo, targetLevel, responses, section)
 
   const totalQs = questions.length || 1;
   const markPct = Math.round((correctCount / totalQs) * 100);
-  const currentLevel = (emp && emp.currentLevel) || 'I';
-  const levelRules = {
-    "I": { "nextLevel": "L", "numQuestions": 20, "passingPct": 50 },
-    "L": { "nextLevel": "U", "numQuestions": 20, "passingPct": 50 },
-    "U": { "nextLevel": "O", "numQuestions": 30, "passingPct": 50 },
-    "O": { "nextLevel": "O", "numQuestions": 40, "passingPct": 50 }
-  };
-  const rule = levelRules[currentLevel] || levelRules['I'];
-  const pass = markPct >= rule.passingPct;
+  const activeConfig = getActiveAssessmentConfig();
+  const passingPct = isFoundation ? 70 : (activeConfig.passMarks[targetLevel] || 70);
+  const pass = markPct >= passingPct;
 
   let uMark = 0, lMark = 0, oMark = 0;
   if (targetLevel === 'U') uMark = correctCount;
@@ -2618,6 +3352,9 @@ async function scoreAssessmentServerSide(empNo, targetLevel, responses, section)
     section: emp ? emp.section : empSection,
     doj: emp ? emp.doj : '-',
     targetLevel: targetLevel,
+    isFoundation: isFoundation,
+    moduleName: isFoundation ? 'Manufacturing Foundation Module' : `Level ${targetLevel} MCQ Assessment`,
+    passingPct,
     inProgress: false,
     isCompleted: true,
     responses: responses,
@@ -2848,8 +3585,21 @@ app.post('/api/records/reset-department', requireAdminAuth, async (req, res) => 
   });
 });
 
-// POST /api/records/restore-demo (Superadmin only)
-app.post('/api/records/restore-demo', requireAdminAuth, async (req, res) => {
+// POST /api/records/restore-demo (Superadmin only - strictly disabled in production)
+app.post('/api/records/restore-demo', requireSuperAdminAuth, async (req, res) => {
+  if (isProduction) {
+    return res.status(403).json({
+      success: false,
+      message: 'Forbidden: Demo data restoration is strictly prohibited in production environments'
+    });
+  }
+  const { confirmPhrase } = req.body || {};
+  if (confirmPhrase !== 'RESTORE-DEMO-DATA') {
+    return res.status(400).json({
+      success: false,
+      message: 'Confirmation phrase mismatch. You must explicitly type "RESTORE-DEMO-DATA" to perform this action.'
+    });
+  }
   const BACKUP_FILE = path.join(__dirname, 'assessment_records_backup_236.json');
   if (fs.existsSync(BACKUP_FILE)) {
     try {
@@ -2907,10 +3657,57 @@ app.post('/api/exam/start', requireEmpAuth, async (req, res) => {
       }
     }
 
+    // Resume In-Progress Exam (Task 2.6: Autosave & Resume)
+    let existingSession = activeExamSessions.get(strEmpNo);
+    if (!existingSession && kvUrl && kvToken) {
+      try { existingSession = await syncWithCloudKv('GET', `exam:${strEmpNo}`); } catch (e) {}
+    }
+
+    if (existingSession && !existingSession.isCompleted && Date.now() < existingSession.expiresAt && !req.body.forceRetake) {
+      const serverRemaining = Math.max(0, Math.floor((existingSession.expiresAt - Date.now()) / 1000));
+      const rec = records[strEmpNo] || {};
+
+      const qBank = await getAuthoritativeQuestions();
+      const allQs = qBank[existingSession.targetLevel] || qBank['L'] || [];
+      const questions = existingSession.questions || getQuestionsForSectionServer(allQs, existingSession.targetLevel, emp.section);
+      const sanitizedQuestions = sanitizeQuestionsForEmployee(questions, false);
+
+      return res.json({
+        success: true,
+        isResumed: true,
+        message: 'Active assessment session resumed',
+        activeExam: {
+          empNo: strEmpNo,
+          targetLevel: existingSession.targetLevel,
+          questions: sanitizedQuestions,
+          durationSeconds: existingSession.durationSeconds || 2700,
+          remainingSeconds: serverRemaining,
+          expiresAt: existingSession.expiresAt,
+          responses: rec.responses || existingSession.responses || {},
+          currentIndex: rec.currentIndex || existingSession.currentIndex || 0,
+          tabSwitchCount: rec.tabSwitchCount || existingSession.tabSwitchCount || 0
+        }
+      });
+    }
+
     const targetLevel = req.body.targetLevel || emp.targetLevel || 'L';
+    const isFoundation = targetLevel === 'FOUNDATION' || req.body.isFoundation === true;
+
     const qBank = await getAuthoritativeQuestions();
-    const allQs = qBank[targetLevel] || qBank['L'] || [];
-    const questions = getQuestionsForSectionServer(allQs, targetLevel, emp.section);
+    let questions = [];
+    if (isFoundation) {
+      questions = getFoundationQuestionsServer(qBank, { randomize: true });
+    } else {
+      const allQs = qBank[targetLevel] || qBank['L'] || [];
+      questions = getQuestionsForSectionServer(allQs, targetLevel, emp.section, { randomize: true });
+      if (!questions || questions.length === 0) {
+        return res.status(403).json({
+          success: false,
+          locked: true,
+          message: 'Level exams for this section are locked until a section question bank is uploaded. Please complete the Manufacturing Foundation Module in the interim.'
+        });
+      }
+    }
 
     const durationSeconds = 45 * 60; // 45 minutes
     const expiresAt = Date.now() + (durationSeconds * 1000) + 30000; // 30s latency grace
@@ -2970,6 +3767,109 @@ app.post('/api/exam/start', requireEmpAuth, async (req, res) => {
   }
 });
 
+
+// ---------------------------------------------------------------------
+// POST /api/exam/autosave: Debounced in-progress autosave (Task 2.6 & 2.7)
+// ---------------------------------------------------------------------
+app.post('/api/exam/autosave', requireEmpAuth, async (req, res) => {
+  try {
+    const user = req.authUser;
+    const empNo = req.body.empNo || user.empNo;
+    const strEmpNo = String(empNo).trim();
+
+    if (user.role === 'emp' && String(user.empNo).trim() !== strEmpNo) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You can only autosave your own assessment' });
+    }
+
+    const { responses, currentIndex, tabSwitchCount } = req.body || {};
+
+    let examSession = activeExamSessions.get(strEmpNo);
+    if (!examSession && kvUrl && kvToken) {
+      try {
+        examSession = await syncWithCloudKv('GET', `exam:${strEmpNo}`);
+      } catch (e) {}
+    }
+
+    if (!examSession) {
+      return res.status(404).json({ success: false, message: 'No active exam session found to autosave' });
+    }
+
+    if (examSession.isCompleted) {
+      return res.status(409).json({ success: false, message: 'Exam is already completed' });
+    }
+
+    // Check timer expiration (server-authoritative: 45m + 30s grace)
+    if (Date.now() > (examSession.expiresAt + 30000)) {
+      return res.status(403).json({ success: false, message: 'Exam session expired', isExpired: true });
+    }
+
+    const serverRemaining = Math.max(0, Math.floor((examSession.expiresAt - Date.now()) / 1000));
+
+    // Update session state
+    examSession.responses = responses || examSession.responses || {};
+    examSession.currentIndex = (typeof currentIndex === 'number') ? currentIndex : (examSession.currentIndex || 0);
+    examSession.tabSwitchCount = (typeof tabSwitchCount === 'number') ? tabSwitchCount : (examSession.tabSwitchCount || 0);
+    examSession.lastAutosaveAt = Date.now();
+    activeExamSessions.set(strEmpNo, examSession);
+
+    // Sync to Redis
+    if (kvUrl && kvToken) {
+      try {
+        await syncWithCloudKv('SET', `exam:${strEmpNo}`, examSession, serverRemaining + 120);
+      } catch (e) {}
+    }
+
+    // Update in-progress record
+    const records = await getAuthoritativeRecords();
+    const existing = records[strEmpNo] || {};
+    if (!existing.isCompleted) {
+      await saveAuthoritativeRecord(strEmpNo, {
+        ...existing,
+        empNo: strEmpNo,
+        inProgress: true,
+        isCompleted: false,
+        remainingSeconds: serverRemaining,
+        currentIndex: examSession.currentIndex,
+        responses: examSession.responses,
+        tabSwitchCount: examSession.tabSwitchCount,
+        lastAutosaveAt: new Date().toISOString()
+      });
+    }
+
+    // Tab-switch auto-submit trigger if violations exceed limit (>= 3) (Task 2.7)
+    if (examSession.tabSwitchCount >= 3) {
+      const employees = await getAuthoritativeEmployees();
+      const emp = employees.find(e => String(e.empNo).trim().toLowerCase() === strEmpNo.toLowerCase());
+      const section = (emp && emp.section) || (existing && existing.section) || '';
+      const lvl = examSession.targetLevel || (existing && existing.targetLevel) || 'L';
+      const scoredRecord = await scoreAssessmentServerSide(strEmpNo, lvl, examSession.responses, section);
+      scoredRecord.tabSwitchCount = examSession.tabSwitchCount;
+      scoredRecord.autoSubmitted = true;
+      scoredRecord.autoSubmitReason = 'EXCEEDED_TAB_SWITCH_LIMIT';
+      await saveAuthoritativeRecord(strEmpNo, scoredRecord);
+      await logAuditEvent('EXAM_TERMINATED_TAB_SWITCHES', strEmpNo, `Exam auto-terminated: candidate exceeded 3 tab switches (${examSession.tabSwitchCount})`, req);
+      activeExamSessions.delete(strEmpNo);
+      if (kvUrl && kvToken) {
+        try { await syncWithCloudKv('DEL', `exam:${strEmpNo}`); } catch (e) {}
+      }
+      return res.json({
+        success: true,
+        autoSubmitted: true,
+        message: 'Exam terminated and submitted automatically due to exceeding allowable tab switches (3/3)',
+        record: scoredRecord
+      });
+    }
+
+    return res.json({
+      success: true,
+      remainingSeconds: serverRemaining,
+      savedAt: examSession.lastAutosaveAt
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Autosave error: ' + err.message });
+  }
+});
+
 // POST /api/exam/submit: Server-Side Scoring, Timing Validation & Single Submission Enforcement
 app.post('/api/exam/submit', requireEmpAuth, async (req, res) => {
   try {
@@ -2994,14 +3894,20 @@ app.post('/api/exam/submit', requireEmpAuth, async (req, res) => {
       examSession = await syncWithCloudKv('GET', `exam:${strEmpNo}`);
     }
 
-    if (examSession && examSession.expiresAt && Date.now() > (examSession.expiresAt + 15000)) {
-      console.warn(`Assessment submission for ${strEmpNo} arrived after server expiration.`);
+    if (examSession && examSession.expiresAt && Date.now() > (examSession.expiresAt + 30000)) {
+      if (!req.body.isAutoSubmit) {
+        return res.status(403).json({
+          success: false,
+          message: 'Assessment submission rejected: Exam time limit of 45 minutes has expired'
+        });
+      }
     }
 
     const employees = await getAuthoritativeEmployees();
     const emp = employees.find(e => String(e.empNo).trim().toLowerCase() === strEmpNo.toLowerCase());
     const section = (emp && emp.section) || (existing && existing.section) || '';
-    const lvl = targetLevel || (existing && existing.targetLevel) || (emp && emp.targetLevel) || 'L';
+    const isFoundation = targetLevel === 'FOUNDATION' || req.body.isFoundation === true || (existing && existing.isFoundation);
+    const lvl = isFoundation ? 'FOUNDATION' : (targetLevel || (existing && existing.targetLevel) || (emp && emp.targetLevel) || 'L');
 
     // Server-Side Scoring: authoritative evaluation
     const scoredRecord = await scoreAssessmentServerSide(strEmpNo, lvl, responses || {}, section);
@@ -3014,8 +3920,8 @@ app.post('/api/exam/submit', requireEmpAuth, async (req, res) => {
       scoredRecord.candidateSignature = candidateSignature;
     }
 
-    // Skill level switch upon exam completion / passing
-    if (scoredRecord.isPassed) {
+    // Skill level switch upon exam completion / passing (NEVER for foundation module)
+    if (scoredRecord.isPassed && !isFoundation && lvl !== 'FOUNDATION') {
       if (emp) {
         const prevLevel = emp.currentLevel || 'I';
         emp.currentLevel = lvl;
@@ -3062,6 +3968,87 @@ app.post('/api/exam/submit', requireEmpAuth, async (req, res) => {
 // ---------------------------------------------------------------------
 // QUESTION BANK API (Sanitized for Employees, Full for Admin)
 // ---------------------------------------------------------------------
+
+
+// ---------------------------------------------------------------------
+// QUESTION POOL CAPACITY & SHORTFALL AUDIT ENGINE (Task 2.5 / S6)
+// ---------------------------------------------------------------------
+function calculateQuestionPoolCapacity(qBank) {
+  const REQUIRED_PER_LEVEL = { L: 20, U: 30, O: 40 };
+  const result = {
+    totalQuestions: 0,
+    byLevel: { L: 0, U: 0, O: 0 },
+    bySection: {},
+    shortfallSections: [],
+    sufficientSections: [],
+    hasShortfall: false,
+    auditWarning: null
+  };
+
+  if (!qBank || typeof qBank !== 'object') return result;
+
+  for (const [lvl, qs] of Object.entries(qBank)) {
+    if (!Array.isArray(qs)) continue;
+    result.byLevel[lvl] = qs.length;
+    result.totalQuestions += qs.length;
+
+    qs.forEach(q => {
+      const sec = q.section || 'General';
+      if (!result.bySection[sec]) {
+        result.bySection[sec] = { total: 0, byLevel: { L: 0, U: 0, O: 0 } };
+      }
+      result.bySection[sec].total++;
+      if (result.bySection[sec].byLevel[lvl] !== undefined) {
+        result.bySection[sec].byLevel[lvl]++;
+      }
+    });
+  }
+
+  // Single-paper shortfall audit per section & level
+  for (const [sec, data] of Object.entries(result.bySection)) {
+    let secHasShortfall = false;
+    const levelStatus = {};
+
+    for (const [lvl, reqCount] of Object.entries(REQUIRED_PER_LEVEL)) {
+      const count = (data.byLevel && data.byLevel[lvl]) || 0;
+      const surplus = count - reqCount;
+      levelStatus[lvl] = { count, required: reqCount, surplus: Math.max(0, surplus) };
+      if (surplus <= 0) {
+        secHasShortfall = true;
+      }
+    }
+
+    if (secHasShortfall) {
+      result.shortfallSections.push({
+        section: sec,
+        total: data.total,
+        byLevel: levelStatus,
+        status: 'SINGLE_PAPER_SHORTFALL',
+        recommendation: 'Upload expanded question bank to enable randomized candidate question sampling'
+      });
+    } else {
+      result.sufficientSections.push({
+        section: sec,
+        total: data.total,
+        byLevel: levelStatus
+      });
+    }
+  }
+
+  if (result.shortfallSections.length > 0) {
+    result.hasShortfall = true;
+    result.auditWarning = `CAPACITY AUDIT NOTICE: ${result.shortfallSections.length} section(s) operate with single-paper question pools (zero surplus buffer for randomized distinct papers). Total pool contains ${result.totalQuestions} questions across ${Object.keys(result.bySection).length} sections.`;
+  }
+
+  return result;
+}
+
+// GET /api/admin/questions/capacity
+app.get('/api/admin/questions/capacity', requireAdminAuth, async (req, res) => {
+  const qBank = await getAuthoritativeQuestions();
+  const capacity = calculateQuestionPoolCapacity(qBank);
+  return res.json({ success: true, capacity });
+});
 
 // GET /api/questions: Strips correct answers unless Superadmin
 app.get('/api/questions', async (req, res) => {
@@ -3285,6 +4272,26 @@ app.post('/api/settings', requireAdminAuth, async (req, res) => {
     }
   }
   res.json({ success: true, message: 'Security settings saved to Cloud DB' });
+});
+
+// GET /api/config/assessment-standards: Single configuration source for standards (Task 2.12)
+app.get('/api/config/assessment-standards', (req, res) => {
+  res.json({
+    success: true,
+    standards: getActiveAssessmentConfig(),
+    status: 'ACTIVE_PENDING_HR_CONFIRMATION'
+  });
+});
+
+// GET /api/taxonomy/sections: Canonical plant taxonomy (Task 2.14)
+app.get('/api/taxonomy/sections', (req, res) => {
+  res.json({
+    success: true,
+    totalSections: 33,
+    qaCount: CANONICAL_PLANT_SECTIONS.qa.length,
+    productionCount: CANONICAL_PLANT_SECTIONS.production.length,
+    taxonomy: CANONICAL_PLANT_SECTIONS
+  });
 });
 
 // ---------------------------------------------------------------------
@@ -3903,5 +4910,9 @@ app.setKvWriteForbidden = (val) => {
 app.getKvWriteForbidden = () => isKvWriteForbidden;
 app.LUA_ATOMIC_RATE_LIMIT = LUA_ATOMIC_RATE_LIMIT;
 
+app._sanitizeFormulaInjection = sanitizeFormulaInjection;
+app._calculateEligibleLevel = calculateEligibleLevel;
+app._getActiveAssessmentConfig = getActiveAssessmentConfig;
+app._CANONICAL_PLANT_SECTIONS = CANONICAL_PLANT_SECTIONS;
 module.exports = app;
 

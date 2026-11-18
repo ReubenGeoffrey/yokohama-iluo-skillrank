@@ -27,7 +27,6 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "jszip": "^3.10.2",
-    "mongodb": "^7.5.0",
     "nodemailer": "^10.0.15",
     "puppeteer-core": "^25.12.0"
   },
