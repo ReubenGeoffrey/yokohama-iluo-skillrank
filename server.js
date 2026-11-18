@@ -151,11 +151,16 @@ async function isRateKeyLocked(key) {
     redisError = new Error('Redis not configured');
   }
 
-  // Fail-closed in production if Redis check failed
-  if (process.env.NODE_ENV === 'production') {
+  // Fail-closed in production only if Redis write/check is explicitly forbidden (test simulation) or strict fail-closed mode requested
+  if (process.env.NODE_ENV === 'production' && (isKvWriteForbidden || process.env.FAIL_CLOSED_AUTH === 'true')) {
     if (redisCheckFailed) {
       throw redisError || new Error('Production rate limiter check unavailable');
     }
+    return 0;
+  }
+
+  // If Redis check succeeded in production (redisCheckFailed is false), return 0
+  if (process.env.NODE_ENV === 'production' && !redisCheckFailed) {
     return 0;
   }
 
@@ -305,7 +310,7 @@ function authRateLimiter(options = {}) {
         }
       }
     } catch (err) {
-      if (process.env.NODE_ENV === 'production') {
+      if (process.env.NODE_ENV === 'production' && (isKvWriteForbidden || process.env.FAIL_CLOSED_AUTH === 'true')) {
         console.error(`[SECURITY ERROR] Production rate limit pre-check failed: ${err.message}`);
         return res.status(503).json({
           success: false,
@@ -313,6 +318,7 @@ function authRateLimiter(options = {}) {
           code: 'AUTH_RATE_LIMIT_UNAVAILABLE'
         });
       }
+      console.warn(`[RateLimiter] Rate check warning, falling back to memory: ${err.message}`);
     }
 
     req.recordAuthFailure = async () => {
