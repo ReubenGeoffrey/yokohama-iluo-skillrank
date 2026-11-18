@@ -61,83 +61,242 @@
 
     <!-- VIEW 0: Role-Based Portal Hub Landing (Management Portal) -->
     <section class="view-section active" id="viewPublicLanding">
-      <div class="landing-hero-card">
-        <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" width="86" height="86" style="border-radius: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); object-fit: contain; background: white; border: 1px solid rgba(0,0,0,0.06);" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline-flex';">
-        <span class="brand-logo-fallback" style="display:none; width: 86px; height: 86px; font-size: 28px; border-radius: 20px; margin: 0 auto 16px;" aria-hidden="true">ATG</span>
-        <h1 class="landing-hub-title">Yokohama • ATC Tires</h1>
-        <p class="landing-hub-subtitle">ILUO Skill Assessment, OJT Evaluation &amp; Plant Competency Portal</p>
-      </div>
+      <div class="front-hub-container">
+        
+        <!-- 1. Centered Hero Section -->
+        <div class="front-hero-section">
+          <div class="front-brand-row">
+            <img src="atg_logo.png" alt="Yokohama ATC Tires Logo" class="front-hero-logo" width="68" height="68" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline-flex';">
+            <span class="brand-logo-fallback" style="display:none; width: 68px; height: 68px; font-size: 22px; border-radius: 16px;" aria-hidden="true">ATG</span>
+          </div>
+          <div class="front-plant-badge">
+            <span class="front-badge-dot"></span>
+            <span>Plant Competency &amp; Skill Verification System</span>
+          </div>
+          <h1 class="front-hero-title">Yokohama • ATC Tires</h1>
+          <p class="front-hero-subtitle">ILUO Skill Assessment, OJT Evaluation &amp; Automotive Competency Analytics</p>
+        </div>
 
-      <div class="vertical-portal-list" role="navigation" aria-label="Role Access Portals">
-        <!-- 1. Employee Login (Featured Primary for Operators) -->
-        <button class="vertical-portal-card emp-featured-card" onclick="switchRolePortal('employee')" type="button" aria-label="Sign In to Employee Portal">
-          <div class="portal-card-main">
-            <div class="portal-svg-wrap">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <!-- 2. Centered Operator Search & Start Assessment Card -->
+        <div class="front-action-card">
+          <div class="front-search-header">
+            <span class="front-search-tag">OPERATOR DIRECTORY &amp; ASSESSMENT</span>
+            <h2 class="front-search-title">Select Operator to Begin ILUO Assessment</h2>
+            <p class="front-search-desc">Search plant associate by Employee ID or Name to preview certified skill rank and launch evaluation</p>
+          </div>
+
+          <div class="front-search-container">
+            <div class="front-search-input-wrap">
+              <svg class="front-search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="frontOperatorSearch" class="front-search-input" placeholder="Search by Employee ID or Name (e.g. LN0039, 900262, Prakash)..." autocomplete="off" aria-label="Search Operator by ID or Name" oninput="handleFrontOperatorSearch(this.value)" onfocus="handleFrontOperatorSearch(this.value)">
+              <button type="button" class="front-search-clear" id="btnFrontClearSearch" onclick="clearFrontOperatorSearch()" style="display:none;" aria-label="Clear Search">&times;</button>
             </div>
-            <div class="portal-text-wrap">
-              <span class="portal-title">Employee Login</span>
-              <span class="portal-desc">Take scheduled skill exams &amp; view certified level progress</span>
+
+            <!-- Live Autocomplete Dropdown List -->
+            <div class="front-dropdown-menu" id="frontOperatorDropdown" style="display: none;" role="listbox" aria-label="Matching Operators">
+              <!-- Populated dynamically via JS -->
             </div>
           </div>
-          <span class="portal-arrow" aria-hidden="true">&rarr;</span>
-        </button>
 
-        <!-- 2. Department HOD -->
-        <button class="vertical-portal-card dept-card" onclick="switchRolePortal('department')" type="button" aria-label="Access Department HOD Dashboard">
-          <div class="portal-card-main">
-            <div class="portal-svg-wrap">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="21" x2="21" y2="21"/><line x1="6" y1="21" x2="6" y2="9"/><line x1="10" y1="21" x2="10" y2="9"/><line x1="14" y1="21" x2="14" y2="9"/><line x1="18" y1="21" x2="18" y2="9"/><polygon points="12 3 2 9 22 9 12 3"/></svg>
+          <!-- Selected Operator Preview Card -->
+          <div class="front-selected-preview" id="frontSelectedOperatorCard" style="display: none;">
+            <div class="preview-operator-info">
+              <div class="preview-avatar" id="frontSelectedAvatar">OP</div>
+              <div class="preview-details">
+                <div class="preview-name-row">
+                  <span class="preview-name" id="frontSelectedName">Associate Name</span>
+                  <span class="preview-id tabular-nums" id="frontSelectedEmpNo">LN0000</span>
+                  <span class="badge-iluo" id="frontSelectedLevelBadge">Level U</span>
+                </div>
+                <div class="preview-meta-row">
+                  <span class="preview-dept" id="frontSelectedDept">PRODUCTION</span>
+                  <span class="preview-divider">&bull;</span>
+                  <span class="preview-section" id="frontSelectedSection">Tyre Building</span>
+                  <span class="preview-divider">&bull;</span>
+                  <span class="preview-exp" id="frontSelectedExp">2-3 years exp</span>
+                </div>
+              </div>
             </div>
-            <div class="portal-text-wrap">
-              <span class="portal-title">Department</span>
-              <span class="portal-desc">Executive HOD dashboard, plant matrix &amp; section metrics</span>
+            <div class="preview-actions">
+              <button type="button" class="btn-front-start" id="btnFrontStartAssessment" onclick="launchFrontAssessment()">
+                <span>Start Assessment</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
             </div>
           </div>
-          <span class="portal-arrow" aria-hidden="true">&rarr;</span>
-        </button>
 
-        <!-- 3. HR Login -->
-        <button class="vertical-portal-card admin-card" onclick="switchRolePortal('admin')" type="button" aria-label="Access HR Control Center">
-          <div class="portal-card-main">
-            <div class="portal-svg-wrap">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            </div>
-            <div class="portal-text-wrap">
-              <span class="portal-title">HR Login</span>
-              <span class="portal-desc">Manage question banks, master roster, exams &amp; resets</span>
-            </div>
+          <!-- Default Action button when no operator selected yet -->
+          <div class="front-default-action-wrap" id="frontDefaultActionWrap">
+            <button type="button" class="btn-front-start" onclick="navigateTo('/employee')" id="btnFrontDirectStart">
+              <span>Sign In &amp; Start Assessment</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
           </div>
-          <span class="portal-arrow" aria-hidden="true">&rarr;</span>
-        </button>
+        </div>
 
-        <!-- 4. Section Login -->
-        <button class="vertical-portal-card section-card" onclick="switchRolePortal('section')" type="button" aria-label="Access Section Roster Dashboard">
-          <div class="portal-card-main">
-            <div class="portal-svg-wrap">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="9" y1="22" x2="9" y2="22.01"/><line x1="15" y1="22" x2="15" y2="22.01"/><line x1="9" y1="6" x2="9" y2="6.01"/><line x1="15" y1="6" x2="15" y2="6.01"/><line x1="9" y1="10" x2="9" y2="10.01"/><line x1="15" y1="10" x2="15" y2="10.01"/><line x1="9" y1="14" x2="9" y2="14.01"/><line x1="15" y1="14" x2="15" y2="14.01"/><line x1="9" y1="18" x2="9" y2="18.01"/><line x1="15" y1="18" x2="15" y2="18.01"/></svg>
+        <!-- 3. Centered 4 KPI Cards (Aligned in 4-col desktop, 2x2 tablet, 2x2 mobile) -->
+        <div class="front-kpi-grid">
+          <!-- KPI 1: Total Plant Headcount -->
+          <div class="front-kpi-card">
+            <div class="front-kpi-header">
+              <span class="front-kpi-label">TOTAL PLANT HEADCOUNT</span>
+              <span class="front-kpi-icon-wrap navy">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </span>
             </div>
-            <div class="portal-text-wrap">
-              <span class="portal-title">Section Login</span>
-              <span class="portal-desc">QA &amp; Production section rosters, evaluations &amp; approvals</span>
-            </div>
+            <div class="front-kpi-value tabular-nums" id="frontKpiTotalHeadcount">1,462</div>
+            <div class="front-kpi-subtext">33 Plant Sections &bull; 1,179 Production + 283 QA</div>
           </div>
-          <span class="portal-arrow" aria-hidden="true">&rarr;</span>
-        </button>
 
-        <!-- 5. Skill Assessment Login -->
-        <button class="vertical-portal-card ojt-card" onclick="switchRolePortal('ojt')" type="button" aria-label="Access Practical OJT Skill Assessment Center">
-          <div class="portal-card-main">
-            <div class="portal-svg-wrap">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><polyline points="9 14 11 16 15 11"/></svg>
+          <!-- KPI 2: Knowledge MCQ Certified -->
+          <div class="front-kpi-card">
+            <div class="front-kpi-header">
+              <span class="front-kpi-label">KNOWLEDGE MCQ CERTIFIED</span>
+              <span class="front-kpi-icon-wrap blue">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              </span>
             </div>
-            <div class="portal-text-wrap">
-              <span class="portal-title">Skill Assessment Login</span>
-              <span class="portal-desc">Practical on-the-job rubric evaluations &amp; certifications</span>
-            </div>
+            <div class="front-kpi-value tabular-nums" id="frontKpiMcqPass">894 <span class="front-kpi-pct">(61.1%)</span></div>
+            <div class="front-kpi-subtext">Passing threshold &ge; 70% Automotive Standard</div>
           </div>
-          <span class="portal-arrow" aria-hidden="true">&rarr;</span>
-        </button>
+
+          <!-- KPI 3: Practical OJT Qualified -->
+          <div class="front-kpi-card">
+            <div class="front-kpi-header">
+              <span class="front-kpi-label">PRACTICAL OJT QUALIFIED</span>
+              <span class="front-kpi-icon-wrap green">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              </span>
+            </div>
+            <div class="front-kpi-value tabular-nums" id="frontKpiOjtQualified">742 <span class="front-kpi-pct">(50.8%)</span></div>
+            <div class="front-kpi-subtext">Shop-floor rubric certified &ge; 70%</div>
+          </div>
+
+          <!-- KPI 4: Level U & O High-Skill Mentors -->
+          <div class="front-kpi-card">
+            <div class="front-kpi-header">
+              <span class="front-kpi-label">HIGH SKILL (LEVEL U &amp; O)</span>
+              <span class="front-kpi-icon-wrap amber">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              </span>
+            </div>
+            <div class="front-kpi-value tabular-nums" id="frontKpiHighSkill">1,193 <span class="front-kpi-pct">(81.6%)</span></div>
+            <div class="front-kpi-subtext">Autonomous executors &amp; trainers/mentors</div>
+          </div>
+        </div>
+
+        <!-- 4. Centered Role Access Portals -->
+        <div class="front-role-section">
+          <div class="front-section-heading">
+            <h2>Plant Management &amp; Role Portals</h2>
+            <p>Direct role-based authentication and operational control centers</p>
+          </div>
+
+          <div class="front-role-grid">
+            <!-- 1. Employee Portal -->
+            <button class="front-role-card role-employee" onclick="switchRolePortal('employee')" type="button" aria-label="Sign In to Employee Portal">
+              <div class="role-card-top">
+                <div class="role-icon-box">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+                <span class="role-badge featured">Primary</span>
+              </div>
+              <div class="role-card-body">
+                <h3 class="role-title">Employee Portal</h3>
+                <p class="role-desc">Take scheduled skill exams &amp; view certified level progress</p>
+              </div>
+              <div class="role-card-footer">
+                <span>Enter Portal</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </div>
+            </button>
+
+            <!-- 2. Department HOD -->
+            <button class="front-role-card" onclick="switchRolePortal('department')" type="button" aria-label="Access Department HOD Dashboard">
+              <div class="role-card-top">
+                <div class="role-icon-box purple">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="21" x2="21" y2="21"/><line x1="6" y1="21" x2="6" y2="9"/><line x1="10" y1="21" x2="10" y2="9"/><line x1="14" y1="21" x2="14" y2="9"/><line x1="18" y1="21" x2="18" y2="9"/><polygon points="12 3 2 9 22 9 12 3"/></svg>
+                </div>
+                <span class="role-badge">Executive</span>
+              </div>
+              <div class="role-card-body">
+                <h3 class="role-title">Department HOD</h3>
+                <p class="role-desc">Production &amp; QA executive dashboards, plant matrix &amp; section metrics</p>
+              </div>
+              <div class="role-card-footer">
+                <span>Enter Portal</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </div>
+            </button>
+
+            <!-- 3. Section In-Charge -->
+            <button class="front-role-card" onclick="switchRolePortal('section')" type="button" aria-label="Access Section Roster Dashboard">
+              <div class="role-card-top">
+                <div class="role-icon-box blue">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="9" y1="22" x2="9" y2="22.01"/><line x1="15" y1="22" x2="15" y2="22.01"/><line x1="9" y1="6" x2="9" y2="6.01"/><line x1="15" y1="6" x2="15" y2="6.01"/><line x1="9" y1="10" x2="9" y2="10.01"/><line x1="15" y1="10" x2="15" y2="10.01"/><line x1="9" y1="14" x2="9" y2="14.01"/><line x1="15" y1="14" x2="15" y2="14.01"/><line x1="9" y1="18" x2="9" y2="18.01"/><line x1="15" y1="18" x2="15" y2="18.01"/></svg>
+                </div>
+                <span class="role-badge">33 Sections</span>
+              </div>
+              <div class="role-card-body">
+                <h3 class="role-title">Section In-Charge</h3>
+                <p class="role-desc">QA &amp; Production section rosters, evaluations &amp; approvals</p>
+              </div>
+              <div class="role-card-footer">
+                <span>Enter Portal</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </div>
+            </button>
+
+            <!-- 4. Practical OJT Center -->
+            <button class="front-role-card" onclick="switchRolePortal('ojt')" type="button" aria-label="Access Practical OJT Skill Assessment Center">
+              <div class="role-card-top">
+                <div class="role-icon-box green">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><polyline points="9 14 11 16 15 11"/></svg>
+                </div>
+                <span class="role-badge">Evaluators</span>
+              </div>
+              <div class="role-card-body">
+                <h3 class="role-title">Skill Assessment Center</h3>
+                <p class="role-desc">Practical on-the-job rubric evaluations &amp; certifications</p>
+              </div>
+              <div class="role-card-footer">
+                <span>Enter Portal</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </div>
+            </button>
+
+            <!-- 5. HR Control Center -->
+            <button class="front-role-card" onclick="switchRolePortal('admin')" type="button" aria-label="Access HR Control Center">
+              <div class="role-card-top">
+                <div class="role-icon-box red">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                </div>
+                <span class="role-badge">Admin</span>
+              </div>
+              <div class="role-card-body">
+                <h3 class="role-title">HR Control Center</h3>
+                <p class="role-desc">Question banks, employee master, exams, resets &amp; reports</p>
+              </div>
+              <div class="role-card-footer">
+                <span>Enter Portal</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- 5. Mobile Sticky Bottom Start Button -->
+        <div class="mobile-sticky-start-bar" id="mobileStickyStartBar">
+          <div class="mobile-sticky-info">
+            <span class="mobile-sticky-title" id="mobileStickyOperatorName">Operator Assessment</span>
+            <span class="mobile-sticky-sub" id="mobileStickyOperatorId">Select operator or start exam</span>
+          </div>
+          <button type="button" class="btn-front-start mobile-btn" onclick="launchFrontAssessment()" id="btnMobileStickyStart">
+            <span>Start Assessment</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+
       </div>
     </section>
 
@@ -2250,35 +2409,6 @@
     </section>
 
   
-  <!-- Global Application Footer (BUG-17) -->
-  <footer class="app-global-footer" role="contentinfo">
-    <div class="footer-container">
-      <div class="footer-col-left">
-        <div class="footer-brand-title">Yokohama • ATC Tires — ILUO Skill Assessment &amp; Analytics Portal</div>
-        <div class="footer-subtext">Plant Competency &amp; Verification System • ISO/IATF 16949 Automotive Quality Compliant</div>
-      </div>
-      <div class="footer-col-center">
-        <div class="footer-meta-item">
-          <span class="meta-label">Active Shift:</span>
-          <span class="meta-val shift-pill" id="footerActiveShift">Shift 2 (14:00 - 22:00)</span>
-        </div>
-        <div class="footer-meta-item">
-          <span class="meta-label">Data Sync:</span>
-          <span class="meta-val tabular-nums" id="footerLastSyncTime">Today, 15:45 IST</span>
-        </div>
-      </div>
-      <div class="footer-col-right">
-        <div class="footer-meta-item">
-          <span class="meta-label">System Build:</span>
-          <span class="meta-val">v58.1-enterprise</span>
-        </div>
-        <div class="footer-support-link">
-          Support: <a href="mailto:it-quality@atctires.com">Yokohama Quality &amp; IT Cell</a>
-        </div>
-      </div>
-    </div>
-  </footer>
-
   </main>
 
   <!-- ILUO Definitions & SOP Modal (ui.pptx) -->

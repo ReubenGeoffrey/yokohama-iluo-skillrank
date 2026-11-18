@@ -13,20 +13,10 @@ from docx.oxml.ns import nsdecls
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-QC_DIR = os.path.join(BASE_DIR, "QC question")
-if not os.path.exists(QC_DIR):
-    alt_qc = r"C:\Users\ReubenG\Downloads\ILUO MCQ TO Excel sheet\QC question"
-    if os.path.exists(alt_qc):
-        QC_DIR = alt_qc
-
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+QC_DIR = os.path.join(BASE_DIR, "QC_templates")
 DATA_JS = os.path.join(BASE_DIR, "data.js")
 LOGO_PATH = os.path.join(BASE_DIR, "yokohama_logo.png")
-if not os.path.exists(LOGO_PATH):
-    alt_logo = r"C:\Users\ReubenG\Downloads\ILUO MCQ TO Excel sheet\yokohama_logo.png"
-    if os.path.exists(alt_logo):
-        LOGO_PATH = alt_logo
-
 OJT_JSON = os.path.join(BASE_DIR, "ojt_evaluations.json")
 RECORDS_JSON = os.path.join(BASE_DIR, "assessment_records.json")
 OUTPUT_DIR = os.path.join(BASE_DIR, "output_docx")

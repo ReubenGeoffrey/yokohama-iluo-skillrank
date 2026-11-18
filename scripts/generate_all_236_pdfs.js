@@ -1,10 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
-const app = require('./server.js');
+const projectRoot = path.resolve(__dirname, '..');
+const app = require(path.join(projectRoot, 'server.js'));
 
 async function main() {
-  const empsFile = path.join(__dirname, 'custom_employees.json');
+  const empsFile = path.join(projectRoot, 'custom_employees.json');
   if (!fs.existsSync(empsFile)) {
     console.error('custom_employees.json not found');
     process.exit(1);
@@ -13,8 +14,8 @@ async function main() {
   const emps = JSON.parse(fs.readFileSync(empsFile, 'utf-8'));
   console.log(`Found ${emps.length} employees to generate.`);
 
-  const tempDocxDir = path.join(__dirname, 'temp_all_docx');
-  const targetPdfDir = path.join(__dirname, 'pdf_reports');
+  const tempDocxDir = path.join(projectRoot, 'temp_all_docx');
+  const targetPdfDir = path.join(projectRoot, 'pdf_reports');
 
   if (!fs.existsSync(tempDocxDir)) fs.mkdirSync(tempDocxDir, { recursive: true });
   if (!fs.existsSync(targetPdfDir)) fs.mkdirSync(targetPdfDir, { recursive: true });

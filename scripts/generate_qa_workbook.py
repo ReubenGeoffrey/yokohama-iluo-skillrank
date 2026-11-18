@@ -11,8 +11,10 @@ TEMPLATE_PATH = r'D:\Output like same\1. PRODUCTION SKILL ASSESSMENT DATA 30.06.
 OUTPUT_QA_PATH = r'D:\Output like same\1. QA SKILL ASSESSMENT DATA 30.06.2026.xlsx'
 DOWNLOADS_QA_PATH = r'C:\Users\ReubenG\Downloads\1. QA SKILL ASSESSMENT DATA 30.06.2026.xlsx'
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # Load employees from data.js
-with open('data.js', encoding='utf-8') as f:
+with open(os.path.join(BASE_DIR, 'data.js'), encoding='utf-8') as f:
     txt = f.read()
 
 m = re.search(r'const EMPLOYEES = (\[.*?\]);', txt, re.DOTALL)
@@ -20,18 +22,21 @@ employees = json.loads(m.group(1))
 
 # Load assessment records
 records = {}
-if os.path.exists('assessment_records_backup_236.json'):
-    with open('assessment_records_backup_236.json', encoding='utf-8') as f:
+rec_backup = os.path.join(BASE_DIR, 'assessment_records_backup_236.json')
+if os.path.exists(rec_backup):
+    with open(rec_backup, encoding='utf-8') as f:
         records.update(json.load(f))
-if os.path.exists('assessment_records.json'):
-    with open('assessment_records.json', encoding='utf-8') as f:
+rec_primary = os.path.join(BASE_DIR, 'assessment_records.json')
+if os.path.exists(rec_primary):
+    with open(rec_primary, encoding='utf-8') as f:
         records.update(json.load(f))
 
 # Load OJT evaluations
 ojt_records = {}
-if os.path.exists('ojt_evaluations.json'):
+ojt_path = os.path.join(BASE_DIR, 'ojt_evaluations.json')
+if os.path.exists(ojt_path):
     try:
-        with open('ojt_evaluations.json', encoding='utf-8') as f:
+        with open(ojt_path, encoding='utf-8') as f:
             ojt_records = json.load(f)
     except Exception:
         ojt_records = {}

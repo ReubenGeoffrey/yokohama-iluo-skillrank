@@ -18,7 +18,9 @@ wb = openpyxl.load_workbook(BACKUP_SOURCE, data_only=False)
 # -------------------------------------------------------------
 # 1. LOAD QA EMPLOYEES & SCORES
 # -------------------------------------------------------------
-with open('data.js', encoding='utf-8') as f:
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+data_js_path = os.path.join(BASE_DIR, 'data.js')
+with open(data_js_path, encoding='utf-8') as f:
     txt = f.read()
 
 m = re.search(r'const EMPLOYEES = (\[.*?\]);', txt, re.DOTALL)
@@ -26,11 +28,13 @@ employees = json.loads(m.group(1))
 print(f'Loaded {len(employees)} QA employees from data.js')
 
 records = {}
-if os.path.exists('assessment_records_backup_236.json'):
-    with open('assessment_records_backup_236.json', encoding='utf-8') as f:
+rec_backup = os.path.join(BASE_DIR, 'assessment_records_backup_236.json')
+if os.path.exists(rec_backup):
+    with open(rec_backup, encoding='utf-8') as f:
         records.update(json.load(f))
-if os.path.exists('assessment_records.json'):
-    with open('assessment_records.json', encoding='utf-8') as f:
+rec_primary = os.path.join(BASE_DIR, 'assessment_records.json')
+if os.path.exists(rec_primary):
+    with open(rec_primary, encoding='utf-8') as f:
         records.update(json.load(f))
 print(f'Loaded assessment records: {len(records)}')
 

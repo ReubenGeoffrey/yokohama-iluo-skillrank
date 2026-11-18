@@ -549,6 +549,7 @@ const ALLOWED_STATIC_FILES = new Set([
   '/management/',
   '/app.js',
   '/styles.css',
+  '/public_operators.js',
   '/ojt_templates_data.js',
   '/docx_generator.js',
   '/report_html_generator.js',
@@ -830,6 +831,40 @@ app.get('/api/download-master-excel', requireAdminAuth, async (req, res) => {
   } catch (e) {}
 
   return res.status(404).json({ success: false, message: 'Master Excel file not found on server' });
+});
+
+// Explicit public_operators script handler
+app.get('/public_operators.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.sendFile(path.join(__dirname, 'public_operators.js'));
+});
+
+// Public operator search and directory endpoint for front-page autocomplete
+app.get('/api/public/operators', (req, res) => {
+  try {
+    const q = (req.query.q || '').trim().toLowerCase();
+    const publicOperatorsPath = path.join(__dirname, 'public_operators.js');
+    if (fs.existsSync(publicOperatorsPath)) {
+      const code = fs.readFileSync(publicOperatorsPath, 'utf8');
+      const jsonStart = code.indexOf('[');
+      const jsonEnd = code.lastIndexOf(']');
+      if (jsonStart !== -1 && jsonEnd !== -1) {
+        let operators = JSON.parse(code.substring(jsonStart, jsonEnd + 1));
+        if (q) {
+          operators = operators.filter(o =>
+            (o.empNo && o.empNo.toLowerCase().includes(q)) ||
+            (o.name && o.name.toLowerCase().includes(q)) ||
+            (o.section && o.section.toLowerCase().includes(q))
+          );
+        }
+        return res.json({ success: true, count: operators.length, operators: operators.slice(0, 50) });
+      }
+    }
+    return res.json({ success: true, count: 0, operators: [] });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Failed to query operators' });
+  }
 });
 
 // Explicit OJT Official Templates script handler
@@ -4385,9 +4420,7 @@ async function buildDocxBufferForEmployee(empNo, optionalRecordData) {
   }
 
   const allowedTemplateDirs = [
-    path.resolve(__dirname, 'QC_templates'),
-    path.resolve('D:', 'QC question'),
-    path.resolve(__dirname, 'QC question')
+    path.resolve(__dirname, 'QC_templates')
   ];
 
   let templatePath = null;

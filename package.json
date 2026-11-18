@@ -1,11 +1,12 @@
 {
-  "name": "iluo-mcq-to-excel-sheet",
+  "name": "yokohama-iluo-portal",
   "version": "1.0.0",
-  "description": "",
-  "main": "app.js",
+  "description": "Yokohama ATC Tires ILUO Skill Assessment & Analytics System",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "test": "node --test --test-concurrency=1 tests/*.test.js",
+    "export:pdfs": "node scripts/batch_convert_all_to_pdf.js",
     "build:android": "npx cap sync android",
     "android": "npx cap open android"
   },

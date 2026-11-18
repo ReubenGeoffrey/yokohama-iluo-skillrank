@@ -1,16 +1,17 @@
 const fs = require('fs');
 const path = require('path');
-const app = require('./server.js');
+const projectRoot = path.resolve(__dirname, '..');
+const app = require(path.join(projectRoot, 'server.js'));
 
 async function main() {
-  const outputDir = path.join(__dirname, 'output_pdf');
+  const outputDir = path.join(projectRoot, 'output_pdf');
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
   // Load employees
   let employees = [];
-  const empFile = path.join(__dirname, 'custom_employees.json');
+  const empFile = path.join(projectRoot, 'custom_employees.json');
   if (fs.existsSync(empFile)) {
     try {
       employees = JSON.parse(fs.readFileSync(empFile, 'utf-8'));
