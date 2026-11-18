@@ -2678,9 +2678,10 @@ body {
 }
 
 .portal-title {
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--yoko-slate-primary);
+  letter-spacing: -0.2px;
 }
 
 .portal-desc {

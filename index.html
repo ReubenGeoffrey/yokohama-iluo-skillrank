@@ -65,7 +65,6 @@
         <img src="atg_logo.png" alt="ATC Tires Yokohama ILUO Portal Logo" width="86" height="86" style="border-radius: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); object-fit: contain; background: white; border: 1px solid rgba(0,0,0,0.06);" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline-flex';">
         <span class="brand-logo-fallback" style="display:none; width: 86px; height: 86px; font-size: 28px; border-radius: 20px; margin: 0 auto 16px;" aria-hidden="true">ATG</span>
         <h1 class="landing-hub-title">Yokohama • ATC Tires</h1>
-        <p class="landing-hub-subtitle">ILUO Skill Assessment, OJT Evaluation &amp; Plant Competency Portal</p>
       </div>
 
       <div class="vertical-portal-list" role="navigation" aria-label="Role Access Portals">
@@ -77,74 +76,61 @@
             </div>
             <div class="portal-text-wrap">
               <span class="portal-title">Employee Login</span>
-              <span class="portal-desc">Take scheduled skill exams &amp; view certified level progress</span>
             </div>
           </div>
           <span class="portal-arrow" aria-hidden="true">&rarr;</span>
         </button>
 
-        <!-- 2. Department HOD -->
-        <button class="vertical-portal-card dept-card" onclick="switchRolePortal('department')" type="button" aria-label="Access Department HOD Dashboard">
+        <!-- 2. Department Login -->
+        <button class="vertical-portal-card dept-card" onclick="switchRolePortal('department')" type="button" aria-label="Access Department Login">
           <div class="portal-card-main">
             <div class="portal-svg-wrap">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="21" x2="21" y2="21"/><line x1="6" y1="21" x2="6" y2="9"/><line x1="10" y1="21" x2="10" y2="9"/><line x1="14" y1="21" x2="14" y2="9"/><line x1="18" y1="21" x2="18" y2="9"/><polygon points="12 3 2 9 22 9 12 3"/></svg>
             </div>
             <div class="portal-text-wrap">
-              <span class="portal-title">Department</span>
-              <span class="portal-desc">Executive HOD dashboard, plant matrix &amp; section metrics</span>
+              <span class="portal-title">Department Login</span>
             </div>
           </div>
           <span class="portal-arrow" aria-hidden="true">&rarr;</span>
         </button>
 
         <!-- 3. HR Login -->
-        <button class="vertical-portal-card admin-card" onclick="switchRolePortal('admin')" type="button" aria-label="Access HR Control Center">
+        <button class="vertical-portal-card admin-card" onclick="switchRolePortal('admin')" type="button" aria-label="Access HR Login">
           <div class="portal-card-main">
             <div class="portal-svg-wrap">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </div>
             <div class="portal-text-wrap">
               <span class="portal-title">HR Login</span>
-              <span class="portal-desc">Manage question banks, master roster, exams &amp; resets</span>
             </div>
           </div>
           <span class="portal-arrow" aria-hidden="true">&rarr;</span>
         </button>
 
         <!-- 4. Section Login -->
-        <button class="vertical-portal-card section-card" onclick="switchRolePortal('section')" type="button" aria-label="Access Section Roster Dashboard">
+        <button class="vertical-portal-card section-card" onclick="switchRolePortal('section')" type="button" aria-label="Access Section Login">
           <div class="portal-card-main">
             <div class="portal-svg-wrap">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="9" y1="22" x2="9" y2="22.01"/><line x1="15" y1="22" x2="15" y2="22.01"/><line x1="9" y1="6" x2="9" y2="6.01"/><line x1="15" y1="6" x2="15" y2="6.01"/><line x1="9" y1="10" x2="9" y2="10.01"/><line x1="15" y1="10" x2="15" y2="10.01"/><line x1="9" y1="14" x2="9" y2="14.01"/><line x1="15" y1="14" x2="15" y2="14.01"/><line x1="9" y1="18" x2="9" y2="18.01"/><line x1="15" y1="18" x2="15" y2="18.01"/></svg>
             </div>
             <div class="portal-text-wrap">
               <span class="portal-title">Section Login</span>
-              <span class="portal-desc">QA &amp; Production section rosters, evaluations &amp; approvals</span>
             </div>
           </div>
           <span class="portal-arrow" aria-hidden="true">&rarr;</span>
         </button>
 
         <!-- 5. Skill Assessment Login -->
-        <button class="vertical-portal-card ojt-card" onclick="switchRolePortal('ojt')" type="button" aria-label="Access Practical OJT Skill Assessment Center">
+        <button class="vertical-portal-card ojt-card" onclick="switchRolePortal('ojt')" type="button" aria-label="Access Skill Assessment Login">
           <div class="portal-card-main">
             <div class="portal-svg-wrap">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><polyline points="9 14 11 16 15 11"/></svg>
             </div>
             <div class="portal-text-wrap">
               <span class="portal-title">Skill Assessment Login</span>
-              <span class="portal-desc">Practical on-the-job rubric evaluations &amp; certifications</span>
             </div>
           </div>
           <span class="portal-arrow" aria-hidden="true">&rarr;</span>
-        </button>
-      </div>
-
-      <!-- Mobile Sticky Start Assessment Bar (360px - 767px) -->
-      <div class="mobile-sticky-start-bar" id="mobileStickyStartBar">
-        <button type="button" class="mobile-sticky-start-btn" onclick="switchRolePortal('employee')" aria-label="Start Skill Assessment">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-          Start Assessment
         </button>
       </div>
     </section>
