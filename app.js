@@ -158,10 +158,8 @@ const STORAGE_KEY_OJT = 'yokohama_ojt_evaluations_v1';
 const STORAGE_KEY_CUSTOM_EMPLOYEES = 'yokohama_custom_employees_v2';
 const STORAGE_KEY_CUSTOM_QUESTIONS = 'yokohama_custom_questions_v1';
 
-// Baseline Data State (Loaded dynamically from authenticated backend APIs or bundled public directory)
-var EMPLOYEES = (typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES) && EMPLOYEES.length > 0)
-  ? EMPLOYEES
-  : (typeof window !== 'undefined' && Array.isArray(window.PUBLIC_OPERATORS) ? [...window.PUBLIC_OPERATORS] : []);
+// Baseline Data State (Loaded dynamically from authenticated backend APIs)
+var EMPLOYEES = typeof EMPLOYEES !== 'undefined' ? EMPLOYEES : [];
 var QUESTION_BANK = typeof QUESTION_BANK !== 'undefined' ? QUESTION_BANK : { L: [], U: [], O: [] };
 var DEFAULT_QUESTION_BANK = typeof DEFAULT_QUESTION_BANK !== 'undefined' ? DEFAULT_QUESTION_BANK : { L: [], U: [], O: [] };
 var LEVEL_RULES = typeof LEVEL_RULES !== 'undefined' ? LEVEL_RULES : {
@@ -401,12 +399,6 @@ function initStorage() {
         localStorage.removeItem(STORAGE_KEY_CUSTOM_EMPLOYEES);
       }
     }
-    if (EMPLOYEES.length === 0 && typeof window !== 'undefined' && Array.isArray(window.PUBLIC_OPERATORS) && window.PUBLIC_OPERATORS.length > 0) {
-      EMPLOYEES.push(...window.PUBLIC_OPERATORS);
-    }
-    if (typeof updateFrontPageKpis === 'function') {
-      updateFrontPageKpis();
-    }
   } catch (e) {}
 
   // Stagger cloud syncs non-blockingly so initial render and tab spinner clear in 0ms
@@ -608,9 +600,6 @@ function handleRoute() {
     showView('viewPublicLanding');
     updateRoleNavHighlight('home');
     updateUserBadge(session && session.name ? session.name : (session && session.role === 'admin' ? 'Administrator' : null));
-    if (typeof updateFrontPageKpis === 'function') {
-      updateFrontPageKpis();
-    }
     return;
   }
 
@@ -700,15 +689,6 @@ function handleRoute() {
       navigateTo('/employee/dashboard');
     } else {
       showView('viewEmpLogin');
-      const prefill = sessionStorage.getItem('iluo_prefill_emp');
-      if (prefill) {
-        const input = document.getElementById('empIdInput');
-        if (input) {
-          input.value = prefill;
-          const pwd = document.getElementById('empPasswordInput');
-          if (pwd) pwd.focus();
-        }
-      }
     }
     return;
   }
@@ -8711,7 +8691,16 @@ function getActivePlantShift() {
 }
 
 function updatePlantShiftAndSyncInfo() {
-  // Footer block cleanly removed per enterprise specification
+  const shift = getActivePlantShift();
+  const shiftEl = document.getElementById('footerActiveShift');
+  if (shiftEl) shiftEl.textContent = shift.name;
+
+  const syncEl = document.getElementById('footerLastSyncTime');
+  if (syncEl) {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    syncEl.textContent = `Today, ${timeStr} IST`;
+  }
 }
 
 // Header Breadcrumbs & Dynamic Active Role Pill (BUG-06)
@@ -9549,257 +9538,3 @@ document.addEventListener('keydown', (e) => {
     });
   }
 });
-
-// --------------------------------------------------------------------------
-// FRONT HUB: OPERATOR SEARCH, SELECTION, KPI HYDRATION & ASSESSMENT LAUNCH
-// --------------------------------------------------------------------------
-let selectedFrontOperator = null;
-
-function handleFrontOperatorSearch(query) {
-  const q = (query || '').trim().toLowerCase();
-  const dropdown = document.getElementById('frontOperatorDropdown');
-  const clearBtn = document.getElementById('btnFrontClearSearch');
-  if (clearBtn) clearBtn.style.display = q ? 'inline-block' : 'none';
-
-  if (!dropdown) return;
-  if (!q) {
-    dropdown.style.display = 'none';
-    dropdown.innerHTML = '';
-    return;
-  }
-
-  const list = (typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES) && EMPLOYEES.length > 0)
-    ? EMPLOYEES
-    : (typeof window !== 'undefined' && Array.isArray(window.PUBLIC_OPERATORS) ? window.PUBLIC_OPERATORS : []);
-
-  if (list.length === 0) {
-    dropdown.innerHTML = '<div style="padding: 12px 16px; color: #64748B; font-size: 0.85rem;">Loading operator directory...</div>';
-    dropdown.style.display = 'block';
-    return;
-  }
-
-  const matches = list.filter(emp => {
-    const nameMatch = emp.name && emp.name.toLowerCase().includes(q);
-    const idMatch = emp.empNo && emp.empNo.toLowerCase().includes(q);
-    const secMatch = emp.section && emp.section.toLowerCase().includes(q);
-    return nameMatch || idMatch || secMatch;
-  }).slice(0, 8);
-
-  if (matches.length === 0) {
-    dropdown.innerHTML = '<div style="padding: 14px 16px; color: #64748B; font-size: 0.88rem; text-align: center;">No matching plant operator found for "<b>' + escapeHtml(q) + '</b>"</div>';
-    dropdown.style.display = 'block';
-    return;
-  }
-
-  dropdown.innerHTML = matches.map(emp => {
-    const lvl = (emp.currentLevel || 'I').toUpperCase();
-    const lvlClass = 'level-' + lvl.toLowerCase();
-    const initials = emp.name ? emp.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'OP';
-    const dept = emp.dept || 'PLANT';
-    const sec = emp.section || 'General';
-    return `
-      <div class="front-dropdown-item" role="option" onclick="selectFrontOperator('${escapeHtml(emp.empNo)}')">
-        <div class="dropdown-item-left">
-          <div class="dropdown-avatar">${escapeHtml(initials)}</div>
-          <div class="dropdown-info">
-            <div class="dropdown-name-row">
-              <span class="dropdown-emp-name">${escapeHtml(emp.name)}</span>
-              <span class="dropdown-emp-id tabular-nums">${escapeHtml(emp.empNo)}</span>
-            </div>
-            <div class="dropdown-emp-sub">${escapeHtml(dept)} &bull; ${escapeHtml(sec)}</div>
-          </div>
-        </div>
-        <span class="badge-iluo ${lvlClass}">Level ${escapeHtml(lvl)}</span>
-      </div>
-    `;
-  }).join('');
-
-  dropdown.style.display = 'block';
-}
-
-function selectFrontOperator(empNo) {
-  const list = (typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES) && EMPLOYEES.length > 0)
-    ? EMPLOYEES
-    : (typeof window !== 'undefined' && Array.isArray(window.PUBLIC_OPERATORS) ? window.PUBLIC_OPERATORS : []);
-
-  const emp = list.find(e => String(e.empNo).toUpperCase() === String(empNo).toUpperCase());
-  if (!emp) return;
-
-  selectedFrontOperator = emp;
-  sessionStorage.setItem('iluo_selected_emp', emp.empNo);
-  sessionStorage.setItem('iluo_prefill_emp', emp.empNo);
-
-  const searchInput = document.getElementById('frontOperatorSearch');
-  if (searchInput) searchInput.value = `${emp.name} (${emp.empNo})`;
-
-  const dropdown = document.getElementById('frontOperatorDropdown');
-  if (dropdown) dropdown.style.display = 'none';
-
-  const clearBtn = document.getElementById('btnFrontClearSearch');
-  if (clearBtn) clearBtn.style.display = 'inline-block';
-
-  // Populate preview card
-  const previewCard = document.getElementById('frontSelectedOperatorCard');
-  const defaultWrap = document.getElementById('frontDefaultActionWrap');
-  if (previewCard) {
-    const initials = emp.name ? emp.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'OP';
-    const avatarEl = document.getElementById('frontSelectedAvatar');
-    if (avatarEl) avatarEl.textContent = initials;
-
-    const nameEl = document.getElementById('frontSelectedName');
-    if (nameEl) nameEl.textContent = emp.name;
-
-    const idEl = document.getElementById('frontSelectedEmpNo');
-    if (idEl) idEl.textContent = emp.empNo;
-
-    const lvl = (emp.currentLevel || 'I').toUpperCase();
-    const lvlEl = document.getElementById('frontSelectedLevelBadge');
-    if (lvlEl) {
-      lvlEl.textContent = 'Level ' + lvl;
-      lvlEl.className = 'badge-iluo level-' + lvl.toLowerCase();
-    }
-
-    const deptEl = document.getElementById('frontSelectedDept');
-    if (deptEl) deptEl.textContent = emp.dept || 'PRODUCTION';
-
-    const secEl = document.getElementById('frontSelectedSection');
-    if (secEl) secEl.textContent = emp.section || 'General';
-
-    const expEl = document.getElementById('frontSelectedExp');
-    if (expEl) expEl.textContent = emp.yearExp || emp.qualification || 'Plant Associate';
-
-    previewCard.style.display = 'flex';
-  }
-  if (defaultWrap) defaultWrap.style.display = 'none';
-
-  // Update mobile sticky bar
-  const stickyName = document.getElementById('mobileStickyOperatorName');
-  if (stickyName) stickyName.textContent = emp.name;
-  const stickyId = document.getElementById('mobileStickyOperatorId');
-  if (stickyId) stickyId.textContent = `${emp.empNo} • Level ${emp.currentLevel || 'I'}`;
-}
-
-function clearFrontOperatorSearch() {
-  selectedFrontOperator = null;
-  sessionStorage.removeItem('iluo_selected_emp');
-  sessionStorage.removeItem('iluo_prefill_emp');
-
-  const searchInput = document.getElementById('frontOperatorSearch');
-  if (searchInput) {
-    searchInput.value = '';
-    searchInput.focus();
-  }
-
-  const dropdown = document.getElementById('frontOperatorDropdown');
-  if (dropdown) dropdown.style.display = 'none';
-
-  const clearBtn = document.getElementById('btnFrontClearSearch');
-  if (clearBtn) clearBtn.style.display = 'none';
-
-  const previewCard = document.getElementById('frontSelectedOperatorCard');
-  if (previewCard) previewCard.style.display = 'none';
-
-  const defaultWrap = document.getElementById('frontDefaultActionWrap');
-  if (defaultWrap) defaultWrap.style.display = 'block';
-
-  const stickyName = document.getElementById('mobileStickyOperatorName');
-  if (stickyName) stickyName.textContent = 'Operator Assessment';
-  const stickyId = document.getElementById('mobileStickyOperatorId');
-  if (stickyId) stickyId.textContent = 'Select operator or start exam';
-}
-
-function launchFrontAssessment() {
-  const searchInput = document.getElementById('frontOperatorSearch');
-  let targetEmp = selectedFrontOperator ? selectedFrontOperator.empNo : null;
-  if (!targetEmp && searchInput && searchInput.value.trim()) {
-    const raw = searchInput.value.trim();
-    const match = raw.match(/\(([^)]+)\)$/);
-    targetEmp = match ? match[1].trim() : raw;
-  }
-  if (targetEmp) {
-    sessionStorage.setItem('iluo_prefill_emp', targetEmp);
-  }
-  navigateTo('/employee');
-}
-
-function updateFrontPageKpis() {
-  const list = (typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES) && EMPLOYEES.length > 0)
-    ? EMPLOYEES
-    : (typeof window !== 'undefined' && Array.isArray(window.PUBLIC_OPERATORS) ? window.PUBLIC_OPERATORS : []);
-
-  const total = list.length > 0 ? list.length : 1462;
-
-  // Level U & O High Skill
-  let highSkillCount = 0;
-  if (list.length > 0) {
-    list.forEach(e => {
-      const lvl = (e.currentLevel || 'I').toUpperCase();
-      if (lvl === 'U' || lvl === 'O') highSkillCount++;
-    });
-  } else {
-    highSkillCount = 1193;
-  }
-  const highSkillPct = ((highSkillCount / total) * 100).toFixed(1);
-
-  // MCQ Certified
-  let mcqPassCount = 0;
-  try {
-    const recStr = localStorage.getItem(STORAGE_KEY_RECORDS);
-    if (recStr) {
-      const recs = JSON.parse(recStr);
-      Object.keys(recs).forEach(k => {
-        const r = recs[k];
-        if (r && (r.isCompleted || r.scorePct !== undefined)) {
-          const score = typeof r.scorePct === 'number' ? r.scorePct : (r.score || 0);
-          if (score >= 70) mcqPassCount++;
-        }
-      });
-    }
-  } catch(e) {}
-  const mcqDisplayCount = mcqPassCount > 0 ? mcqPassCount : 894;
-  const mcqDisplayPct = ((mcqDisplayCount / total) * 100).toFixed(1);
-
-  // OJT Qualified
-  let ojtQualifiedCount = 0;
-  try {
-    const ojtStr = localStorage.getItem(STORAGE_KEY_OJT);
-    if (ojtStr) {
-      const ojt = JSON.parse(ojtStr);
-      Object.keys(ojt).forEach(k => {
-        const ev = ojt[k];
-        if (ev && (ev.totalPct >= 70 || ev.qualified)) ojtQualifiedCount++;
-      });
-    }
-  } catch(e) {}
-  const ojtDisplayCount = ojtQualifiedCount > 0 ? ojtQualifiedCount : 742;
-  const ojtDisplayPct = ((ojtDisplayCount / total) * 100).toFixed(1);
-
-  const elHeadcount = document.getElementById('frontKpiTotalHeadcount');
-  if (elHeadcount) elHeadcount.textContent = total.toLocaleString();
-
-  const elMcq = document.getElementById('frontKpiMcqPass');
-  if (elMcq) elMcq.innerHTML = `${mcqDisplayCount.toLocaleString()} <span class="front-kpi-pct">(${mcqDisplayPct}%)</span>`;
-
-  const elOjt = document.getElementById('frontKpiOjtQualified');
-  if (elOjt) elOjt.innerHTML = `${ojtDisplayCount.toLocaleString()} <span class="front-kpi-pct">(${ojtDisplayPct}%)</span>`;
-
-  const elHighSkill = document.getElementById('frontKpiHighSkill');
-  if (elHighSkill) elHighSkill.innerHTML = `${highSkillCount.toLocaleString()} <span class="front-kpi-pct">(${highSkillPct}%)</span>`;
-}
-
-// Global click-outside listener to dismiss operator search dropdown
-document.addEventListener('click', (e) => {
-  const container = document.querySelector('.front-search-container');
-  const dropdown = document.getElementById('frontOperatorDropdown');
-  if (dropdown && container && !container.contains(e.target)) {
-    dropdown.style.display = 'none';
-  }
-});
-
-if (typeof window !== 'undefined') {
-  window.handleFrontOperatorSearch = handleFrontOperatorSearch;
-  window.selectFrontOperator = selectFrontOperator;
-  window.clearFrontOperatorSearch = clearFrontOperatorSearch;
-  window.launchFrontAssessment = launchFrontAssessment;
-  window.updateFrontPageKpis = updateFrontPageKpis;
-}
