@@ -190,15 +190,59 @@ let currentActiveSectionKey = 'warehouse';
 let currentActiveSectionTab = 'employees';
 
 const QA_SECTIONS_LIST = [
-  { id: 'warehouse', name: 'Warehouse QA', normName: 'warehouse qa', code: 'WH', title: 'Warehouse QA' },
-  { id: 'final_finish', name: 'Final Finish QA', normName: 'final finish qa', code: 'FF', title: 'Final Finish QA' },
-  { id: 'tire_building', name: 'Tire Building QA', normName: 'tire building qa', code: 'TB', title: 'Tire Building QA' },
-  { id: 'tire_curing', name: 'Tire Curing QA', normName: 'tire curing qa', code: 'TC', title: 'Tire Curing QA' },
-  { id: 'solid_tire', name: 'Solid Tire QA', normName: 'solid tire qa', code: 'ST', title: 'Solid Tire QA' },
-  { id: 'rro_alt', name: 'Final Finish RRO & ALT QA', normName: 'final finish rro & alt qa', code: 'RA', title: 'Final Finish RRO & ALT QA' },
-  { id: 'preparatory', name: 'Preparatory QA', normName: 'preparatory qa', code: 'PR', title: 'Preparatory QA' },
-  { id: 'fid_inspector', name: 'FID Inspector QA', normName: 'fid inspector qa', code: 'FD', title: 'FID Inspector QA' }
+  { id: 'warehouse', name: 'Warehouse QA', normName: 'warehouse qa', code: 'WH', title: 'Warehouse QA', dept: 'QUALITY CONTROL' },
+  { id: 'final_finish', name: 'Final Finish QA', normName: 'final finish qa', code: 'FF', title: 'Final Finish QA', dept: 'QUALITY CONTROL' },
+  { id: 'tire_building', name: 'Tire Building QA', normName: 'tire building qa', code: 'TB', title: 'Tire Building QA', dept: 'QUALITY CONTROL' },
+  { id: 'tire_curing', name: 'Tire Curing QA', normName: 'tire curing qa', code: 'TC', title: 'Tire Curing QA', dept: 'QUALITY CONTROL' },
+  { id: 'solid_tire', name: 'Solid Tire QA', normName: 'solid tire qa', code: 'ST', title: 'Solid Tire QA', dept: 'QUALITY CONTROL' },
+  { id: 'rro_alt', name: 'Final Finish RRO & ALT QA', normName: 'final finish rro & alt qa', code: 'RA', title: 'Final Finish RRO & ALT QA', dept: 'QUALITY CONTROL' },
+  { id: 'preparatory', name: 'Preparatory QA', normName: 'preparatory qa', code: 'PR', title: 'Preparatory QA', dept: 'QUALITY CONTROL' },
+  { id: 'fid_inspector', name: 'FID Inspector QA', normName: 'fid inspector qa', code: 'FD', title: 'FID Inspector QA', dept: 'QUALITY CONTROL' }
 ];
+
+const PROD_SECTIONS_LIST = [
+  { id: 'prod_mixing', name: 'MIXING', normName: 'mixing', code: 'PR-MIX', title: 'Mixing', dept: 'PRODUCTION' },
+  { id: 'prod_4roll', name: '4 ROLL', normName: '4 roll', code: 'PR-4ROLL', title: '4 Roll Calender', dept: 'PRODUCTION' },
+  { id: 'prod_3roll_p2', name: '3 ROLL-P2', normName: '3 roll-p2', code: 'PR-3ROLL', title: '3 Roll Calender P2', dept: 'PRODUCTION' },
+  { id: 'prod_extruder', name: 'EXTRUDER', normName: 'extruder', code: 'PR-EXT', title: 'Extruder', dept: 'PRODUCTION' },
+  { id: 'prod_bead_winding', name: 'BEAD WINDING', normName: 'bead winding', code: 'PR-BEAD', title: 'Bead Winding', dept: 'PRODUCTION' },
+  { id: 'prod_steelastic', name: 'STEELASTIC', normName: 'steelastic', code: 'PR-STEL', title: 'Steelastic', dept: 'PRODUCTION' },
+  { id: 'prod_tyre_building_p1', name: 'TYRE BUILDING-P1', normName: 'tyre building-p1', code: 'PR-TB1', title: 'Tyre Building P1', dept: 'PRODUCTION' },
+  { id: 'prod_tyre_building_p2', name: 'TYRE BUILDING-P2', normName: 'tyre building-p2', code: 'PR-TB2', title: 'Tyre Building P2', dept: 'PRODUCTION' },
+  { id: 'prod_tyre_building_p3', name: 'TYRE BUILDING-P3', normName: 'tyre building-p3', code: 'PR-TB3', title: 'Tyre Building P3', dept: 'PRODUCTION' },
+  { id: 'prod_band_building_p1', name: 'BAND BUILDING-P1', normName: 'band building-p1', code: 'PR-BB1', title: 'Band Building P1', dept: 'PRODUCTION' },
+  { id: 'prod_band_building_p2', name: 'BAND BUILDING-P2', normName: 'band building-p2', code: 'PR-BB2', title: 'Band Building P2', dept: 'PRODUCTION' },
+  { id: 'prod_band_building_p3', name: 'BAND BUILDING-P3', normName: 'band building-p3', code: 'PR-BB3', title: 'Band Building P3', dept: 'PRODUCTION' },
+  { id: 'prod_bias_cutting_1', name: 'BIAS CUTTING-1', normName: 'bias cutting-1', code: 'PR-BIAS1', title: 'Bias Cutting 1', dept: 'PRODUCTION' },
+  { id: 'prod_bias_cutting_2', name: 'BIAS CUTTING-2', normName: 'bias cutting-2', code: 'PR-BIAS2', title: 'Bias Cutting 2', dept: 'PRODUCTION' },
+  { id: 'prod_bias_cutting_4', name: 'BIAS CUTTING-4', normName: 'bias cutting-4', code: 'PR-BIAS4', title: 'Bias Cutting 4', dept: 'PRODUCTION' },
+  { id: 'prod_bias_cutting_5', name: 'BIAS CUTTING-5', normName: 'bias cutting-5', code: 'PR-BIAS5', title: 'Bias Cutting 5', dept: 'PRODUCTION' },
+  { id: 'prod_auto_biascutter', name: 'AUTO BIASCUTTER', normName: 'auto biascutter', code: 'PR-AUTOB', title: 'Auto Bias Cutter', dept: 'PRODUCTION' },
+  { id: 'prod_slitting', name: 'SLITTING', normName: 'slitting', code: 'PR-SLIT', title: 'Slitting', dept: 'PRODUCTION' },
+  { id: 'prod_liner_dressing', name: 'LINER DRESSING', normName: 'liner dressing', code: 'PR-LINE', title: 'Liner Dressing', dept: 'PRODUCTION' },
+  { id: 'prod_salvage', name: 'SALVAGE', normName: 'salvage', code: 'PR-SALV', title: 'Salvage', dept: 'PRODUCTION' },
+  { id: 'prod_radial_marangoni', name: 'RADIAL MARANGONI', normName: 'radial marangoni', code: 'PR-RADM', title: 'Radial Marangoni', dept: 'PRODUCTION' },
+  { id: 'prod_bias_marangoni', name: 'BIAS MARANGONI&BESTRY', normName: 'bias marangoni&bestry', code: 'PR-BIASM', title: 'Bias Marangoni & Bestry', dept: 'PRODUCTION' },
+  { id: 'prod_yanthai', name: 'YANTHAI', normName: 'yanthai', code: 'PR-YAN', title: 'Yanthai', dept: 'PRODUCTION' },
+  { id: 'prod_solid_tyre', name: 'SOLID TYRE', normName: 'solid tyre', code: 'PR-ST', title: 'Solid Tyre Production', dept: 'PRODUCTION' },
+  { id: 'prod_tyre_curing', name: 'TYRE CURING', normName: 'tyre curing', code: 'PR-TC', title: 'Tyre Curing Production', dept: 'PRODUCTION' }
+];
+
+const ALL_PLANT_SECTIONS_LIST = [
+  ...QA_SECTIONS_LIST,
+  ...PROD_SECTIONS_LIST
+];
+
+function getSectionObj(secIdOrName) {
+  if (!secIdOrName) return PROD_SECTIONS_LIST[0];
+  const q = String(secIdOrName).toLowerCase().trim();
+  const direct = ALL_PLANT_SECTIONS_LIST.find(s => s.id === secIdOrName || s.normName === q || s.name.toLowerCase() === q || s.title.toLowerCase() === q);
+  if (direct) return direct;
+  const norm = typeof normalizeSectionName === 'function' ? normalizeSectionName(secIdOrName) : q;
+  const match = ALL_PLANT_SECTIONS_LIST.find(s => s.normName === norm);
+  if (match) return match;
+  return { id: secIdOrName, name: secIdOrName, normName: norm, code: 'SEC', title: secIdOrName, dept: 'PRODUCTION' };
+}
 
 // Initialize App & Router
 document.addEventListener('DOMContentLoaded', () => {
@@ -709,7 +753,7 @@ function handleRoute() {
     }
     updateUserBadge(session.name || 'Administrator', session.roleClaim || 'hr_admin');
     
-    let sub = hash.replace(/^/(control-center|secure-control|hr)/?/, '').trim();
+    let sub = hash.replace(/^\/(control-center|secure-control|hr)\/?/, '').trim();
     if (!sub) sub = 'dashboard';
     showControlCenterSubView(sub);
     return;
@@ -2069,18 +2113,219 @@ function renderAdminDashboard() {
 
   renderPieChart(completedCount, inProgressCount, notStartedCount);
   renderBarChart(records);
+  renderDashboardDeptRollup(records, allOjt);
   renderDashboardSectionMatrix(records, allOjt);
   renderSectionPieChart();
   renderCategoryPerformanceBarChart();
 }
 
-function renderDashboardSectionMatrix(records, allOjt) {
+let currentDashboardDeptTracker = 'PRODUCTION'; // 'PRODUCTION' | 'QUALITY CONTROL' | 'ALL'
+let currentDashboardSecSearchQuery = '';
+
+function setDashboardDeptTracker(dept) {
+  currentDashboardDeptTracker = dept || 'PRODUCTION';
+  
+  // Update toggle buttons
+  const btnProd = document.getElementById('btnDeptTrackerProd');
+  const btnQa = document.getElementById('btnDeptTrackerQa');
+  const btnAll = document.getElementById('btnDeptTrackerAll');
+  
+  if (btnProd) {
+    btnProd.classList.toggle('active', currentDashboardDeptTracker === 'PRODUCTION');
+    btnProd.setAttribute('aria-pressed', currentDashboardDeptTracker === 'PRODUCTION');
+  }
+  if (btnQa) {
+    btnQa.classList.toggle('active', currentDashboardDeptTracker === 'QUALITY CONTROL');
+    btnQa.setAttribute('aria-pressed', currentDashboardDeptTracker === 'QUALITY CONTROL');
+  }
+  if (btnAll) {
+    btnAll.classList.toggle('active', currentDashboardDeptTracker === 'ALL');
+    btnAll.setAttribute('aria-pressed', currentDashboardDeptTracker === 'ALL');
+  }
+
+  const records = (typeof getStoredRecords === 'function') ? getStoredRecords() : {};
+  const allOjt = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
+
+  renderDashboardDeptRollup(records, allOjt);
+  renderDashboardSectionMatrix(records, allOjt, currentDashboardSecSearchQuery);
+}
+window.setDashboardDeptTracker = setDashboardDeptTracker;
+
+function handleDashboardSecSearch(query) {
+  currentDashboardSecSearchQuery = (query || '').toLowerCase().trim();
+  const records = (typeof getStoredRecords === 'function') ? getStoredRecords() : {};
+  const allOjt = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
+  renderDashboardSectionMatrix(records, allOjt, currentDashboardSecSearchQuery);
+}
+window.handleDashboardSecSearch = handleDashboardSecSearch;
+
+function renderDashboardDeptRollup(records, allOjt) {
+  const container = document.getElementById('deptTrackerRollupCard');
+  if (!container) return;
+
+  const allEmployees = (typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES)) ? EMPLOYEES : [];
+  records = records || ((typeof getStoredRecords === 'function') ? getStoredRecords() : {});
+  allOjt = allOjt || ((typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {});
+
+  let deptEmps = [];
+  let deptTitle = 'Production Department';
+  let deptBadge = '25 Sections &bull; 1,179 Associates';
+  let deptColor = '#6D28D9';
+
+  if (currentDashboardDeptTracker === 'PRODUCTION') {
+    deptEmps = allEmployees.filter(e => (e.dept || '').toUpperCase().includes('PROD'));
+    deptTitle = 'Production Department';
+    deptBadge = '25 Manufacturing Sections &bull; 1,179 Associates';
+    deptColor = '#6D28D9';
+  } else if (currentDashboardDeptTracker === 'QUALITY CONTROL') {
+    deptEmps = allEmployees.filter(e => (e.dept || '').toUpperCase().includes('QUAL'));
+    deptTitle = 'Quality Control Department';
+    deptBadge = '8 QA Sections &bull; 283 Associates';
+    deptColor = '#005B9E';
+  } else {
+    deptEmps = allEmployees;
+    deptTitle = 'All Plant Departments';
+    deptBadge = '33 Total Plant Sections &bull; 1,462 Associates';
+    deptColor = '#0F172A';
+  }
+
+  const total = deptEmps.length;
+  let examDone = 0;
+  let ojtDone = 0;
+  let bothDone = 0;
+  let countI = 0, countL = 0, countU = 0, countO = 0;
+
+  deptEmps.forEach(e => {
+    const rec = records[e.empNo];
+    const ojt = allOjt[e.empNo];
+    const hasExam = rec && rec.isCompleted;
+    const hasOjt = ojt && (ojt.totalScore !== undefined || ojt.scorePct !== undefined);
+
+    if (hasExam) examDone++;
+    if (hasOjt) ojtDone++;
+    if (hasExam && hasOjt) bothDone++;
+
+    const lvl = (e.currentLevel || 'I').toUpperCase();
+    if (lvl === 'I') countI++;
+    else if (lvl === 'L') countL++;
+    else if (lvl === 'U') countU++;
+    else if (lvl === 'O') countO++;
+  });
+
+  const examPct = total > 0 ? Math.round((examDone / total) * 100) : 0;
+  const ojtPct = total > 0 ? Math.round((ojtDone / total) * 100) : 0;
+  const bothPct = total > 0 ? Math.round((bothDone / total) * 100) : 0;
+
+  container.innerHTML = `
+    <div style="border-right: 1px solid #E2E8F0; padding-right: 16px;">
+      <div style="font-size: 0.72rem; font-weight: 800; color: ${deptColor}; text-transform: uppercase; letter-spacing: 0.5px;">Active Executive Scope</div>
+      <div style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin: 2px 0;">${deptTitle}</div>
+      <div style="font-size: 0.78rem; color: #64748B;">${deptBadge}</div>
+    </div>
+
+    <div>
+      <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Total Associates</div>
+      <div style="font-size: 1.35rem; font-weight: 800; color: #0F172A; font-variant-numeric: tabular-nums;">${total.toLocaleString()}</div>
+      <div style="font-size: 0.75rem; color: #059669; font-weight: 600;">100% Plant Rostered</div>
+    </div>
+
+    <div>
+      <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Exam Certified</div>
+      <div style="font-size: 1.35rem; font-weight: 800; color: #0284C7; font-variant-numeric: tabular-nums;">${examDone} <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">(${examPct}%)</span></div>
+      <div style="font-size: 0.75rem; color: #64748B;">MCQ Knowledge Tests</div>
+    </div>
+
+    <div>
+      <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Skill Assessment (OJT)</div>
+      <div style="font-size: 1.35rem; font-weight: 800; color: #059669; font-variant-numeric: tabular-nums;">${ojtDone} <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">(${ojtPct}%)</span></div>
+      <div style="font-size: 0.75rem; color: #64748B;">Practical Shop-Floor Rubric</div>
+    </div>
+
+    <div>
+      <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Both Qualified</div>
+      <div style="font-size: 1.35rem; font-weight: 800; color: #7C3AED; font-variant-numeric: tabular-nums;">${bothDone} <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">(${bothPct}%)</span></div>
+      <div style="font-size: 0.75rem; color: #64748B;">Fully Certified ILUO</div>
+    </div>
+
+    <div style="border-left: 1px solid #E2E8F0; padding-left: 16px;">
+      <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 6px;">Competency Mix</div>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        <span class="iluo-badge iluo-badge-i" style="font-size: 0.75rem; padding: 2px 7px;" title="Level I (Beginner/Induction)">I: ${countI}</span>
+        <span class="iluo-badge iluo-badge-l" style="font-size: 0.75rem; padding: 2px 7px;" title="Level L (Learner)">L: ${countL}</span>
+        <span class="iluo-badge iluo-badge-u" style="font-size: 0.75rem; padding: 2px 7px;" title="Level U (Executor)">U: ${countU}</span>
+        <span class="iluo-badge iluo-badge-o" style="font-size: 0.75rem; padding: 2px 7px;" title="Level O (Expert)">O: ${countO}</span>
+      </div>
+    </div>
+  `;
+}
+window.renderDashboardDeptRollup = renderDashboardDeptRollup;
+
+function renderDashboardSectionMatrix(records, allOjt, filterText = '') {
   const tbody = document.getElementById('dashboardSectionTableBody');
   if (!tbody) return;
   tbody.innerHTML = '';
 
-  QA_SECTIONS_LIST.forEach((sec, idx) => {
-    const emps = EMPLOYEES.filter(e => normalizeSectionName(e.section) === sec.normName);
+  records = records || ((typeof getStoredRecords === 'function') ? getStoredRecords() : {});
+  allOjt = allOjt || ((typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {});
+
+  // Determine sections based on active department tracker
+  let targetSections = [];
+  let headerTitle = 'Production Section-Wise Completion Tracker';
+  let headerSub = 'Real-time associate breakdown of MCQ Assessment and Skill Assessment completion across all 25 Production sections';
+  let badgeText = '25 Production Sections';
+
+  if (currentDashboardDeptTracker === 'PRODUCTION') {
+    targetSections = PROD_SECTIONS_LIST;
+    headerTitle = 'Production Section-Wise Completion Tracker';
+    headerSub = 'Real-time associate breakdown of MCQ Assessment and Skill Assessment completion across all 25 Production sections (1,179 Associates)';
+    badgeText = '25 Production Sections';
+  } else if (currentDashboardDeptTracker === 'QUALITY CONTROL') {
+    targetSections = QA_SECTIONS_LIST;
+    headerTitle = 'QA Section-Wise Completion Tracker';
+    headerSub = 'Real-time employee breakdown of MCQ Assessment and Skill Assessment completion across all 8 QA sections (283 Associates)';
+    badgeText = '8 QA Sections';
+  } else {
+    targetSections = ALL_PLANT_SECTIONS_LIST;
+    headerTitle = 'Plant-Wide Section Completion Tracker';
+    headerSub = 'Comprehensive completion breakdown across all 33 manufacturing & QA sections (1,462 Associates)';
+    badgeText = '33 Total Sections';
+  }
+
+  // Update header text in DOM
+  const titleEl = document.getElementById('dashboardSectionTrackerTitle');
+  if (titleEl) titleEl.innerText = headerTitle;
+  const subEl = document.getElementById('dashboardSectionTrackerSubtitle');
+  if (subEl) subEl.innerText = headerSub;
+  const badgeEl = document.getElementById('dashboardSectionTrackerBadge');
+  if (badgeEl) badgeEl.innerText = badgeText;
+
+  // Filter sections by search text if provided
+  const query = (filterText || currentDashboardSecSearchQuery || '').toLowerCase().trim();
+  const visibleSections = query
+    ? targetSections.filter(s => s.name.toLowerCase().includes(query) || s.title.toLowerCase().includes(query) || s.code.toLowerCase().includes(query))
+    : targetSections;
+
+  const showingEl = document.getElementById('dashboardSecShowingText');
+  if (showingEl) {
+    showingEl.innerText = `Showing ${visibleSections.length} of ${targetSections.length} sections`;
+  }
+
+  if (visibleSections.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" style="text-align: center; padding: 32px; color: var(--text-muted);">
+          No sections match "${query}". <button type="button" class="btn-secondary" style="margin-left: 8px; padding: 4px 10px; font-size: 0.78rem;" onclick="document.getElementById('dashboardSecSearch').value=''; handleDashboardSecSearch('');">Clear Search</button>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  visibleSections.forEach((sec, idx) => {
+    const emps = EMPLOYEES.filter(e => {
+      const s = typeof normalizeSectionName === 'function' ? normalizeSectionName(e.section) : (e.section || '').toLowerCase().trim();
+      return s === sec.normName;
+    });
     const total = emps.length;
 
     let examDone = 0;
@@ -2099,27 +2344,31 @@ function renderDashboardSectionMatrix(records, allOjt) {
     });
 
     const completionPct = total > 0 ? Math.round((bothDone / total) * 100) : 0;
+    const isProd = (sec.dept === 'PRODUCTION') || (!sec.name.toLowerCase().includes('qa'));
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td style="font-weight: 700; color: var(--text-muted);">${idx + 1}</td>
+      <td style="font-weight: 700; color: var(--text-muted); font-variant-numeric: tabular-nums;">${idx + 1}</td>
       <td>
-        <div style="font-weight: 700; color: var(--text-main); font-size: 0.92rem;">${sec.title}</div>
-        <div style="font-size: 0.75rem; color: var(--text-muted);">${sec.code} Section &bull; ${sec.name}</div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 0.72rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: ${isProd ? '#EDE9FE' : '#EFF6FF'}; color: ${isProd ? '#6D28D9' : '#0284C7'}; border: 1px solid ${isProd ? '#DDD6FE' : '#BFDBFE'};">${sec.code}</span>
+          <div style="font-weight: 700; color: var(--text-main); font-size: 0.92rem;">${sec.title}</div>
+        </div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">${isProd ? 'Production Department' : 'Quality Control Department'} &bull; ${sec.name}</div>
       </td>
-      <td style="text-align: center; font-weight: 700;">${total}</td>
+      <td style="text-align: center; font-weight: 700; font-variant-numeric: tabular-nums;">${total}</td>
       <td style="text-align: center;">
-        <span class="${examDone > 0 ? 'badge-pass' : ''}" style="display: inline-block; padding: 3px 8px; font-weight: 700; font-size: 0.8rem;">
+        <span class="${examDone > 0 ? 'badge-pass' : ''}" style="display: inline-block; padding: 3px 8px; font-weight: 700; font-size: 0.8rem; font-variant-numeric: tabular-nums;">
           ${examDone} / ${total}
         </span>
       </td>
       <td style="text-align: center;">
-        <span class="${ojtDone > 0 ? 'badge-pass' : ''}" style="display: inline-block; padding: 3px 8px; font-weight: 700; font-size: 0.8rem; background: ${ojtDone > 0 ? '#DCFCE7' : '#F1F5F9'}; color: ${ojtDone > 0 ? '#166534' : '#64748B'};">
+        <span class="${ojtDone > 0 ? 'badge-pass' : ''}" style="display: inline-block; padding: 3px 8px; font-weight: 700; font-size: 0.8rem; background: ${ojtDone > 0 ? '#DCFCE7' : '#F1F5F9'}; color: ${ojtDone > 0 ? '#166534' : '#64748B'}; font-variant-numeric: tabular-nums;">
           ${ojtDone} / ${total}
         </span>
       </td>
       <td style="text-align: center;">
-        <span style="display: inline-block; padding: 3px 8px; font-weight: 800; font-size: 0.82rem; background: ${bothDone > 0 ? '#DBEAFE' : '#F8FAFC'}; color: ${bothDone > 0 ? '#1E40AF' : '#94A3B8'}; border-radius: 6px;">
+        <span style="display: inline-block; padding: 3px 8px; font-weight: 800; font-size: 0.82rem; background: ${bothDone > 0 ? '#DBEAFE' : '#F8FAFC'}; color: ${bothDone > 0 ? '#1E40AF' : '#94A3B8'}; border-radius: 6px; font-variant-numeric: tabular-nums;">
           ${bothDone} / ${total}
         </span>
       </td>
@@ -2128,7 +2377,7 @@ function renderDashboardSectionMatrix(records, allOjt) {
           <div style="flex: 1; background: #E2E8F0; height: 8px; border-radius: 4px; overflow: hidden;">
             <div style="width: ${completionPct}%; background: #059669; height: 100%; border-radius: 4px; transition: width 0.3s ease;"></div>
           </div>
-          <span style="font-size: 0.76rem; font-weight: 700; color: #0F172A; min-width: 50px; text-align: right;">${bothDone} Done</span>
+          <span style="font-size: 0.76rem; font-weight: 700; color: #0F172A; min-width: 50px; text-align: right; font-variant-numeric: tabular-nums;">${bothDone} Done</span>
         </div>
       </td>
       <td style="text-align: center;">
@@ -2136,9 +2385,11 @@ function renderDashboardSectionMatrix(records, allOjt) {
           <button type="button" class="btn-primary" style="padding: 4px 10px; font-size: 0.76rem; background: #005B9E; border-color: #005B9E;" onclick="showSectionCompletedModal('${sec.id}')">
             View List
           </button>
-          <button type="button" class="btn-secondary" style="padding: 4px 8px; font-size: 0.76rem;" onclick="navigateTo('/control-center/sections'); renderSectionsExplorer('${sec.id}');">
-            Explorer
-          </button>
+          ${!isProd ? `
+            <button type="button" class="btn-secondary" style="padding: 4px 8px; font-size: 0.76rem;" onclick="navigateTo('/control-center/sections'); renderSectionsExplorer('${sec.id}');">
+              Explorer
+            </button>
+          ` : ''}
           <button type="button" class="btn-reset" style="padding: 4px 8px; font-size: 0.74rem;" onclick="resetSectionExams('${sec.id}', '${sec.title.replace(/'/g, "\\'")}')" title="Reset all candidate exams for ${sec.title}">
             Reset
           </button>
@@ -2148,7 +2399,6 @@ function renderDashboardSectionMatrix(records, allOjt) {
     tbody.appendChild(tr);
   });
 }
-
 let currentModalSectionId = null;
 let currentModalFilterType = 'ALL';
 
@@ -2156,7 +2406,7 @@ function showSectionCompletedModal(secId, filterType = 'ALL') {
   currentModalSectionId = secId;
   currentModalFilterType = filterType;
 
-  const sec = QA_SECTIONS_LIST.find(s => s.id === secId) || QA_SECTIONS_LIST[0];
+  const sec = (typeof getSectionObj === 'function') ? getSectionObj(secId) : (QA_SECTIONS_LIST.find(s => s.id === secId) || QA_SECTIONS_LIST[0]);
   const modal = document.getElementById('modalSectionCompleted');
   if (!modal) return;
 
@@ -2195,7 +2445,7 @@ function filterModalEmployees(type) {
     }
   });
 
-  const sec = QA_SECTIONS_LIST.find(s => s.id === currentModalSectionId) || QA_SECTIONS_LIST[0];
+  const sec = (typeof getSectionObj === 'function') ? getSectionObj(currentModalSectionId) : (QA_SECTIONS_LIST.find(s => s.id === currentModalSectionId) || QA_SECTIONS_LIST[0]);
   const sectionEmps = EMPLOYEES.filter(e => normalizeSectionName(e.section) === sec.normName);
   const records = getStoredRecords();
   const allOjt = getStoredOjtRecords();
@@ -6284,7 +6534,7 @@ window.applyAll234CompletedRecords = applyAll234CompletedRecords;
 // DEDICATED ADMIN SECTION & DEPARTMENT EXAM RESET MANAGEMENT
 // ---------------------------------------------------------------------
 async function resetSectionExams(secIdOrName, customTitle) {
-  const sec = QA_SECTIONS_LIST.find(s => s.id === secIdOrName || s.normName === String(secIdOrName).toLowerCase() || s.title.toLowerCase() === String(secIdOrName).toLowerCase());
+  const sec = (typeof getSectionObj === 'function') ? getSectionObj(secIdOrName) : (QA_SECTIONS_LIST.find(s => s.id === secIdOrName || s.normName === String(secIdOrName).toLowerCase() || s.title.toLowerCase() === String(secIdOrName).toLowerCase()));
   const title = customTitle || (sec ? sec.title : secIdOrName);
   const secId = sec ? sec.id : secIdOrName;
   const normName = sec ? sec.normName : String(secIdOrName).toLowerCase().replace(/qa/g, '').trim();
