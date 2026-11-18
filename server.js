@@ -4533,7 +4533,7 @@ async function convertDocxBufferToPdf(docxBuf, identifier = 'doc') {
   }
 }
 
-const { generateOfficialReportHtml } = require('./report_html_generator.js');
+const { generateOfficialReportHtml, generateDepartmentSummaryHtml } = require('./report_html_generator.js');
 
 let logoBase64Cache = null;
 function getLogoBase64() {
@@ -4863,6 +4863,167 @@ app.get('/api/employee-report-html/:empNo', async (req, res) => {
   } catch (err) {
     const status = err.statusCode || 500;
     return res.status(status).send(`<h3>Error: ${err.message}</h3>`);
+  }
+});
+
+// Section Definitions for Department Summary Reporting
+const QA_SECTIONS_DEF = [
+  { id: 'warehouse', name: 'Warehouse QA', normName: 'warehouse qa', code: 'QA-WH', title: 'Warehouse QA', dept: 'QUALITY CONTROL' },
+  { id: 'final_finish', name: 'Final Finish QA', normName: 'final finish qa', code: 'QA-FF', title: 'Final Finish QA', dept: 'QUALITY CONTROL' },
+  { id: 'tire_building', name: 'Tire building QA', normName: 'tire building qa', code: 'QA-TB', title: 'Tire Building QA', dept: 'QUALITY CONTROL' },
+  { id: 'tire_curing', name: 'Tire curing QA', normName: 'tire curing qa', code: 'QA-TC', title: 'Tire Curing QA', dept: 'QUALITY CONTROL' },
+  { id: 'solid_tire', name: 'Solid tire QA', normName: 'solid tire qa', code: 'QA-ST', title: 'Solid Tire QA', dept: 'QUALITY CONTROL' },
+  { id: 'rro_alt', name: 'Final finish RRO & ALT QA', normName: 'final finish rro & alt qa', code: 'QA-RRO', title: 'Final Finish RRO & ALT QA', dept: 'QUALITY CONTROL' },
+  { id: 'preparatory', name: 'Preparatory QA', normName: 'preparatory qa', code: 'QA-PREP', title: 'Preparatory QA', dept: 'QUALITY CONTROL' },
+  { id: 'fid_inspector', name: 'FID Inspector QA', normName: 'fid inspector qa', code: 'QA-FD', title: 'FID Inspector QA', dept: 'QUALITY CONTROL' }
+];
+
+const PROD_SECTIONS_DEF = [
+  { id: 'prod_mixing', name: 'MIXING', normName: 'mixing', code: 'PR-MIX', title: 'Mixing', dept: 'PRODUCTION' },
+  { id: 'prod_4roll', name: '4 ROLL', normName: '4 roll', code: 'PR-4ROLL', title: '4 Roll Calender', dept: 'PRODUCTION' },
+  { id: 'prod_3roll_p2', name: '3 ROLL-P2', normName: '3 roll-p2', code: 'PR-3ROLL', title: '3 Roll Calender P2', dept: 'PRODUCTION' },
+  { id: 'prod_extruder', name: 'EXTRUDER', normName: 'extruder', code: 'PR-EXT', title: 'Extruder', dept: 'PRODUCTION' },
+  { id: 'prod_bead_winding', name: 'BEAD WINDING', normName: 'bead winding', code: 'PR-BEAD', title: 'Bead Winding', dept: 'PRODUCTION' },
+  { id: 'prod_steelastic', name: 'STEELASTIC', normName: 'steelastic', code: 'PR-STEL', title: 'Steelastic', dept: 'PRODUCTION' },
+  { id: 'prod_tyre_building_p1', name: 'TYRE BUILDING-P1', normName: 'tyre building-p1', code: 'PR-TB1', title: 'Tyre Building P1', dept: 'PRODUCTION' },
+  { id: 'prod_tyre_building_p2', name: 'TYRE BUILDING-P2', normName: 'tyre building-p2', code: 'PR-TB2', title: 'Tyre Building P2', dept: 'PRODUCTION' },
+  { id: 'prod_tyre_building_p3', name: 'TYRE BUILDING-P3', normName: 'tyre building-p3', code: 'PR-TB3', title: 'Tyre Building P3', dept: 'PRODUCTION' },
+  { id: 'prod_band_building_p1', name: 'BAND BUILDING-P1', normName: 'band building-p1', code: 'PR-BB1', title: 'Band Building P1', dept: 'PRODUCTION' },
+  { id: 'prod_band_building_p2', name: 'BAND BUILDING-P2', normName: 'band building-p2', code: 'PR-BB2', title: 'Band Building P2', dept: 'PRODUCTION' },
+  { id: 'prod_band_building_p3', name: 'BAND BUILDING-P3', normName: 'band building-p3', code: 'PR-BB3', title: 'Band Building P3', dept: 'PRODUCTION' },
+  { id: 'prod_bias_cutting_1', name: 'BIAS CUTTING-1', normName: 'bias cutting-1', code: 'PR-BIAS1', title: 'Bias Cutting 1', dept: 'PRODUCTION' },
+  { id: 'prod_bias_cutting_2', name: 'BIAS CUTTING-2', normName: 'bias cutting-2', code: 'PR-BIAS2', title: 'Bias Cutting 2', dept: 'PRODUCTION' },
+  { id: 'prod_bias_cutting_4', name: 'BIAS CUTTING-4', normName: 'bias cutting-4', code: 'PR-BIAS4', title: 'Bias Cutting 4', dept: 'PRODUCTION' },
+  { id: 'prod_bias_cutting_5', name: 'BIAS CUTTING-5', normName: 'bias cutting-5', code: 'PR-BIAS5', title: 'Bias Cutting 5', dept: 'PRODUCTION' },
+  { id: 'prod_auto_biascutter', name: 'AUTO BIASCUTTER', normName: 'auto biascutter', code: 'PR-AUTOB', title: 'Auto Bias Cutter', dept: 'PRODUCTION' },
+  { id: 'prod_slitting', name: 'SLITTING', normName: 'slitting', code: 'PR-SLIT', title: 'Slitting', dept: 'PRODUCTION' },
+  { id: 'prod_liner_dressing', name: 'LINER DRESSING', normName: 'liner dressing', code: 'PR-LINE', title: 'Liner Dressing', dept: 'PRODUCTION' },
+  { id: 'prod_salvage', name: 'SALVAGE', normName: 'salvage', code: 'PR-SALV', title: 'Salvage', dept: 'PRODUCTION' },
+  { id: 'prod_radial_marangoni', name: 'RADIAL MARANGONI', normName: 'radial marangoni', code: 'PR-RADM', title: 'Radial Marangoni', dept: 'PRODUCTION' },
+  { id: 'prod_bias_marangoni', name: 'BIAS MARANGONI&BESTRY', normName: 'bias marangoni&bestry', code: 'PR-BIASM', title: 'Bias Marangoni & Bestry', dept: 'PRODUCTION' },
+  { id: 'prod_yanthai', name: 'YANTHAI', normName: 'yanthai', code: 'PR-YAN', title: 'Yanthai', dept: 'PRODUCTION' },
+  { id: 'prod_solid_tyre', name: 'SOLID TYRE', normName: 'solid tyre', code: 'PR-ST', title: 'Solid Tyre Production', dept: 'PRODUCTION' },
+  { id: 'prod_tyre_curing', name: 'TYRE CURING', normName: 'tyre curing', code: 'PR-TC', title: 'Tyre Curing Production', dept: 'PRODUCTION' }
+];
+
+const ALL_SECTIONS_DEF = [...QA_SECTIONS_DEF, ...PROD_SECTIONS_DEF];
+
+// GET /api/reports/department-summary/:dept: Returns authoritative department summary JSON
+app.get('/api/reports/department-summary/:dept', async (req, res) => {
+  const user = await getAuthUser(req);
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Unauthorized: Authentication required' });
+  }
+
+  const role = (user.role || '').toUpperCase();
+  const rawDept = String(req.params.dept || 'PRODUCTION').toUpperCase().trim();
+
+  // Only admins or HODs can view department summaries
+  const isSuperOrAdmin = ['SUPERADMIN', 'ADMIN', 'HR_ADMIN'].includes(role) || user.roleClaim === 'hr_admin';
+  const isDeptHead = ['DEPT_HEAD', 'DEPT_HOD'].includes(role) || user.roleClaim === 'dept_head';
+
+  if (!isSuperOrAdmin && !isDeptHead) {
+    return res.status(403).json({ success: false, message: 'Forbidden: Insufficient privileges for department summary' });
+  }
+
+  try {
+    const employees = await getAuthoritativeEmployees();
+    const records = await getAuthoritativeRecords();
+    const ojtRecords = await getAuthoritativeOjtEvaluations();
+
+    let sections = ALL_SECTIONS_DEF;
+    if (rawDept === 'PRODUCTION' || rawDept.includes('PROD')) {
+      sections = PROD_SECTIONS_DEF;
+    } else if (rawDept === 'QUALITY CONTROL' || rawDept === 'QUALITY' || rawDept.includes('QUAL')) {
+      sections = QA_SECTIONS_DEF;
+    }
+
+    let deptEmps = employees;
+    if (rawDept === 'PRODUCTION' || rawDept.includes('PROD')) {
+      deptEmps = employees.filter(e => (e.dept || '').toUpperCase().includes('PROD'));
+    } else if (rawDept === 'QUALITY CONTROL' || rawDept === 'QUALITY' || rawDept.includes('QUAL')) {
+      deptEmps = employees.filter(e => (e.dept || '').toUpperCase().includes('QUAL'));
+    }
+
+    const total = deptEmps.length;
+    let examDone = 0, ojtDone = 0, bothDone = 0;
+    let countI = 0, countL = 0, countU = 0, countO = 0;
+
+    deptEmps.forEach(e => {
+      const rec = records[e.empNo];
+      const ojt = ojtRecords[e.empNo];
+      const hasExam = rec && rec.isCompleted;
+      const hasOjt = ojt && (ojt.totalScore !== undefined || ojt.scorePct !== undefined);
+      if (hasExam) examDone++;
+      if (hasOjt) ojtDone++;
+      if (hasExam && hasOjt) bothDone++;
+
+      const lvl = (e.currentLevel || 'I').toUpperCase();
+      if (lvl === 'I') countI++;
+      else if (lvl === 'L') countL++;
+      else if (lvl === 'U') countU++;
+      else if (lvl === 'O') countO++;
+    });
+
+    return res.json({
+      success: true,
+      department: rawDept,
+      totalHeadcount: total,
+      examDone,
+      ojtDone,
+      bothDone,
+      completionPct: total > 0 ? Math.round((bothDone / total) * 100) : 0,
+      competencyMix: { I: countI, L: countL, U: countU, O: countO },
+      sectionCount: sections.length
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/reports/department-summary-html/:dept: Returns print-ready landscape HTML
+app.get('/api/reports/department-summary-html/:dept', async (req, res) => {
+  const user = await getAuthUser(req);
+  if (!user) {
+    return res.status(401).send('<h3>Unauthorized: Authentication required</h3>');
+  }
+
+  const role = (user.role || '').toUpperCase();
+  const rawDept = String(req.params.dept || 'PRODUCTION').toUpperCase().trim();
+
+  const isSuperOrAdmin = ['SUPERADMIN', 'ADMIN', 'HR_ADMIN'].includes(role) || user.roleClaim === 'hr_admin';
+  const isDeptHead = ['DEPT_HEAD', 'DEPT_HOD'].includes(role) || user.roleClaim === 'dept_head';
+
+  if (!isSuperOrAdmin && !isDeptHead) {
+    return res.status(403).send('<h3>Forbidden: Insufficient privileges for department summary</h3>');
+  }
+
+  try {
+    const employees = await getAuthoritativeEmployees();
+    const records = await getAuthoritativeRecords();
+    const ojtRecords = await getAuthoritativeOjtEvaluations();
+
+    let sections = ALL_SECTIONS_DEF;
+    if (rawDept === 'PRODUCTION' || rawDept.includes('PROD')) {
+      sections = PROD_SECTIONS_DEF;
+    } else if (rawDept === 'QUALITY CONTROL' || rawDept === 'QUALITY' || rawDept.includes('QUAL')) {
+      sections = QA_SECTIONS_DEF;
+    }
+
+    const html = generateDepartmentSummaryHtml({
+      dept: rawDept,
+      employees,
+      records,
+      ojtRecords,
+      sections,
+      logoBase64: getLogoBase64(),
+      shift: 'Shift 1 (06:00 - 14:00)'
+    });
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
+  } catch (err) {
+    return res.status(500).send(`<h3>Error generating department summary HTML: ${err.message}</h3>`);
   }
 });
 

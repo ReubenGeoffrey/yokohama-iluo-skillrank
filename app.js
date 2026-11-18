@@ -3855,6 +3855,143 @@ async function downloadEmployeePDF(empNo) {
 }
 window.downloadEmployeePDFReport = downloadEmployeePDF;
 
+// =====================================================================
+// DEPARTMENT COMPETENCY SUMMARY REPORT (PDF & PREVIEW)
+// Landscape A4 audit-ready PDF generation via html2pdf & report_html_generator
+// =====================================================================
+async function ensurePdfAndGeneratorLibraries() {
+  if (typeof window.html2pdf === 'undefined') {
+    await new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'html2pdf.bundle.min.js';
+      script.onload = resolve;
+      script.onerror = () => reject(new Error('Failed to load html2pdf library'));
+      document.head.appendChild(script);
+    });
+  }
+  if (typeof window.generateDepartmentSummaryHtml !== 'function') {
+    await new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'report_html_generator.js?v=47.0';
+      script.onload = resolve;
+      script.onerror = () => reject(new Error('Failed to load report_html_generator library'));
+      document.head.appendChild(script);
+    });
+  }
+}
+
+async function buildDepartmentSummaryHtmlData(deptOverride) {
+  await ensurePdfAndGeneratorLibraries();
+
+  const dept = (deptOverride || currentDashboardDeptTracker || 'PRODUCTION').toUpperCase().trim();
+  const allEmployees = (typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES)) ? EMPLOYEES : [];
+  const records = (typeof getStoredRecords === 'function') ? getStoredRecords() : {};
+  const ojtRecords = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
+
+  let sections = [];
+  let deptSlug = 'Production';
+
+  if (dept === 'PRODUCTION' || dept.includes('PROD')) {
+    sections = (typeof PROD_SECTIONS_LIST !== 'undefined') ? PROD_SECTIONS_LIST : [];
+    deptSlug = 'Production';
+  } else if (dept === 'QUALITY CONTROL' || dept === 'QUALITY' || dept.includes('QUAL')) {
+    sections = (typeof QA_SECTIONS_LIST !== 'undefined') ? QA_SECTIONS_LIST : [];
+    deptSlug = 'Quality_Control';
+  } else {
+    sections = (typeof ALL_PLANT_SECTIONS_LIST !== 'undefined') ? ALL_PLANT_SECTIONS_LIST : [];
+    deptSlug = 'All_Plant';
+  }
+
+  const logoBase64 = await getBrowserLogoBase64();
+  const now = new Date();
+  const generatedDate = now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
+  const dateFileStr = now.toISOString().slice(0, 10);
+  const filename = `Yokohama_ATC_${deptSlug}_Department_Summary_${dateFileStr}.pdf`;
+
+  const html = window.generateDepartmentSummaryHtml({
+    dept,
+    employees: allEmployees,
+    records,
+    ojtRecords,
+    sections,
+    logoBase64,
+    generatedDate,
+    shift: 'Shift 1 (06:00 - 14:00)'
+  });
+
+  return { html, dept, deptSlug, filename };
+}
+
+async function generateAndDownloadDepartmentSummaryPdf(deptOverride) {
+  showToast('Generating official Department Summary PDF...');
+
+  try {
+    const { html, deptSlug, filename } = await buildDepartmentSummaryHtmlData(deptOverride);
+
+    const opt = {
+      margin: [6, 8, 6, 8],
+      filename: filename,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 1.6, useCORS: true, logging: false },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
+      pagebreak: { mode: ['css', 'legacy'] }
+    };
+
+    await window.html2pdf().set(opt).from(html).save();
+    showToast(`Official ${deptSlug.replace(/_/g, ' ')} Summary PDF downloaded successfully!`);
+  } catch (err) {
+    console.error('Department Summary PDF generation error:', err);
+    showToast('Could not compile client PDF. Opening printable report preview...');
+    previewDepartmentSummaryHtml(deptOverride);
+  }
+}
+window.generateAndDownloadDepartmentSummaryPdf = generateAndDownloadDepartmentSummaryPdf;
+
+async function previewDepartmentSummaryHtml(deptOverride) {
+  try {
+    const { html } = await buildDepartmentSummaryHtmlData(deptOverride);
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+      showToast('Department Summary report opened for printing/preview.');
+    } else {
+      alert('Popup blocker prevented opening the report preview. Please allow popups or use the direct Download PDF button.');
+    }
+  } catch (err) {
+    console.error('Preview error:', err);
+    alert('Unable to generate Department Summary preview: ' + (err.message || 'Unknown error'));
+  }
+}
+window.previewDepartmentSummaryHtml = previewDepartmentSummaryHtml;
+
+function downloadSelectedDepartmentSummaryPDF() {
+  const sel = document.getElementById('reportDeptSummarySelect');
+  const dept = (sel && sel.value) ? sel.value : 'PRODUCTION';
+  generateAndDownloadDepartmentSummaryPdf(dept);
+}
+window.downloadSelectedDepartmentSummaryPDF = downloadSelectedDepartmentSummaryPDF;
+
+function previewSelectedDepartmentSummaryPDF() {
+  const sel = document.getElementById('reportDeptSummarySelect');
+  const dept = (sel && sel.value) ? sel.value : 'PRODUCTION';
+  previewDepartmentSummaryHtml(dept);
+}
+window.previewSelectedDepartmentSummaryPDF = previewSelectedDepartmentSummaryPDF;
+
+function downloadCurrentDeptTrackerPDF() {
+  const dept = (typeof currentDashboardDeptTracker !== 'undefined' && currentDashboardDeptTracker) ? currentDashboardDeptTracker : 'PRODUCTION';
+  generateAndDownloadDepartmentSummaryPdf(dept);
+}
+window.downloadCurrentDeptTrackerPDF = downloadCurrentDeptTrackerPDF;
+
+function downloadCurrentDeptPortalPDF() {
+  const dept = sessionStorage.getItem('iluo_dept_session') || 'PRODUCTION';
+  generateAndDownloadDepartmentSummaryPdf(dept);
+}
+window.downloadCurrentDeptPortalPDF = downloadCurrentDeptPortalPDF;
+
 // Download Official DOCX Evaluation Report for Employee Assessment (Universal Client + Server)
 async function downloadEmployeeDocx(empNo) {
   if (!empNo) return alert('Employee ID is required.');

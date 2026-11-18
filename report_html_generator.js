@@ -603,9 +603,501 @@ function generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmp
   `;
 }
 
+// =====================================================================
+// EXECUTIVE DEPARTMENT COMPETENCY SUMMARY REPORT HTML GENERATOR
+// Landscape A4 audit-ready layout compliant with ISO/IATF 16949
+// =====================================================================
+function generateDepartmentSummaryHtml(options = {}) {
+  const dept = (options.dept || 'PRODUCTION').toUpperCase().trim();
+  const allEmployees = options.employees || [];
+  const records = options.records || {};
+  const ojtRecords = options.ojtRecords || {};
+  const sections = options.sections || [];
+  const logoBase64 = options.logoBase64 || '';
+  const generatedDate = options.generatedDate || new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
+  const shift = options.shift || 'Shift 1 (06:00 - 14:00)';
+
+  // Determine Department Titles & Scope
+  let deptTitle = 'Production Department';
+  let deptScopeBadge = '25 Manufacturing Sections • 1,179 Associates';
+  let deptRef = 'PROD';
+  let deptColor = '#6D28D9';
+  let deptEmps = [];
+
+  if (dept === 'PRODUCTION' || dept.includes('PROD')) {
+    deptTitle = 'Production Department';
+    deptScopeBadge = '25 Manufacturing Sections • 1,179 Associates';
+    deptRef = 'PROD';
+    deptColor = '#6D28D9';
+    deptEmps = allEmployees.filter(e => (e.dept || '').toUpperCase().includes('PROD'));
+  } else if (dept === 'QUALITY CONTROL' || dept === 'QUALITY' || dept.includes('QUAL')) {
+    deptTitle = 'Quality Control Department';
+    deptScopeBadge = '8 QA Sections • 283 Associates';
+    deptRef = 'QA';
+    deptColor = '#005B9E';
+    deptEmps = allEmployees.filter(e => (e.dept || '').toUpperCase().includes('QUAL'));
+  } else {
+    deptTitle = 'All Plant Departments';
+    deptScopeBadge = '33 Total Sections • 1,462 Associates';
+    deptRef = 'PLANT';
+    deptColor = '#0F172A';
+    deptEmps = allEmployees;
+  }
+
+  const totalEmps = deptEmps.length;
+  let examDone = 0;
+  let ojtDone = 0;
+  let bothDone = 0;
+  let countI = 0, countL = 0, countU = 0, countO = 0;
+
+  deptEmps.forEach(e => {
+    const rec = records[e.empNo];
+    const ojt = ojtRecords[e.empNo];
+    const hasExam = rec && rec.isCompleted;
+    const hasOjt = ojt && (ojt.totalScore !== undefined || ojt.scorePct !== undefined);
+
+    if (hasExam) examDone++;
+    if (hasOjt) ojtDone++;
+    if (hasExam && hasOjt) bothDone++;
+
+    const lvl = (e.currentLevel || 'I').toUpperCase();
+    if (lvl === 'I') countI++;
+    else if (lvl === 'L') countL++;
+    else if (lvl === 'U') countU++;
+    else if (lvl === 'O') countO++;
+  });
+
+  const examPct = totalEmps > 0 ? Math.round((examDone / totalEmps) * 100) : 0;
+  const ojtPct = totalEmps > 0 ? Math.round((ojtDone / totalEmps) * 100) : 0;
+  const bothPct = totalEmps > 0 ? Math.round((bothDone / totalEmps) * 100) : 0;
+  const tniCount = countI + countL; // Training Needs Identified (Level I & L needing elevation to Level U)
+
+  // Build Section Rows
+  let tableRowsHtml = '';
+  let grandTotalEmps = 0;
+  let grandTotalI = 0, grandTotalL = 0, grandTotalU = 0, grandTotalO = 0;
+  let grandTotalExam = 0, grandTotalOjt = 0, grandTotalBoth = 0;
+
+  sections.forEach((sec, idx) => {
+    const normSec = (sec.normName || sec.name || '').toLowerCase().trim();
+    const sEmps = deptEmps.filter(e => {
+      const eSec = (e.section || '').toLowerCase().trim();
+      return eSec === normSec || eSec === (sec.name || '').toLowerCase().trim();
+    });
+
+    const sTotal = sEmps.length;
+    let sExam = 0, sOjt = 0, sBoth = 0;
+    let sI = 0, sL = 0, sU = 0, sO = 0;
+
+    sEmps.forEach(e => {
+      const rec = records[e.empNo];
+      const ojt = ojtRecords[e.empNo];
+      const hasExam = rec && rec.isCompleted;
+      const hasOjt = ojt && (ojt.totalScore !== undefined || ojt.scorePct !== undefined);
+
+      if (hasExam) sExam++;
+      if (hasOjt) sOjt++;
+      if (hasExam && hasOjt) sBoth++;
+
+      const lvl = (e.currentLevel || 'I').toUpperCase();
+      if (lvl === 'I') sI++;
+      else if (lvl === 'L') sL++;
+      else if (lvl === 'U') sU++;
+      else if (lvl === 'O') sO++;
+    });
+
+    const sPct = sTotal > 0 ? Math.round((sBoth / sTotal) * 100) : 0;
+    const isProd = (sec.dept === 'PRODUCTION') || (!sec.name.toLowerCase().includes('qa'));
+
+    grandTotalEmps += sTotal;
+    grandTotalI += sI;
+    grandTotalL += sL;
+    grandTotalU += sU;
+    grandTotalO += sO;
+    grandTotalExam += sExam;
+    grandTotalOjt += sOjt;
+    grandTotalBoth += sBoth;
+
+    const progressColor = sPct >= 80 ? '#059669' : (sPct >= 50 ? '#0284C7' : '#D97706');
+
+    tableRowsHtml += `
+      <tr style="border-bottom: 1px solid #E2E8F0; ${idx % 2 === 1 ? 'background-color: #F8FAFC;' : ''}">
+        <td style="text-align: center; font-weight: 700; color: #64748B; padding: 5px 4px;">${idx + 1}</td>
+        <td style="text-align: center; padding: 5px 4px;">
+          <span style="display: inline-block; padding: 2px 5px; font-size: 9px; font-weight: 800; border-radius: 3px; background: ${isProd ? '#EDE9FE' : '#EFF6FF'}; color: ${isProd ? '#6D28D9' : '#0284C7'}; border: 1px solid ${isProd ? '#DDD6FE' : '#BFDBFE'};">${escapeHtml(sec.code || 'SEC')}</span>
+        </td>
+        <td style="padding: 5px 6px; font-weight: 700; color: #0F172A;">
+          ${escapeHtml(sec.title || sec.name)}
+          <span style="font-size: 8.5px; font-weight: 400; color: #64748B; display: block;">${escapeHtml(sec.name)}</span>
+        </td>
+        <td style="text-align: center; font-weight: 700; padding: 5px 4px; font-variant-numeric: tabular-nums;">${sTotal}</td>
+        <td style="text-align: center; padding: 5px 4px; font-variant-numeric: tabular-nums; color: #475569;">${sI}</td>
+        <td style="text-align: center; padding: 5px 4px; font-variant-numeric: tabular-nums; color: #475569;">${sL}</td>
+        <td style="text-align: center; padding: 5px 4px; font-variant-numeric: tabular-nums; color: #059669; font-weight: 600;">${sU}</td>
+        <td style="text-align: center; padding: 5px 4px; font-variant-numeric: tabular-nums; color: #7C3AED; font-weight: 700;">${sO}</td>
+        <td style="text-align: center; padding: 5px 4px; font-variant-numeric: tabular-nums; color: #0284C7; font-weight: 600;">${sExam} / ${sTotal}</td>
+        <td style="text-align: center; padding: 5px 4px; font-variant-numeric: tabular-nums; color: #059669; font-weight: 600;">${sOjt} / ${sTotal}</td>
+        <td style="text-align: center; padding: 5px 4px; font-variant-numeric: tabular-nums; color: #1E40AF; font-weight: 700;">${sBoth} / ${sTotal}</td>
+        <td style="padding: 5px 6px;">
+          <div style="display: flex; align-items: center; gap: 5px;">
+            <div style="flex: 1; background: #E2E8F0; height: 6px; border-radius: 3px; overflow: hidden;">
+              <div style="width: ${sPct}%; background: ${progressColor}; height: 100%;"></div>
+            </div>
+            <span style="font-size: 9.5px; font-weight: 800; min-width: 32px; text-align: right; color: #0F172A; font-variant-numeric: tabular-nums;">${sPct}%</span>
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+
+  const grandPct = grandTotalEmps > 0 ? Math.round((grandTotalBoth / grandTotalEmps) * 100) : 0;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Yokohama • ATC Tires — Department Summary Report (${escapeHtml(deptTitle)})</title>
+  <style>
+    @page {
+      size: A4 landscape;
+      margin: 8mm 10mm;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      color: #0F172A;
+      background: #FFFFFF;
+      font-size: 10px;
+      line-height: 1.35;
+    }
+    .report-page {
+      width: 100%;
+      max-width: 1120px;
+      margin: 0 auto;
+      background: #FFFFFF;
+    }
+    .header-table {
+      width: 100%;
+      border-collapse: collapse;
+      border-bottom: 2.5px solid #003D6B;
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+    }
+    .header-table td {
+      border: none;
+      vertical-align: middle;
+      padding: 4px 6px;
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .kpi-card {
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 6px;
+      padding: 8px 12px;
+      border-top: 3px solid #003D6B;
+    }
+    .kpi-title {
+      font-size: 8.5px;
+      font-weight: 700;
+      color: #64748B;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .kpi-val {
+      font-size: 16px;
+      font-weight: 800;
+      color: #0F172A;
+      margin: 2px 0;
+      font-variant-numeric: tabular-nums;
+    }
+    .kpi-sub {
+      font-size: 8.5px;
+      color: #64748B;
+    }
+    .summary-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5px;
+      margin-top: 6px;
+      margin-bottom: 12px;
+      page-break-inside: auto;
+    }
+    .summary-table th {
+      background: #003D6B;
+      color: #FFFFFF;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 8.5px;
+      letter-spacing: 0.4px;
+      padding: 6px 4px;
+      border: 1px solid #002B4D;
+      text-align: center;
+    }
+    .summary-table td {
+      border: 1px solid #CBD5E1;
+      padding: 4px 5px;
+    }
+    .summary-table tr {
+      page-break-inside: avoid;
+    }
+    .grand-total-row {
+      background: #0F172A !important;
+      color: #FFFFFF !important;
+      font-weight: 800;
+      border-top: 2px solid #000000;
+    }
+    .grand-total-row td {
+      border: 1px solid #0F172A;
+      color: #FFFFFF !important;
+      font-size: 10px;
+      padding: 6px 4px;
+    }
+    .tni-box {
+      background: #F8FAFC;
+      border: 1px solid #CBD5E1;
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      page-break-inside: avoid;
+    }
+    .sign-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      page-break-inside: avoid;
+    }
+    .sign-table td {
+      width: 33.33%;
+      border: 1px solid #CBD5E1;
+      padding: 10px 12px;
+      background: #FFFFFF;
+      vertical-align: top;
+    }
+    .sign-label {
+      font-size: 8.5px;
+      font-weight: 700;
+      color: #64748B;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .sign-role {
+      font-size: 10px;
+      font-weight: 800;
+      color: #0F172A;
+      margin-bottom: 24px;
+    }
+    .sign-line {
+      border-top: 1px dashed #94A3B8;
+      padding-top: 4px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 8.5px;
+      color: #64748B;
+    }
+    .footer-bar {
+      margin-top: 10px;
+      padding-top: 6px;
+      border-top: 1px solid #E2E8F0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 8px;
+      color: #94A3B8;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="report-page">
+    <!-- Official Yokohama / ATC Header -->
+    <table class="header-table">
+      <tr>
+        <td style="width: 160px;">
+          ${logoBase64 ? `<img src="${logoBase64}" alt="Yokohama ATC Tires" style="height: 42px; max-width: 155px; object-fit: contain;">` : `<div style="font-size: 18px; font-weight: 900; color: #D32F2F; letter-spacing: 1px;">YOKOHAMA<br><span style="color: #003D6B; font-size: 12px;">ATC TIRES</span></div>`}
+        </td>
+        <td style="text-align: center;">
+          <div style="font-size: 15px; font-weight: 900; color: #0F172A; letter-spacing: 0.5px;">ATC TIRES PVT. LTD. &bull; YOKOHAMA GROUP</div>
+          <div style="font-size: 9.5px; font-weight: 700; color: #D32F2F; letter-spacing: 0.8px; margin-top: 1px;">
+            PLANT COMPETENCY &amp; VERIFICATION SYSTEM &bull; ISO 9001:2015 &amp; IATF 16949 COMPLIANT
+          </div>
+          <div style="font-size: 12.5px; font-weight: 800; color: #003D6B; margin-top: 3px; text-transform: uppercase;">
+            EXECUTIVE DEPARTMENT COMPETENCY SUMMARY REPORT — ${escapeHtml(deptTitle.toUpperCase())}
+          </div>
+        </td>
+        <td style="width: 200px; text-align: right; font-size: 8.5px; line-height: 1.4;">
+          <div style="background: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 4px; padding: 5px 8px; text-align: left; display: inline-block;">
+            <div><strong>DOC REF:</strong> YOKO/ATC/ILUO-${deptRef}/2026</div>
+            <div><strong>IATF REV:</strong> 04 (Automotive Standard)</div>
+            <div><strong>DATE:</strong> ${escapeHtml(generatedDate)}</div>
+            <div><strong>SHIFT:</strong> ${escapeHtml(shift)}</div>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Executive KPI Summary Grid -->
+    <div class="kpi-grid">
+      <div class="kpi-card" style="border-top-color: #003D6B;">
+        <div class="kpi-title">Total Headcount</div>
+        <div class="kpi-val">${totalEmps.toLocaleString()}</div>
+        <div class="kpi-sub">${escapeHtml(deptScopeBadge)}</div>
+      </div>
+      <div class="kpi-card" style="border-top-color: #0284C7;">
+        <div class="kpi-title">Theory Exam Certified</div>
+        <div class="kpi-val" style="color: #0284C7;">${examDone.toLocaleString()} <span style="font-size: 11px; font-weight: 600; color: #64748B;">(${examPct}%)</span></div>
+        <div class="kpi-sub">30-MCQ Section Knowledge (Passing &ge; 70%)</div>
+      </div>
+      <div class="kpi-card" style="border-top-color: #059669;">
+        <div class="kpi-title">Skill Assessment (OJT)</div>
+        <div class="kpi-val" style="color: #059669;">${ojtDone.toLocaleString()} <span style="font-size: 11px; font-weight: 600; color: #64748B;">(${ojtPct}%)</span></div>
+        <div class="kpi-sub">Shop-Floor Practical Rubric (Passing &ge; 75%)</div>
+      </div>
+      <div class="kpi-card" style="border-top-color: #7C3AED;">
+        <div class="kpi-title">Fully Certified (Both Done)</div>
+        <div class="kpi-val" style="color: #7C3AED;">${bothDone.toLocaleString()} <span style="font-size: 11px; font-weight: 600; color: #64748B;">(${bothPct}%)</span></div>
+        <div class="kpi-sub">Dual-Qualified Associates (Exam + OJT)</div>
+      </div>
+    </div>
+
+    <!-- Competency Level Mix Bar -->
+    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 6px 12px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+      <div style="font-size: 8.5px; font-weight: 700; color: #475569; text-transform: uppercase;">
+        ILUO Competency Breakdown:
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px; font-weight: 700; color: #DC2626;">
+          <span style="width: 14px; height: 14px; border-radius: 3px; background: #FEE2E2; color: #DC2626; display: inline-flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 800;">I</span>
+          Beginner: <strong>${countI}</strong> (${totalEmps > 0 ? Math.round((countI/totalEmps)*100) : 0}%)
+        </span>
+        <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px; font-weight: 700; color: #D97706;">
+          <span style="width: 14px; height: 14px; border-radius: 3px; background: #FEF3C7; color: #D97706; display: inline-flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 800;">L</span>
+          Learner: <strong>${countL}</strong> (${totalEmps > 0 ? Math.round((countL/totalEmps)*100) : 0}%)
+        </span>
+        <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px; font-weight: 700; color: #059669;">
+          <span style="width: 14px; height: 14px; border-radius: 3px; background: #DCFCE7; color: #059669; display: inline-flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 800;">U</span>
+          Executor: <strong>${countU}</strong> (${totalEmps > 0 ? Math.round((countU/totalEmps)*100) : 0}%)
+        </span>
+        <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px; font-weight: 700; color: #7C3AED;">
+          <span style="width: 14px; height: 14px; border-radius: 3px; background: #EDE9FE; color: #7C3AED; display: inline-flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 800;">O</span>
+          Expert: <strong>${countO}</strong> (${totalEmps > 0 ? Math.round((countO/totalEmps)*100) : 0}%)
+        </span>
+      </div>
+      <div style="font-size: 9px; color: #64748B;">
+        Autonomous Coverage (U + O): <strong>${totalEmps > 0 ? Math.round(((countU + countO) / totalEmps) * 100) : 0}%</strong>
+      </div>
+    </div>
+
+    <!-- Section Breakdown Table -->
+    <table class="summary-table">
+      <thead>
+        <tr>
+          <th style="width: 32px;">S.No</th>
+          <th style="width: 55px;">Code</th>
+          <th style="text-align: left; padding-left: 8px;">Section Name</th>
+          <th style="width: 65px;">Headcount</th>
+          <th style="width: 48px;">Level I</th>
+          <th style="width: 48px;">Level L</th>
+          <th style="width: 48px;">Level U</th>
+          <th style="width: 48px;">Level O</th>
+          <th style="width: 78px;">Theory Exam</th>
+          <th style="width: 78px;">Skill (OJT)</th>
+          <th style="width: 82px;">Both Done</th>
+          <th style="width: 105px;">Completion %</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${tableRowsHtml}
+        <!-- Grand Total Summary Row -->
+        <tr class="grand-total-row">
+          <td colspan="3" style="text-align: right; padding-right: 12px; font-weight: 800; font-size: 10.5px;">
+            TOTAL (${sections.length} SECTIONS)
+          </td>
+          <td style="text-align: center; font-weight: 800; font-size: 10.5px; font-variant-numeric: tabular-nums;">${grandTotalEmps}</td>
+          <td style="text-align: center; font-weight: 800; font-variant-numeric: tabular-nums;">${grandTotalI}</td>
+          <td style="text-align: center; font-weight: 800; font-variant-numeric: tabular-nums;">${grandTotalL}</td>
+          <td style="text-align: center; font-weight: 800; font-variant-numeric: tabular-nums;">${grandTotalU}</td>
+          <td style="text-align: center; font-weight: 800; font-variant-numeric: tabular-nums;">${grandTotalO}</td>
+          <td style="text-align: center; font-weight: 800; font-variant-numeric: tabular-nums;">${grandTotalExam} / ${grandTotalEmps}</td>
+          <td style="text-align: center; font-weight: 800; font-variant-numeric: tabular-nums;">${grandTotalOjt} / ${grandTotalEmps}</td>
+          <td style="text-align: center; font-weight: 800; font-variant-numeric: tabular-nums;">${grandTotalBoth} / ${grandTotalEmps}</td>
+          <td style="text-align: center; font-weight: 800; font-size: 10.5px; font-variant-numeric: tabular-nums;">${grandPct}% DONE</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Skill Gap & Training Needs Identification (TNI) Clause -->
+    <div class="tni-box">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+        <span style="font-size: 9px; font-weight: 800; color: #003D6B; text-transform: uppercase; letter-spacing: 0.5px;">
+          Skill Gap Analysis &amp; Training Action Plan (IATF 16949 Clause 7.2)
+        </span>
+        <span style="font-size: 8.5px; font-weight: 700; color: #D32F2F;">
+          Training Needs Identified (TNI): ${tniCount} Associates (Level I &amp; L)
+        </span>
+      </div>
+      <p style="margin: 0; font-size: 8.5px; color: #334155; line-height: 1.4;">
+        In accordance with IATF 16949:2016 automotive standards and plant standard operating procedures, associates at <strong>Level I (Beginner)</strong> and <strong>Level L (Learner)</strong> are restricted to designated training lines under direct supervisory oversight. Targeted OJT progression programs are scheduled within 30 days to elevate qualifying operators to <strong>Level U (Autonomous)</strong>. All evaluation rubrics, safety verifications, and 30-MCQ knowledge scores are archived in the authoritative plant qualification ledger.
+      </p>
+    </div>
+
+    <!-- Formal 3-Column Management Approval Block -->
+    <table class="sign-table">
+      <tr>
+        <td>
+          <div class="sign-label">Prepared &amp; Verified By</div>
+          <div class="sign-role">Competency Evaluator / HR Lead</div>
+          <div class="sign-line">
+            <span>Signature: _______________________</span>
+            <span>Date: ____________</span>
+          </div>
+        </td>
+        <td>
+          <div class="sign-label">Reviewed By</div>
+          <div class="sign-role">Head of Department (HOD) — ${escapeHtml(deptTitle)}</div>
+          <div class="sign-line">
+            <span>Signature: _______________________</span>
+            <span>Date: ____________</span>
+          </div>
+        </td>
+        <td>
+          <div class="sign-label">Approved By</div>
+          <div class="sign-role">Plant Head / Quality Head (ATC Tires)</div>
+          <div class="sign-line">
+            <span>Signature: _______________________</span>
+            <span>Date: ____________</span>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Footer Bar -->
+    <div class="footer-bar">
+      <span>ATC TIRES PVT. LTD. &bull; YOKOHAMA GROUP &bull; PLANT COMPETENCY SYSTEM</span>
+      <span>AUTOMOTIVE TIRE MANUFACTURING &bull; CONFIDENTIAL &amp; PROPRIETARY</span>
+      <span>ISO 9001:2015 &bull; IATF 16949 COMPLIANT REPORT</span>
+    </div>
+  </div>
+
+</body>
+</html>
+  `;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { generateOfficialReportHtml };
+  module.exports = { generateOfficialReportHtml, generateDepartmentSummaryHtml };
 }
 if (typeof window !== 'undefined') {
   window.generateOfficialReportHtml = generateOfficialReportHtml;
+  window.generateDepartmentSummaryHtml = generateDepartmentSummaryHtml;
 }
