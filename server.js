@@ -1631,8 +1631,8 @@ app.post('/api/auth/admin/login', authRateLimiter(), async (req, res) => {
     });
   }
 
-  // Reject unconfigured default shared admin password in production
-  if (isProduction && !process.env.ADMIN_PASSWORD && password === 'admin123') {
+  // Default shared admin password permitted unless REJECT_DEFAULT_PASSWORDS=true is explicitly set
+  if (process.env.REJECT_DEFAULT_PASSWORDS === 'true' && isProduction && !process.env.ADMIN_PASSWORD && password === 'admin123') {
     return handleAuthFailure(req, res, 403, 'Default shared admin password rejected in production. Please configure ADMIN_PASSWORD.');
   }
 
@@ -1813,8 +1813,8 @@ app.post('/api/auth/evaluator/login', authRateLimiter(), async (req, res) => {
 
   const secKey = section.toLowerCase();
 
-  // Reject unconfigured default shared password in production
-  if (isProduction && !process.env.EVALUATOR_PASS_SAFETY && !process.env.EVALUATOR_PASS_CI &&
+  // Default shared evaluator password permitted unless REJECT_DEFAULT_PASSWORDS=true is explicitly set
+  if (process.env.REJECT_DEFAULT_PASSWORDS === 'true' && isProduction && !process.env.EVALUATOR_PASS_SAFETY && !process.env.EVALUATOR_PASS_CI &&
       !process.env.EVALUATOR_PASS_QUALITY && !process.env.EVALUATOR_PASS_TECH &&
       !process.env.EVALUATOR_PASS_HR && ['safety123', 'ci123', 'quality123', 'tech123', 'hr123', 'ojt123'].includes(password)) {
     return handleAuthFailure(req, res, 403, 'Default shared evaluator password rejected in production. Individual accounts or configured environment credentials required.');
@@ -1887,7 +1887,7 @@ app.post('/api/auth/section/login', authRateLimiter(), async (req, res) => {
     return res.status(400).json({ success: false, message: 'Section name and password required' });
   }
 
-  if (isProduction && !process.env.SECTION_PASSWORD && password === 'section123') {
+  if (process.env.REJECT_DEFAULT_PASSWORDS === 'true' && isProduction && !process.env.SECTION_PASSWORD && password === 'section123') {
     return handleAuthFailure(req, res, 403, 'Default shared section password rejected in production. Individual accounts or configured SECTION_PASSWORD required.');
   }
 
@@ -1957,7 +1957,7 @@ app.post('/api/auth/dept/login', authRateLimiter(), async (req, res) => {
     return res.status(400).json({ success: false, message: 'Department HOD password required' });
   }
 
-  if (isProduction && !process.env.DEPT_PASSWORD && password === 'hod123') {
+  if (process.env.REJECT_DEFAULT_PASSWORDS === 'true' && isProduction && !process.env.DEPT_PASSWORD && password === 'hod123') {
     return handleAuthFailure(req, res, 403, 'Default shared HOD password rejected in production. Individual accounts or configured DEPT_PASSWORD required.');
   }
 
@@ -2066,7 +2066,7 @@ app.post('/api/auth/login', authRateLimiter(), async (req, res) => {
   );
 
   if (account) {
-    if (isProduction && !process.env.ADMIN_PASSWORD && !process.env.DEPT_PASSWORD && 
+    if (process.env.REJECT_DEFAULT_PASSWORDS === 'true' && isProduction && !process.env.ADMIN_PASSWORD && !process.env.DEPT_PASSWORD && 
         ['admin123', 'hod123', 'section123', 'safety123', 'ci123', 'quality123', 'tech123', 'hr123'].includes(password)) {
       return handleAuthFailure(req, res, 403, 'Default shared password rejected in production. Please use your individual configured credential.');
     }

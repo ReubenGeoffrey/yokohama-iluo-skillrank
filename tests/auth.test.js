@@ -140,3 +140,28 @@ test('POST /api/auth/employee/login rejects default password and succeeds after 
   });
   assert.strictEqual(resBad.status, 401);
 });
+
+test('POST /api/auth/admin/login accepts default password admin123 in production when REJECT_DEFAULT_PASSWORDS is not true', async () => {
+  const originalEnv = process.env.NODE_ENV;
+  const originalAdminPass = process.env.ADMIN_PASSWORD;
+  const originalReject = process.env.REJECT_DEFAULT_PASSWORDS;
+  process.env.NODE_ENV = 'production';
+  delete process.env.ADMIN_PASSWORD;
+  delete process.env.REJECT_DEFAULT_PASSWORDS;
+
+  try {
+    const res = await fetch(`${baseUrl}/api/auth/admin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'admin', password: 'admin123' })
+    });
+    assert.strictEqual(res.status, 200, `Must accept default admin123, got ${res.status}`);
+    const data = await res.json();
+    assert.strictEqual(data.success, true);
+    assert.ok(data.token, 'Must return session token');
+  } finally {
+    process.env.NODE_ENV = originalEnv;
+    if (originalAdminPass !== undefined) process.env.ADMIN_PASSWORD = originalAdminPass;
+    if (originalReject !== undefined) process.env.REJECT_DEFAULT_PASSWORDS = originalReject;
+  }
+});
