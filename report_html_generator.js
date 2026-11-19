@@ -795,12 +795,15 @@ function generateDepartmentSummaryHtml(options = {}) {
       padding: 4px 6px;
     }
     .kpi-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
       gap: 10px;
       margin-bottom: 12px;
     }
     .kpi-card {
+      flex: 1;
+      min-width: 0;
       background: #F8FAFC;
       border: 1px solid #E2E8F0;
       border-radius: 6px;

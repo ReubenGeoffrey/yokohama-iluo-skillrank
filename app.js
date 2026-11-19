@@ -3727,6 +3727,81 @@ async function getBrowserLogoBase64() {
   return '';
 }
 
+// Robust DOM-staged PDF download engine to prevent html2canvas blank page/scroll offset issues
+async function executeHtml2PdfDownload(htmlString, opt, isLandscape = false) {
+  if (typeof window.html2pdf === 'undefined') {
+    throw new Error('html2pdf library is not loaded');
+  }
+
+  // Create an off-screen staging container mounted directly to document.body with fixed coordinates
+  // This avoids window.scrollY / window.scrollX offsets which cause blank pages in html2canvas!
+  const stagingContainer = document.createElement('div');
+  stagingContainer.className = 'pdf-render-staging-container';
+  stagingContainer.style.position = 'fixed';
+  stagingContainer.style.left = '0';
+  stagingContainer.style.top = '0';
+  stagingContainer.style.width = isLandscape ? '1120px' : '820px';
+  stagingContainer.style.background = '#ffffff';
+  stagingContainer.style.zIndex = '-99999';
+  stagingContainer.style.opacity = '0.02';
+  stagingContainer.style.pointerEvents = 'none';
+  stagingContainer.style.overflow = 'visible';
+
+  // Parse HTML string with DOMParser to cleanly preserve styles and full DOM tree
+  const parser = new DOMParser();
+  const parsedDoc = parser.parseFromString(htmlString, 'text/html');
+
+  // Copy head styles
+  parsedDoc.head.querySelectorAll('style').forEach(st => {
+    stagingContainer.appendChild(st.cloneNode(true));
+  });
+
+  // Copy all body elements
+  Array.from(parsedDoc.body.childNodes).forEach(node => {
+    stagingContainer.appendChild(node.cloneNode(true));
+  });
+
+  document.body.appendChild(stagingContainer);
+
+  // Configure html2canvas to eliminate scroll offset and blank page issues
+  const html2canvasConfig = {
+    scale: isLandscape ? 1.5 : 1.4,
+    useCORS: true,
+    logging: false,
+    scrollX: 0,
+    scrollY: 0,
+    windowWidth: isLandscape ? 1200 : 860,
+    backgroundColor: '#ffffff',
+    ...(opt.html2canvas || {})
+  };
+
+  const finalOpt = {
+    ...opt,
+    html2canvas: html2canvasConfig
+  };
+
+  try {
+    // Wait for any embedded images inside the staging container to finish loading
+    const images = Array.from(stagingContainer.querySelectorAll('img'));
+    if (images.length > 0) {
+      await Promise.all(images.map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise(res => {
+          img.onload = res;
+          img.onerror = res;
+          setTimeout(res, 800);
+        });
+      }));
+    }
+
+    await window.html2pdf().set(finalOpt).from(stagingContainer).save();
+  } finally {
+    if (stagingContainer.parentNode) {
+      stagingContainer.parentNode.removeChild(stagingContainer);
+    }
+  }
+}
+
 // Generate and immediately download a 100% real, dynamic .pdf file directly in the browser
 async function generateAndDownloadClientSidePdf(empNo, recordData = null) {
   if (!empNo) throw new Error('Employee ID is required');
@@ -3746,7 +3821,7 @@ async function generateAndDownloadClientSidePdf(empNo, recordData = null) {
   if (typeof window.generateOfficialReportHtml !== 'function') {
     await new Promise((resolve, reject) => {
       const script = document.createElement('script');
-      script.src = 'report_html_generator.js?v=46.0';
+      script.src = 'report_html_generator.js?v=48.0';
       script.onload = resolve;
       script.onerror = () => reject(new Error('Failed to load report_html_generator library'));
       document.head.appendChild(script);
@@ -3802,12 +3877,11 @@ async function generateAndDownloadClientSidePdf(empNo, recordData = null) {
     margin: [6, 8, 6, 8],
     filename: filename,
     image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 1.5, useCORS: true, logging: false },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     pagebreak: { mode: ['css', 'legacy'] }
   };
 
-  await window.html2pdf().set(opt).from(reportHtml).save();
+  await executeHtml2PdfDownload(reportHtml, opt, false);
 }
 window.generateAndDownloadClientSidePdf = generateAndDownloadClientSidePdf;
 
@@ -3956,12 +4030,11 @@ async function generateAndDownloadDepartmentSummaryPdf(deptOverride) {
       margin: [6, 8, 6, 8],
       filename: filename,
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 1.6, useCORS: true, logging: false },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
       pagebreak: { mode: ['css', 'legacy'] }
     };
 
-    await window.html2pdf().set(opt).from(html).save();
+    await executeHtml2PdfDownload(html, opt, true);
     showToast(`Official ${deptSlug.replace(/_/g, ' ')} Summary PDF downloaded successfully!`);
   } catch (err) {
     console.error('Department Summary PDF generation error:', err);
