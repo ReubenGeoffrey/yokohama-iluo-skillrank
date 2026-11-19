@@ -3733,19 +3733,20 @@ async function executeHtml2PdfDownload(htmlString, opt, isLandscape = false) {
     throw new Error('html2pdf library is not loaded');
   }
 
-  // Create an off-screen staging container mounted directly to document.body with fixed coordinates
-  // This avoids window.scrollY / window.scrollX offsets which cause blank pages in html2canvas!
-  const stagingContainer = document.createElement('div');
-  stagingContainer.className = 'pdf-render-staging-container';
-  stagingContainer.style.position = 'fixed';
-  stagingContainer.style.left = '0';
-  stagingContainer.style.top = '0';
-  stagingContainer.style.width = isLandscape ? '1120px' : '820px';
-  stagingContainer.style.background = '#ffffff';
-  stagingContainer.style.zIndex = '-99999';
-  stagingContainer.style.opacity = '0.02';
-  stagingContainer.style.pointerEvents = 'none';
-  stagingContainer.style.overflow = 'visible';
+  // Create an off-screen wrapper positioned off-viewport so it does NOT disturb layout or visible UI
+  const offscreenWrapper = document.createElement('div');
+  offscreenWrapper.id = 'pdf-render-offscreen-wrapper';
+  offscreenWrapper.style.position = 'absolute';
+  offscreenWrapper.style.left = '-99999px';
+  offscreenWrapper.style.top = '0';
+  offscreenWrapper.style.width = isLandscape ? '1120px' : '820px';
+  offscreenWrapper.style.overflow = 'visible';
+
+  // Inner content container in standard document flow with 100% opacity and explicit dimensions
+  const contentDiv = document.createElement('div');
+  contentDiv.style.width = isLandscape ? '1120px' : '820px';
+  contentDiv.style.background = '#ffffff';
+  contentDiv.style.color = '#0F172A';
 
   // Parse HTML string with DOMParser to cleanly preserve styles and full DOM tree
   const parser = new DOMParser();
@@ -3753,24 +3754,24 @@ async function executeHtml2PdfDownload(htmlString, opt, isLandscape = false) {
 
   // Copy head styles
   parsedDoc.head.querySelectorAll('style').forEach(st => {
-    stagingContainer.appendChild(st.cloneNode(true));
+    contentDiv.appendChild(st.cloneNode(true));
   });
 
   // Copy all body elements
   Array.from(parsedDoc.body.childNodes).forEach(node => {
-    stagingContainer.appendChild(node.cloneNode(true));
+    contentDiv.appendChild(node.cloneNode(true));
   });
 
-  document.body.appendChild(stagingContainer);
+  offscreenWrapper.appendChild(contentDiv);
+  document.body.appendChild(offscreenWrapper);
 
   // Configure html2canvas to eliminate scroll offset and blank page issues
   const html2canvasConfig = {
-    scale: isLandscape ? 1.5 : 1.4,
+    scale: 1.5,
     useCORS: true,
     logging: false,
     scrollX: 0,
     scrollY: 0,
-    windowWidth: isLandscape ? 1200 : 860,
     backgroundColor: '#ffffff',
     ...(opt.html2canvas || {})
   };
@@ -3781,8 +3782,8 @@ async function executeHtml2PdfDownload(htmlString, opt, isLandscape = false) {
   };
 
   try {
-    // Wait for any embedded images inside the staging container to finish loading
-    const images = Array.from(stagingContainer.querySelectorAll('img'));
+    // Wait for any embedded images inside the content container to finish loading
+    const images = Array.from(contentDiv.querySelectorAll('img'));
     if (images.length > 0) {
       await Promise.all(images.map(img => {
         if (img.complete) return Promise.resolve();
@@ -3794,10 +3795,10 @@ async function executeHtml2PdfDownload(htmlString, opt, isLandscape = false) {
       }));
     }
 
-    await window.html2pdf().set(finalOpt).from(stagingContainer).save();
+    await window.html2pdf().set(finalOpt).from(contentDiv).save();
   } finally {
-    if (stagingContainer.parentNode) {
-      stagingContainer.parentNode.removeChild(stagingContainer);
+    if (offscreenWrapper.parentNode) {
+      offscreenWrapper.parentNode.removeChild(offscreenWrapper);
     }
   }
 }
