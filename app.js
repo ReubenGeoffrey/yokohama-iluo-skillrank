@@ -3739,14 +3739,15 @@ async function executeHtml2PdfDownload(htmlString, opt, isLandscape = false) {
   offscreenWrapper.style.position = 'absolute';
   offscreenWrapper.style.left = '-99999px';
   offscreenWrapper.style.top = '0';
-  offscreenWrapper.style.width = isLandscape ? '1120px' : '820px';
+  offscreenWrapper.style.width = isLandscape ? '1060px' : '730px';
   offscreenWrapper.style.overflow = 'visible';
 
   // Inner content container in standard document flow with 100% opacity and explicit dimensions
   const contentDiv = document.createElement('div');
-  contentDiv.style.width = isLandscape ? '1120px' : '820px';
+  contentDiv.style.width = isLandscape ? '1060px' : '730px';
   contentDiv.style.background = '#ffffff';
   contentDiv.style.color = '#0F172A';
+  contentDiv.style.boxSizing = 'border-box';
 
   // Parse HTML string with DOMParser to cleanly preserve styles and full DOM tree
   const parser = new DOMParser();
@@ -3767,7 +3768,7 @@ async function executeHtml2PdfDownload(htmlString, opt, isLandscape = false) {
 
   // Configure html2canvas to eliminate scroll offset and blank page issues
   const html2canvasConfig = {
-    scale: 1.5,
+    scale: 2,
     useCORS: true,
     logging: false,
     scrollX: 0,
