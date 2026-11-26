@@ -5,11 +5,11 @@
       "src": "server.js",
       "use": "@vercel/node",
       "config": {
+          "maxLambdaSize": "50mb",
           "includeFiles": [
             "index.html",
             "employee.html",
             "app.js",
-            "public_operators.js",
             "employee.js",
             "data.js",
             "styles.css",
@@ -26,12 +26,18 @@
             "jszip.min.js",
             "atg_logo.png",
             "yokohama_logo.png",
+            "favicon.ico",
             "mammoth.browser.min.js",
             "docx-preview.min.js",
             "xlsx.full.min.js",
             "seed_ojt.js",
+            "shared_constants.js",
             "master_excel_b64.js",
-            "1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx",
+            "excel_sync_engine.js",
+            "master_questions.json",
+            "audit_logs.json",
+            "custom_settings.json",
+            "public/**",
             "QC_templates/**",
             "assets/**"
           ]
@@ -41,7 +47,15 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "server.js"
+      "dest": "server.js",
+      "headers": {
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+        "X-Frame-Options": "SAMEORIGIN",
+        "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+        "Cache-Control": "no-store"
+      }
     },
     {
       "src": "/employee",
@@ -70,7 +84,15 @@
     { "handle": "filesystem" },
     {
       "src": "/(.*)",
-      "dest": "server.js"
+      "dest": "server.js",
+      "headers": {
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+        "X-Frame-Options": "SAMEORIGIN",
+        "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+        "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'"
+      }
     }
   ]
 }

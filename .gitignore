@@ -1,52 +1,72 @@
-# ==============================================================================
-# YOKOHAMA ILUO PORTAL - .gitignore
-# ==============================================================================
-
-# Environment & Credentials
 .env
-.env*
-!.env.example
-
-# Node Dependencies
 node_modules/
-npm-debug.log*
-
-# Python Cache & Bytecode
-__pycache__/
-*.py[cod]
-*$py.class
-scripts/__pycache__/
-
-# Ephemeral Logs & Output Dumps
 *.log
 *.txt
+__pycache__/
+*.py
+!update_ojt_excel.py
+!generate_employee_docx.py
+!generate_qa_workbook.py
+!combine_production_and_qa.py
+!populate_all_production_data.py
 output_docx/
-pdf_reports/
-temp_all_docx/
-temp_docx/
+/pdf_reports/
+test_*.docx
+extracted_logo.jpg
+parsed_qc_questions.json
+parsed_perfect_qc_bank.json
+parsed_docx.json
+QC question/
+extracted_ppt_images/
+*.pptx
+*.xlsx
+!1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx
+*.bat
+!batch_convert_all_to_pdf.bat
+dump_*.txt
+clean_out.txt
+cur_out.txt
+curing_dump.txt
+full_out.txt
+ff_*.txt
+headers.txt
+inspect_*.txt
+inspect_*.py
+inspect_output.txt
+inspect_ans.txt
+inspect_structure.txt
+test_seq.txt
+verify_out.txt
+deep_out.txt
+dump_l.txt
+dump_o.txt
+dump_u.txt
 
-# Dynamic Plant Production State Files (Preserved Locally/On Server)
+.vercel
+.env*
+!.env.example
+!.env.staging.example
+dist/
+
+archive_pregen_pdfs/
+public/pdf_reports/
+temp_test_*.pdf
+pending_test_out.pdf
+
+# Sensitive Customer/Production JSON Data
 assessment_records*.json
 custom_employees*.json
 ojt_evaluations*.json
 custom_settings*.json
+audit_logs*.json
+checkpoints_qa_*.json
 
-# Vercel Deployment Cache
-.vercel
-
-# Android / Mobile Builds & Workspace Projects
 *.apk
-*.keystore
-capacitor.config.json
-android/
 www/
+android/
+capacitor.config.json
 
-# Reference Archives & Large Offline Datasets
-archive_pregen_pdfs/
-data/reference_workbooks/
-docs/reference/
+*.keystore
 
-# Operating System Metadata
-.DS_Store
-Thumbs.db
-Desktop.ini
+.vercel
+.env*

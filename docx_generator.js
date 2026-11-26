@@ -1,6 +1,6 @@
 // =====================================================================
 // YOKOHAMA ILUO OFFICIAL DOCX REPORT GENERATOR (Exact Template Mapper)
-// Preserves exact QC_templates with perfect answer tick mapping
+// Preserves exact D:\QC question templates with perfect answer tick mapping
 // =====================================================================
 
 (function (global) {

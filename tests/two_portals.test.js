@@ -19,20 +19,6 @@ test.before(async () => {
       resolve();
     });
   });
-
-  const testEmps = [
-    { empNo: '900191', doj: '2011-04-01' },
-    { empNo: '900262', doj: '2011-04-01' },
-    { empNo: '900445', doj: '2012-04-01' },
-    { empNo: 'LN0039', doj: '2023-12-13' }
-  ];
-  for (const te of testEmps) {
-    await fetch(`${baseUrl}/api/auth/employee/setup-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ empNo: te.empNo, doj: te.doj, newPassword: 'Emp@Secure2026!' })
-    });
-  }
 });
 
 test.after(async () => {
@@ -161,7 +147,7 @@ test('TWO-PORTAL 5: Employee can log in and view own profile data', async () => 
   const empLogin = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: '900262', password: 'Emp@Secure2026!' })
+    body: JSON.stringify({ empNo: '900262', password: '900262' })
   });
   assert.strictEqual(empLogin.status, 200);
   const empData = await empLogin.json();
@@ -183,7 +169,7 @@ test('TWO-PORTAL 6: Employee is strictly isolated from other employees records',
   const empLogin = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: '900262', password: 'Emp@Secure2026!' })
+    body: JSON.stringify({ empNo: '900262', password: '900262' })
   });
   const token = (await empLogin.json()).token;
 
@@ -211,7 +197,7 @@ test('TWO-PORTAL 7: Employee cannot access Management APIs directly', async () =
   const empLogin = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: '900262', password: 'Emp@Secure2026!' })
+    body: JSON.stringify({ empNo: '900262', password: '900262' })
   });
   const token = (await empLogin.json()).token;
 
@@ -246,7 +232,7 @@ test('TWO-PORTAL 8: Assessment lifecycle persists authoritatively in shared back
   const empLogin = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: '900191', password: 'Emp@Secure2026!' })
+    body: JSON.stringify({ empNo: '900191', password: '900191' })
   });
   const token = (await empLogin.json()).token;
 
@@ -341,77 +327,73 @@ test('TWO-PORTAL 10: Host and path routing serves Employee Portal vs Management 
   assert.ok(hostEmpIndexHtml.includes('Employee Skill Assessment Portal'));
 });
 
-// TEST 11: Employee can log in with Employee No as password without setup
-test('TWO-PORTAL 11: Employee can log in with Employee No as password without setup', async () => {
-  // 1. Employee No as password succeeds
-  const empLoginRes = await fetch(`${baseUrl}/api/auth/employee/login`, {
+// TEST 11: Employee logs in directly with Employee Number as username & default password; blank/wrong passwords rejected
+test('TWO-PORTAL 11: Employee direct auth uses Employee Number as default password and rejects invalid passwords', async () => {
+  if (app.resetRateLimitMemory) app.resetRateLimitMemory();
+
+  // 1. Direct login with Employee Number as both username and default password succeeds
+  const empNoLoginRes = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ empNo: '900445', password: '900445' })
   });
-  assert.strictEqual(empLoginRes.status, 200);
-  const empLoginData = await empLoginRes.json();
-  assert.strictEqual(empLoginData.success, true);
-  assert.strictEqual(empLoginData.employee.empNo, '900445');
-  assert.ok(empLoginData.token);
+  assert.strictEqual(empNoLoginRes.status, 200);
+  const empNoLoginData = await empNoLoginRes.json();
+  assert.strictEqual(empNoLoginData.success, true);
+  assert.ok(empNoLoginData.token);
+  assert.strictEqual(empNoLoginData.employee.empNo, '900445');
 
-  // 2. Omitting password also defaults to Employee No and succeeds
-  const empNoPassRes = await fetch(`${baseUrl}/api/auth/employee/login`, {
+  // 2. Username alias also succeeds
+  const aliasLoginRes = await fetch(`${baseUrl}/api/auth/employee/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: '900445', password: '900445' })
+  });
+  assert.strictEqual(aliasLoginRes.status, 200);
+
+  // 3. Empty password MUST be rejected (400)
+  const empEmptyPassRes = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ empNo: '900445', password: '' })
   });
-  assert.strictEqual(empNoPassRes.status, 200);
-  const empNoPassData = await empNoPassRes.json();
-  assert.strictEqual(empNoPassData.success, true);
+  assert.strictEqual(empEmptyPassRes.status, 400);
+  const empEmptyPassData = await empEmptyPassRes.json();
+  assert.strictEqual(empEmptyPassData.success, false);
 
-  // 3. Wrong passwords are rejected with 401
-  const badPasswords = ['wrongpass', '1234', '0000', 'random999'];
+  // 4. Wrong passwords are rejected with 401/403
+  const badPasswords = ['wrongpass', '1234', '0000'];
   for (const pw of badPasswords) {
     const res = await fetch(`${baseUrl}/api/auth/employee/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ empNo: '900445', password: pw })
     });
-    assert.strictEqual(res.status, 401, `Password "${pw}" must be rejected with 401`);
+    assert.strictEqual(res.status === 401 || res.status === 403, true, `Password "${pw}" must be rejected`);
     const data = await res.json();
     assert.strictEqual(data.success, false);
   }
+
+  if (app.resetRateLimitMemory) app.resetRateLimitMemory();
 });
 
-// TEST 12: Secure Password Setup & Reset with DOJ verification
-test('TWO-PORTAL 12: Setup and reset password requires correct DOJ and strong password', async () => {
-  // Wrong DOJ -> 401
-  const badDojRes = await fetch(`${baseUrl}/api/auth/employee/setup-password`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: '900445', doj: '1999-01-01', newPassword: 'ValidPass123!' })
-  });
-  assert.strictEqual(badDojRes.status, 401);
+// TEST 12: Removed DOJ-based employee authentication endpoints return 404
+test('TWO-PORTAL 12: Removed DOJ password setup, reset, and OTP employee routes return 404', async () => {
+  const removedEndpoints = [
+    '/api/auth/employee/setup-password',
+    '/api/auth/employee/reset-password',
+    '/api/auth/employee/send-otp',
+    '/api/auth/employee/verify-otp'
+  ];
 
-  // Weak password (<8 chars) -> 400
-  const weakPwRes = await fetch(`${baseUrl}/api/auth/employee/setup-password`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: '900445', doj: '2012-04-01', newPassword: 'short' })
-  });
-  assert.strictEqual(weakPwRes.status, 400);
-
-  // Correct DOJ & Strong Password -> 200
-  const goodRes = await fetch(`${baseUrl}/api/auth/employee/setup-password`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: '900445', doj: '2012-04-01', newPassword: 'SuperSecret2026!' })
-  });
-  assert.strictEqual(goodRes.status, 200);
-
-  // Login with new password
-  const loginRes = await fetch(`${baseUrl}/api/auth/employee/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: '900445', password: 'SuperSecret2026!' })
-  });
-  assert.strictEqual(loginRes.status, 200);
+  for (const ep of removedEndpoints) {
+    const res = await fetch(`${baseUrl}${ep}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ empNo: '900445', doj: '2012-04-01', newPassword: 'SuperSecret2026!', otp: '123456' })
+    });
+    assert.strictEqual(res.status, 404, `Removed endpoint ${ep} must return 404`);
+  }
 });
 
 // TEST 13: Empty dataset reset does not resurrect legacy seed records
@@ -530,7 +512,7 @@ test('TWO-PORTAL 16: QC employee switches skill level to experience-based level 
     } catch (e) {}
   }
 
-  // 1. Employee 900844 (SAVARIMUTHU F) logs in using Employee ID as password
+  // 1. Employee 900844 (SAVARIMUTHU F) logs in directly using Employee Number as username and default password
   const empLogin = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

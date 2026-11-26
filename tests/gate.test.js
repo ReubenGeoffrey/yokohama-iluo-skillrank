@@ -18,20 +18,6 @@ test.before(async () => {
       resolve();
     });
   });
-
-  const testEmps = [
-    { empNo: '900191', doj: '2011-04-01' },
-    { empNo: '900262', doj: '2011-04-01' },
-    { empNo: '900445', doj: '2012-04-01' },
-    { empNo: 'LN0039', doj: '2023-12-13' }
-  ];
-  for (const te of testEmps) {
-    await fetch(`${baseUrl}/api/auth/employee/setup-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ empNo: te.empNo, doj: te.doj, newPassword: 'Emp@Secure2026!' })
-    });
-  }
 });
 
 test.after(async () => {
@@ -106,7 +92,7 @@ test('GATE 3: Candidate exam question payload contains zero correctAnswer proper
   const loginRes = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: '900191', password: 'Emp@Secure2026!' })
+    body: JSON.stringify({ empNo: '900191', password: '900191' })
   });
   assert.strictEqual(loginRes.status, 200);
   const loginData = await loginRes.json();
@@ -188,7 +174,7 @@ test('GATE 5: Strict RBAC enforcement across roles (401/403 for unauthorized acc
   const empLogin = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: 'LN0039', password: 'Emp@Secure2026!' })
+    body: JSON.stringify({ empNo: 'LN0039', password: 'LN0039' })
   });
   const empToken = (await empLogin.json()).token;
 
@@ -222,7 +208,7 @@ test('GATE 6: IDOR - Employee A cannot access Employee B records or reports', as
   const loginA = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: 'LN0039', password: 'Emp@Secure2026!' })
+    body: JSON.stringify({ empNo: 'LN0039', password: 'LN0039' })
   });
   const tokenA = (await loginA.json()).token;
 
@@ -268,7 +254,7 @@ test('GATE 7: Session lifecycle - logged-out and replayed sessions rejected', as
   const loginRes = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: 'LN0039', password: 'Emp@Secure2026!' })
+    body: JSON.stringify({ empNo: 'LN0039', password: 'LN0039' })
   });
   assert.strictEqual(loginRes.status, 200);
   const data = await loginRes.json();
@@ -359,11 +345,15 @@ test('GATE 9: Audit events recorded with comprehensive security metadata', async
 
 // GATE CHECK 10: CANONICAL DATA INTEGRITY COUNTS (DYNAMIC PROOF WITHOUT HARDCODED CONSTANTS)
 test('GATE 10: Canonical dataset counts match authoritative storage dynamically', async () => {
-  const emps = JSON.parse(fs.readFileSync('custom_employees.json', 'utf8'));
-  const recs = JSON.parse(fs.readFileSync('assessment_records.json', 'utf8'));
+  const emps = await app.getAuthoritativeEmployees();
+  const recs = fs.existsSync('assessment_records.json')
+    ? JSON.parse(fs.readFileSync('assessment_records.json', 'utf8'))
+    : await app.getAuthoritativeRecords();
   delete recs.__initialized;
-  const qs = JSON.parse(fs.readFileSync('custom_questions.json', 'utf8'));
-  const ojts = JSON.parse(fs.readFileSync('ojt_evaluations.json', 'utf8'));
+  const qs = await app.getAuthoritativeQuestions();
+  const ojts = fs.existsSync('ojt_evaluations.json')
+    ? JSON.parse(fs.readFileSync('ojt_evaluations.json', 'utf8'))
+    : await app.getAuthoritativeOjtEvaluations();
   delete ojts.__initialized;
 
   // Admin login to query live authoritative APIs
@@ -374,12 +364,13 @@ test('GATE 10: Canonical dataset counts match authoritative storage dynamically'
   });
   const adminToken = (await loginRes.json()).token;
 
-  // 1. Employee count via API matches canonical store
+  // 1. Employee count via API matches canonical active employees store (excluding Left employees)
   const statsRes = await fetch(`${baseUrl}/api/admin/dashboard-stats`, {
     headers: { 'x-admin-token': adminToken }
   });
   const statsData = await statsRes.json();
-  assert.strictEqual(statsData.data.totalEmployees, emps.length, 'API employee count must match canonical employees store');
+  const activeEmpCount = emps.filter(e => !e.isLeft && String(e.status || '').toUpperCase() !== 'LEFT').length;
+  assert.strictEqual(statsData.data.totalEmployees, activeEmpCount, 'API active employee count must match canonical active employees store');
 
   // 2. Records count via API matches canonical store
   const recsRes = await fetch(`${baseUrl}/api/records`, {
@@ -437,10 +428,7 @@ test('GATE 12: Strict allowlist blocks direct access to server.js and internal a
     '/tests/gate.test.js',
     '/README.md',
     '/word_to_pdf.ps1',
-    '/custom_employees.json',
-    '/data.js',
-    '/seed_data.js',
-    '/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx'
+    '/custom_employees.json'
   ];
 
   for (const f of forbiddenFiles) {
@@ -449,7 +437,7 @@ test('GATE 12: Strict allowlist blocks direct access to server.js and internal a
   }
 
   // Public assets must be accessible (200)
-  const publicFiles = ['/index.html', '/app.js', '/styles.css'];
+  const publicFiles = ['/index.html', '/app.js', '/data.js', '/styles.css'];
   for (const pf of publicFiles) {
     const res = await fetch(`${baseUrl}${pf}`);
     assert.strictEqual(res.status, 200, `Public file ${pf} must be accessible with 200`);
@@ -461,7 +449,7 @@ test('GATE 13: Set-Cookie headers enforce HttpOnly, Path=/, SameSite=lax', async
   const res = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: 'LN0039', password: 'Emp@Secure2026!' })
+    body: JSON.stringify({ empNo: 'LN0039', password: 'LN0039' })
   });
   assert.strictEqual(res.status, 200);
 

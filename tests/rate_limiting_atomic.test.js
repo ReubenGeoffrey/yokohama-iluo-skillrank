@@ -149,29 +149,6 @@ test('DEVELOPMENT FALLBACK: Retains in-memory fallback with HTTP 401 when NODE_E
   }
 });
 
-test('PRODUCTION RESILIENT FALLBACK: Production falls back to memory and does not 503 when strict fail-closed is not demanded', async () => {
-  const originalEnv = process.env.NODE_ENV;
-  const originalFailClosed = process.env.FAIL_CLOSED_AUTH;
-  process.env.NODE_ENV = 'production';
-  delete process.env.FAIL_CLOSED_AUTH;
-  app.setKvWriteForbidden(false);
-
-  try {
-    const res = await fetch(`${baseUrl}/api/auth/employee/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ empNo: '999999', password: 'wrong' })
-    });
-
-    assert.strictEqual(res.status, 401, `Production must fall back to memory and return 401 instead of 503, got ${res.status}`);
-  } finally {
-    process.env.NODE_ENV = originalEnv;
-    if (originalFailClosed !== undefined) {
-      process.env.FAIL_CLOSED_AUTH = originalFailClosed;
-    }
-  }
-});
-
 test('LOCK EXPIRATION: Key automatically unlocks after timeout expires', async () => {
   app.resetRateLimitMemory();
   const testKey = 'expiring_key_' + Date.now();

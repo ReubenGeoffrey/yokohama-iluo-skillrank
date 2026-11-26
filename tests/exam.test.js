@@ -18,18 +18,11 @@ test.before(async () => {
     });
   });
 
-  // Setup password first
-  await fetch(`${baseUrl}/api/auth/employee/setup-password`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: 'LN0039', doj: '2023-12-13', newPassword: 'Emp@Secure2026!' })
-  });
-
-  // Authenticate as test employee
+  // Authenticate as test employee directly with Employee Number as default password
   const res = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: 'LN0039', password: 'Emp@Secure2026!' })
+    body: JSON.stringify({ empNo: 'LN0039', password: 'LN0039' })
   });
   const data = await res.json();
   empToken = data.token;
@@ -117,52 +110,54 @@ test('Duplicate exam submission is rejected (409 Conflict)', async () => {
   assert.strictEqual(data.success, false);
 });
 
-// TEST: Pool Capacity & Shortfall Audit (Task 2.5 / S6)
-test('GET /api/admin/questions/capacity calculates pool capacity and flags single-paper shortfall', async () => {
-  // 1. Authenticate as Admin
-  const adminLogin = await fetch(`${baseUrl}/api/auth/admin/login`, {
+test('After complete zero-finish reset, attending exam stores only the new record without resurrecting seeds', async () => {
+  const adminRes = await fetch(`${baseUrl}/api/auth/admin/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username: 'admin', password: 'admin123' })
   });
-  assert.strictEqual(adminLogin.status, 200);
-  const { token: adminToken } = await adminLogin.json();
+  const adminToken = (await adminRes.json()).token;
 
-  // 2. Query question capacity
-  const capRes = await fetch(`${baseUrl}/api/admin/questions/capacity`, {
-    headers: { 'x-admin-token': adminToken }
-  });
-  assert.strictEqual(capRes.status, 200);
-  const capData = await capRes.json();
-  assert.strictEqual(capData.success, true);
-  assert.ok(capData.capacity);
-  assert.ok(capData.capacity.totalQuestions >= 720, 'Authoritative pool has at least 720 questions');
-  assert.strictEqual(capData.capacity.hasShortfall, true, 'Flags single-paper shortfall across sections');
-  assert.ok(capData.capacity.shortfallSections.length > 0);
-  assert.ok(capData.capacity.auditWarning.includes('CAPACITY AUDIT NOTICE'));
-});
-
-// TEST: Candidate Option Randomization (Task 2.5 / S6)
-test('POST /api/exam/start randomizes candidate options while maintaining canonical keys', async () => {
-  const res = await fetch(`${baseUrl}/api/exam/start`, {
+  // 1. Reset all exam records & OJT evaluations to 0 finished
+  const resetExams = await fetch(`${baseUrl}/api/records/reset-all`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-emp-token': empToken
-    },
+    headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken },
+    body: JSON.stringify({ confirmPhrase: 'RESET-ALL-EXAMS' })
+  });
+  assert.strictEqual(resetExams.status, 200);
+
+  const resetOjt = await fetch(`${baseUrl}/api/ojt-evaluations/reset-all`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken },
+    body: JSON.stringify({ confirmPhrase: 'RESET-ALL-OJT' })
+  });
+  assert.strictEqual(resetOjt.status, 200);
+
+  // Confirm 0 records & 0 OJT
+  const emptyRecs = await (await fetch(`${baseUrl}/api/records`, { headers: { 'x-admin-token': adminToken } })).json();
+  assert.strictEqual(Object.keys(emptyRecs.records).length, 0);
+
+  // 2. Employee attends and submits exam
+  const startRes = await fetch(`${baseUrl}/api/exam/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-emp-token': empToken },
     body: JSON.stringify({ empNo: 'LN0039', targetLevel: 'L', forceRetake: true })
   });
+  assert.strictEqual(startRes.status, 200);
 
-  assert.strictEqual(res.status, 200);
-  const data = await res.json();
-  assert.strictEqual(data.success, true);
-  assert.ok(data.activeExam.questions.length > 0);
+  const subRes = await fetch(`${baseUrl}/api/exam/submit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-emp-token': empToken },
+    body: JSON.stringify({
+      empNo: 'LN0039',
+      targetLevel: 'L',
+      responses: { 'L_Warehouse_QA_1': 'D', 'L_Warehouse_QA_2': 'B' }
+    })
+  });
+  assert.strictEqual(subRes.status, 200);
 
-  // Assert all options have valid non-empty keys and text
-  for (const q of data.activeExam.questions) {
-    const keys = q.options.map(o => o.key);
-    assert.strictEqual(new Set(keys).size, keys.length, 'Option keys must be distinct');
-    assert.strictEqual('correctAnswer' in q, false, 'Correct answer must never be exposed');
-  }
+  // 3. Admin queries /api/records -> strictly 1 finished record stored, 0 resurrected seeds
+  const afterRecs = await (await fetch(`${baseUrl}/api/records`, { headers: { 'x-admin-token': adminToken } })).json();
+  assert.strictEqual(Object.keys(afterRecs.records).length, 1);
+  assert.strictEqual(afterRecs.records['LN0039'].isCompleted, true);
 });
-

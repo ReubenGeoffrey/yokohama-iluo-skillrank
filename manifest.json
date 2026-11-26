@@ -1,7 +1,7 @@
 {
-  "name": "ATC Tires ILUO Skill Assessment",
-  "short_name": "ATC Tires ILUO",
-  "description": "Official Plant Skill Qualification & Analytics Portal for ATC Tires",
+  "name": "Yokohama ILUO Skill Assessment",
+  "short_name": "Yokohama ILUO",
+  "description": "Official Plant Skill Qualification & Analytics Portal for Yokohama ATC Tires",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0B1120",

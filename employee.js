@@ -1,120 +1,3 @@
-// ---------------------------------------------------------------------
-// Strict Content Security Policy (CSP) Programmatic Event Delegator (Task 2.4)
-// Eliminates inline event handler execution without using unsafe-eval
-// ---------------------------------------------------------------------
-(function() {
-  if (typeof window === 'undefined') return;
-
-  function safeExecuteAction(expr, el, e) {
-    if (!expr || typeof expr !== 'string') return;
-    const match = expr.match(/^([a-zA-Z0-9_$.]+)(?:\((.*)\))?$/);
-    if (!match) return;
-    const fnPath = match[1];
-    const argsRaw = match[2];
-
-    const parts = fnPath.split('.');
-    let fn = window;
-    let parent = window;
-    for (const part of parts) {
-      if (!fn || part === '__proto__' || part === 'constructor' || part === 'prototype') return;
-      parent = fn;
-      if (Object.prototype.hasOwnProperty.call(parent, part) || part in parent) {
-        fn = parent[part];
-      } else {
-        return;
-      }
-    }
-
-    if (typeof fn !== 'function') return;
-
-    let args = [];
-    if (argsRaw && argsRaw.trim().length > 0) {
-      args = argsRaw.split(',').map(s => {
-        s = s.trim();
-        if (s === 'event' || s === 'e') return e;
-        if (s === 'this') return el;
-        if (s === 'true') return true;
-        if (s === 'false') return false;
-        if (s === 'null') return null;
-        if (!isNaN(s) && s !== '') return Number(s);
-        if ((s.startsWith("'") && s.endsWith("'")) || (s.startsWith('"') && s.endsWith('"'))) {
-          return s.slice(1, -1);
-        }
-        const foundEl = document.getElementById(s);
-        if (foundEl) return foundEl;
-        return s;
-      });
-    } else if (expr.includes('(event)')) {
-      args = [e];
-    }
-
-    try {
-      fn.apply(parent, args);
-    } catch (err) {
-      console.error('Error executing CSP action:', expr, err);
-    }
-  }
-
-  document.addEventListener('click', function(e) {
-    const el = e.target.closest('[data-click], [onclick]');
-    if (!el) return;
-    const expr = el.getAttribute('data-click') || el.getAttribute('onclick');
-    if (expr) {
-      safeExecuteAction(expr, el, e);
-    }
-  }, false);
-
-  document.addEventListener('change', function(e) {
-    const el = e.target.closest('[data-change], [onchange]');
-    if (!el) return;
-    const expr = el.getAttribute('data-change') || el.getAttribute('onchange');
-    if (expr) {
-      safeExecuteAction(expr, el, e);
-    }
-  }, false);
-
-  document.addEventListener('submit', function(e) {
-    const el = e.target.closest('[data-submit], [onsubmit]');
-    if (!el) return;
-    const expr = el.getAttribute('data-submit') || el.getAttribute('onsubmit');
-    if (expr) {
-      e.preventDefault();
-      safeExecuteAction(expr, el, e);
-    }
-  }, false);
-})();
-
-
-let empAutosaveTimer = null;
-function triggerEmployeeAutosave() {
-  if (!empState || !empState.employee) return;
-  if (empAutosaveTimer) clearTimeout(empAutosaveTimer);
-  empAutosaveTimer = setTimeout(async () => {
-    try {
-      const res = await fetch('/api/exam/autosave', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        credentials: 'include',
-        body: JSON.stringify({
-          empNo: empState.employee.empNo,
-          responses: empState.userAnswers,
-          currentIndex: empState.currentQIndex,
-          tabSwitchCount: empState.tabSwitches || 0
-        })
-      });
-      const data = await res.json();
-      if (data && data.autoSubmitted) {
-        if (empState.examTimerInterval) clearInterval(empState.examTimerInterval);
-        showToast('Assessment auto-terminated due to exceeding tab switch limit.', 'error');
-        if (data.record) {
-          showResultView(data.record);
-        }
-      }
-    } catch (e) {}
-  }, 400);
-}
-
-
 let clientCsrfToken = '';
 
 async function initCsrfToken() {
@@ -149,12 +32,74 @@ function getAuthHeaders(extraHeaders = {}) {
 
 /**
  * Yokohama ILUO - Dedicated Employee Portal Controller
- * Authoritative single-source API client for employee assessments and skill tracking
+ * Authoritative single-source API client for employee assessments, roadmap & certificates
  */
 
 const STORAGE_KEY_EMP_SESSION = 'yokohama_emp_session';
+const STORAGE_KEY_OFFLINE_QUEUE = 'yokohama_offline_exam_queue';
+const STORAGE_KEY_LANG = 'yokohama_portal_lang';
+const STORAGE_KEY_THEME = 'yokohama_portal_theme';
 
-// State container
+let empSettings = {
+  examPassingPct: 50,
+  ojtPassingPct: 70,
+  examDurationMinutes: 45,
+  maxTabSwitches: 3,
+  tabSwitchAction: 'terminate'
+};
+
+let empLang = (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY_LANG)) || 'en';
+let empTheme = (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY_THEME)) || 'light';
+
+const EMP_I18N = {
+  en: {
+    portalSubtitle: 'Employee Skill Assessment Portal',
+    signOut: 'Sign Out',
+    empPortalHeading: 'Employee Portal',
+    empPortalLead: 'Sign in with your Employee Number to access your skill roadmap, exams & certificate',
+    employeeIdLabel: 'Employee Number',
+    passwordLabel: 'Password',
+    defaultPasswordHint: 'Default login: Username and Password are your Employee Number.',
+    signInBtn: 'Sign In to Employee Portal',
+    backToHub: '← Back to Portal Hub',
+    metaEmpId: 'Employee ID',
+    metaDoj: 'Date of Joining',
+    metaDue: 'Re-Assessment Due',
+    currentLevelLabel: 'CURRENT LEVEL',
+    assignedAssessment: 'ASSIGNED ASSESSMENT',
+    knowledgeTestTitle: 'Knowledge Test Assessment',
+    startExamBtn: 'Start Assessment »',
+    viewCertBtn: 'View QR Certificate',
+    roadmapTitle: 'ILUO Skill Qualification Roadmap',
+    roadmapSubtitle: 'Progression milestones across I (Grey) → L (Amber) → U (Blue) → O (Green)',
+    historyTitle: 'Assessment Attempt History',
+    historySubtitle: 'Recorded MCQ exam attempts & practical OJT evaluation status'
+  },
+  ta: {
+    portalSubtitle: 'ஊழியர் திறன் மதிப்பீட்டு தளம்',
+    signOut: 'வெளியேறு',
+    empPortalHeading: 'ஊழியர் தளம்',
+    empPortalLead: 'உங்கள் ஊழியர் எண்ணைக் கொண்டு உள்நுழையவும்',
+    employeeIdLabel: 'ஊழியர் எண் (பயனர் பெயர்)',
+    passwordLabel: 'கடவுச்சொல்',
+    defaultPasswordHint: 'இயல்புநிலை உள்நுழைவு: பயனர் பெயர் மற்றும் கடவுச்சொல் இரண்டும் உங்கள் ஊழியர் எண்.',
+    signInBtn: 'ஊழியர் தளத்தில் உள்நுழையவும்',
+    backToHub: '← முகப்புக்குத் திரும்பு',
+    metaEmpId: 'ஊழியர் எண்',
+    metaDoj: 'சேர்ந்த தேதி',
+    metaDue: 'மறுமதிப்பீட்டு தேதி',
+    currentLevelLabel: 'தற்போதைய நிலை',
+    assignedAssessment: 'ஒதுக்கப்பட்ட தேர்வு',
+    knowledgeTestTitle: 'தொழில்நுட்ப அறிவுத் தேர்வு',
+    startExamBtn: 'தேர்வைத் தொடங்கு »',
+    viewCertBtn: 'QR சான்றிதழ் காண்க',
+    roadmapTitle: 'ILUO திறன் தகுதி பாதை',
+    roadmapSubtitle: 'I (சாம்பல்) → L (மஞ்சள்) → U (நீலம்) → O (பச்சை) நிலைகள்',
+    historyTitle: 'தேர்வு முயற்சி வரலாறு',
+    historySubtitle: 'பதிவு செய்யப்பட்ட தேர்வு மதிப்பெண்கள் மற்றும் OJT நிலை'
+  }
+};
+
 let empState = {
   employee: null,
   token: null,
@@ -163,21 +108,121 @@ let empState = {
   currentQIndex: 0,
   userAnswers: {},
   examTimerInterval: null,
-  timeRemainingSec: 2700, // 45 mins
+  timeRemainingSec: 2700,
   tabSwitches: 0,
   isSubmitting: false
 };
 
+function escapeEmpHtml(val) {
+  if (typeof window !== 'undefined' && window.ILUO_CONSTANTS && typeof window.ILUO_CONSTANTS.escapeHtml === 'function') {
+    return window.ILUO_CONSTANTS.escapeHtml(val);
+  }
+  return String(val ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getExamPassPct() {
+  return Number(empSettings.examPassingPct || 50);
+}
+
+function getOjtPassPct() {
+  return Number(empSettings.ojtPassingPct || 70);
+}
+
+function getMaxTabSwitches() {
+  return Number(empSettings.maxTabSwitches || 3);
+}
+
+async function loadEmpPublicSettings() {
+  try {
+    const res = await fetch('/api/public-settings', { credentials: 'include' });
+    const data = await res.json();
+    if (data && data.success && data.settings) {
+      empSettings = { ...empSettings, ...data.settings };
+      setText('dashExamDuration', `${empSettings.examDurationMinutes || 45} Minutes`);
+      setText('dashExamPassThresholds', `Exam ${getExamPassPct()}% / OJT ${getOjtPassPct()}%`);
+    }
+  } catch (e) {}
+}
+
+function applyEmployeeTheme(theme) {
+  empTheme = (theme === 'dark') ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', empTheme);
+  if (typeof localStorage !== 'undefined') localStorage.setItem(STORAGE_KEY_THEME, empTheme);
+  const btn = document.getElementById('empBtnToggleTheme');
+  if (btn) btn.innerText = empTheme === 'dark' ? 'Light' : 'Dark';
+}
+
+function toggleEmployeeTheme() {
+  applyEmployeeTheme(empTheme === 'dark' ? 'light' : 'dark');
+}
+window.toggleEmployeeTheme = toggleEmployeeTheme;
+
+function applyEmployeeLanguage(lang) {
+  empLang = (lang === 'ta') ? 'ta' : 'en';
+  if (typeof localStorage !== 'undefined') localStorage.setItem(STORAGE_KEY_LANG, empLang);
+  document.body.classList.toggle('lang-ta', empLang === 'ta');
+  const dict = EMP_I18N[empLang] || EMP_I18N.en;
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    const key = el.getAttribute('data-i18n');
+    if (key && dict[key]) el.innerText = dict[key];
+  });
+  const btn = document.getElementById('empBtnToggleLang');
+  if (btn) btn.innerText = empLang === 'ta' ? 'தமிழ் / EN' : 'EN / தமிழ்';
+}
+
+function toggleEmployeeLanguage() {
+  applyEmployeeLanguage(empLang === 'en' ? 'ta' : 'en');
+}
+window.toggleEmployeeLanguage = toggleEmployeeLanguage;
+
 // DOM ready initialization
 document.addEventListener('DOMContentLoaded', () => {
+  applyEmployeeTheme(empTheme);
+  applyEmployeeLanguage(empLang);
+  loadEmpPublicSettings();
   setupTabSwitchDetection();
+  setupQuizAntiCheatListeners();
+  setupOfflineSyncListeners();
+  updateEmployeeNav();
   checkExistingSession();
 });
+
+function isQuizViewActive() {
+  const viewQuiz = document.getElementById('viewQuiz');
+  return Boolean(viewQuiz && viewQuiz.style.display !== 'none' && empState.examTimerInterval);
+}
+
+// Scoped copy/paste/contextmenu protection ONLY on active quiz page
+function setupQuizAntiCheatListeners() {
+  const blockIfQuiz = (e) => {
+    if (isQuizViewActive()) {
+      e.preventDefault();
+    }
+  };
+  document.addEventListener('copy', blockIfQuiz);
+  document.addEventListener('cut', blockIfQuiz);
+  document.addEventListener('paste', blockIfQuiz);
+  document.addEventListener('contextmenu', blockIfQuiz);
+  document.addEventListener('keydown', (e) => {
+    if (!isQuizViewActive()) return;
+    if ((e.ctrlKey || e.metaKey) && ['c', 'u', 's', 'p', 'a'].includes(String(e.key || '').toLowerCase())) {
+      e.preventDefault();
+    }
+    if (e.key === 'F12') {
+      e.preventDefault();
+    }
+  });
+}
 
 // Navigation helper between views
 function showEmployeeView(viewId) {
   const views = ['viewEmpLogin', 'viewEmpDashboard', 'viewQuiz', 'viewResult'];
-  views.forEach(id => {
+  views.forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.style.display = (id === viewId) ? 'block' : 'none';
   });
@@ -193,8 +238,8 @@ function togglePasswordVisibility(inputId, btn) {
 
   if (btn) {
     btn.innerHTML = isPass
-      ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`
-      : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+      ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`
+      : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
   }
 }
 window.togglePasswordVisibility = togglePasswordVisibility;
@@ -212,16 +257,11 @@ function showToast(message, type = 'info') {
   toast.style.boxShadow = '0 8px 24px rgba(0,0,0,0.18)';
   toast.style.color = '#FFFFFF';
   toast.style.maxWidth = '360px';
-  toast.style.animation = 'fadeIn 0.25s ease';
   toast.style.pointerEvents = 'auto';
 
-  if (type === 'error') {
-    toast.style.background = '#DC2626';
-  } else if (type === 'success') {
-    toast.style.background = '#15803D';
-  } else {
-    toast.style.background = '#0F172A';
-  }
+  if (type === 'error') toast.style.background = '#DC2626';
+  else if (type === 'success') toast.style.background = '#15803D';
+  else toast.style.background = '#0F172A';
 
   toast.innerText = message;
   container.appendChild(toast);
@@ -237,6 +277,7 @@ function showToast(message, type = 'info') {
 async function checkExistingSession() {
   const saved = localStorage.getItem(STORAGE_KEY_EMP_SESSION);
   if (!saved) {
+    updateEmployeeNav();
     showEmployeeView('viewEmpLogin');
     return;
   }
@@ -244,6 +285,7 @@ async function checkExistingSession() {
   try {
     const parsed = JSON.parse(saved);
     if (!parsed || !parsed.token || !parsed.empNo) {
+      updateEmployeeNav();
       showEmployeeView('viewEmpLogin');
       return;
     }
@@ -259,18 +301,21 @@ async function checkExistingSession() {
       empState.token = parsed.token;
       updateEmployeeNav();
       await loadEmployeeDashboard();
+      await flushOfflineExamQueue();
       showEmployeeView('viewEmpDashboard');
     } else {
       localStorage.removeItem(STORAGE_KEY_EMP_SESSION);
+      updateEmployeeNav();
       showEmployeeView('viewEmpLogin');
     }
   } catch (err) {
     console.error('Session verify error:', err);
+    updateEmployeeNav();
     showEmployeeView('viewEmpLogin');
   }
 }
 
-// Update top nav user badge
+// Update top nav user badge (strictly hidden & cleared when signed out)
 function updateEmployeeNav() {
   const badge = document.getElementById('empNavUserBadge');
   const nameEl = document.getElementById('empNavUserName');
@@ -284,29 +329,28 @@ function updateEmployeeNav() {
     if (btnSignOut) btnSignOut.style.display = 'inline-block';
   } else {
     if (badge) badge.style.display = 'none';
+    if (nameEl) nameEl.innerText = '';
+    if (noEl) noEl.innerText = '';
     if (btnSignOut) btnSignOut.style.display = 'none';
   }
 }
 
-// Handle Employee Login
+// Handle Employee Login (Username: Employee Number, Default Password: Employee Number)
 async function handleEmployeeLogin(e) {
   if (e) e.preventDefault();
   const empIdInput = document.getElementById('empIdInput');
   const empPasswordInput = document.getElementById('empPasswordInput');
+  const submitBtn = document.getElementById('btnEmpLoginSubmit');
 
   const empNo = empIdInput ? empIdInput.value.trim() : '';
-  let password = empPasswordInput ? empPasswordInput.value.trim() : '';
+  const password = empPasswordInput ? empPasswordInput.value.trim() : '';
 
-  if (!empNo) {
-    showToast('Please enter your Employee ID.', 'error');
+  if (!empNo || !password) {
+    showToast('Please enter your Employee Number and password.', 'error');
     return;
   }
 
-  // If password field was left blank, default to Employee No
-  if (!password) {
-    password = empNo;
-    if (empPasswordInput) empPasswordInput.value = empNo;
-  }
+  if (submitBtn) submitBtn.disabled = true;
 
   try {
     const res = await fetch('/api/auth/employee/login', {
@@ -319,124 +363,35 @@ async function handleEmployeeLogin(e) {
     const data = await res.json();
 
     if (data.success && data.token) {
-      empState.employee = data.employee;
-      empState.token = data.token;
-
-      localStorage.setItem(STORAGE_KEY_EMP_SESSION, JSON.stringify({
-        token: data.token,
-        empNo: data.employee.empNo,
-        name: data.employee.name
-      }));
-
-      updateEmployeeNav();
-      showToast(`Welcome, ${data.employee.name}!`, 'success');
-      await loadEmployeeDashboard();
-      showEmployeeView('viewEmpDashboard');
+      await completeEmployeeSignIn(data.employee, data.token, `Welcome, ${data.employee.name}!`);
     } else {
-      showToast(data.message || 'Invalid Employee ID or password. Use your Employee No as password.', 'error');
+      showToast(data.message || 'Invalid Employee Number or password.', 'error');
     }
   } catch (err) {
     console.error('Login error:', err);
     showToast('Unable to connect to authentication server.', 'error');
-  }
-}
-window.handleEmployeeLogin = handleEmployeeLogin;
-
-function openPasswordSetupModal(mode = 'setup', prefillEmpNo = '') {
-  const modal = document.getElementById('passwordSetupModal');
-  const title = document.getElementById('pwdModalTitle');
-  const empInput = document.getElementById('setupEmpNoInput');
-  const feedback = document.getElementById('setupModalFeedback');
-  const pwdInput = document.getElementById('setupNewPasswordInput');
-  const dojInput = document.getElementById('setupDojInput');
-
-  if (!modal) return;
-  modal.dataset.mode = mode;
-  if (title) title.innerText = (mode === 'setup') ? 'Set Up Employee Password' : 'Reset Employee Password';
-  if (empInput) empInput.value = prefillEmpNo || (document.getElementById('empIdInput') ? document.getElementById('empIdInput').value.trim() : '');
-  if (pwdInput) pwdInput.value = '';
-  if (dojInput) dojInput.value = '';
-  if (feedback) {
-    feedback.style.display = 'none';
-    feedback.innerText = '';
-  }
-  modal.style.display = 'flex';
-}
-window.openPasswordSetupModal = openPasswordSetupModal;
-
-function closePasswordSetupModal() {
-  const modal = document.getElementById('passwordSetupModal');
-  if (modal) modal.style.display = 'none';
-}
-window.closePasswordSetupModal = closePasswordSetupModal;
-
-async function handlePasswordSetupSubmit(e) {
-  if (e) e.preventDefault();
-  const modal = document.getElementById('passwordSetupModal');
-  const mode = (modal && modal.dataset.mode) || 'setup';
-  const empNo = document.getElementById('setupEmpNoInput').value.trim();
-  const doj = document.getElementById('setupDojInput').value.trim();
-  const newPassword = document.getElementById('setupNewPasswordInput').value.trim();
-  const feedback = document.getElementById('setupModalFeedback');
-  const submitBtn = document.getElementById('btnSubmitSetupPassword');
-
-  if (!empNo || !doj || !newPassword) {
-    if (feedback) {
-      feedback.style.display = 'block';
-      feedback.style.background = '#FEF2F2';
-      feedback.style.color = '#991B1B';
-      feedback.innerText = 'All fields are required.';
-    }
-    return;
-  }
-
-  if (newPassword.length < 6) {
-    if (feedback) {
-      feedback.style.display = 'block';
-      feedback.style.background = '#FEF2F2';
-      feedback.style.color = '#991B1B';
-      feedback.innerText = 'Password must be at least 6 characters.';
-    }
-    return;
-  }
-
-  if (submitBtn) submitBtn.disabled = true;
-
-  try {
-    const endpoint = (mode === 'setup') ? '/api/auth/employee/setup-password' : '/api/auth/employee/reset-password';
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ empNo, doj, newPassword })
-    });
-    const data = await res.json();
-    if (data.success) {
-      closePasswordSetupModal();
-      showToast(data.message || 'Password saved successfully! Please sign in.', 'success');
-      const passEl = document.getElementById('empPasswordInput');
-      if (passEl) passEl.value = '';
-      const idEl = document.getElementById('empIdInput');
-      if (idEl) idEl.value = empNo;
-    } else {
-      if (feedback) {
-        feedback.style.display = 'block';
-        feedback.style.background = '#FEF2F2';
-        feedback.style.color = '#991B1B';
-        feedback.innerText = data.message || 'Verification failed. Please check your Employee ID and Date of Joining.';
-      }
-    }
-  } catch (err) {
-    if (feedback) {
-      feedback.style.display = 'block';
-      feedback.style.background = '#FEF2F2';
-      feedback.style.color = '#991B1B';
-      feedback.innerText = 'Network error connecting to authentication server.';
-    }
   } finally {
     if (submitBtn) submitBtn.disabled = false;
   }
 }
-window.handlePasswordSetupSubmit = handlePasswordSetupSubmit;
+window.handleEmployeeLogin = handleEmployeeLogin;
+
+async function completeEmployeeSignIn(employee, token, welcomeMsg) {
+  empState.employee = employee;
+  empState.token = token;
+
+  localStorage.setItem(STORAGE_KEY_EMP_SESSION, JSON.stringify({
+    token,
+    empNo: employee.empNo,
+    name: employee.name
+  }));
+
+  updateEmployeeNav();
+  showToast(welcomeMsg || `Welcome, ${employee.name}!`, 'success');
+  await loadEmployeeDashboard();
+  await flushOfflineExamQueue();
+  showEmployeeView('viewEmpDashboard');
+}
 
 // Handle Employee Logout
 async function handleEmployeeLogout() {
@@ -461,7 +416,7 @@ async function handleEmployeeLogout() {
       currentQIndex: 0,
       userAnswers: {},
       examTimerInterval: null,
-      timeRemainingSec: 2700,
+      timeRemainingSec: (empSettings.examDurationMinutes || 45) * 60,
       tabSwitches: 0,
       isSubmitting: false
     };
@@ -477,7 +432,8 @@ async function loadEmployeeDashboard() {
   const emp = empState.employee;
   if (!emp) return;
 
-  // Re-fetch me to ensure fresh level promotions from server
+  await loadEmpPublicSettings();
+
   try {
     const meRes = await fetch('/api/auth/employee/me', {
       headers: getAuthHeaders(),
@@ -490,16 +446,22 @@ async function loadEmployeeDashboard() {
     }
   } catch (e) {}
 
-  // Populate Profile
   setText('dashEmpName', emp.name || 'Candidate');
   setText('dashEmpNo', emp.empNo || '-');
-  setText('dashEmpDoj', emp.doj || '01-Jan-2024');
+  setText('dashEmpDoj', emp.doj || '-');
   setText('dashEmpDueDate', emp.reAssessmentDate || '30-Jun-2026');
   setText('dashEmpDesignation', emp.designation || 'QA Inspector');
-  setText('dashEmpDeptSec', `${emp.dept || 'Quality Control'} • ${emp.section || 'Tire Building'}`);
+  setText('dashEmpDeptSec', `${emp.dept || 'Quality Control'} • ${emp.section || 'Tire Building QA'}`);
 
-  const currentLevel = (emp.currentLevel || emp.level || 'U').toUpperCase();
-  const targetLevel = (emp.targetLevel || currentLevel).toUpperCase();
+  const currentLevel = String(emp.currentLevel || emp.level || 'I').toUpperCase();
+  const targetLevel = String(emp.targetLevel || currentLevel).toUpperCase();
+  const qCount = (window.ILUO_CONSTANTS && window.ILUO_CONSTANTS.ILUO_LEVELS[targetLevel])
+    ? window.ILUO_CONSTANTS.ILUO_LEVELS[targetLevel].questions
+    : (targetLevel === 'O' ? 40 : targetLevel === 'U' ? 30 : 20);
+
+  setText('dashExamDuration', `${empSettings.examDurationMinutes || 45} Minutes`);
+  setText('dashExamQuestionCount', `${qCount} Questions`);
+  setText('dashExamPassThresholds', `Exam ${getExamPassPct()}% / OJT ${getOjtPassPct()}%`);
 
   const lvlBadge = document.getElementById('dashLevelBadge');
   if (lvlBadge) {
@@ -511,13 +473,14 @@ async function loadEmployeeDashboard() {
   const targetEl = document.getElementById('dashTargetLevel');
   if (targetEl) {
     if (emp.skillLevelExpBased && emp.skillLevelExpBased !== 'Not Eligible') {
-      targetEl.innerHTML = `Level ${targetLevel} <span style="font-size: 0.75rem; color: #0284C7; font-weight: 600;">(Experience Based)</span>`;
+      targetEl.innerHTML = `Level ${escapeEmpHtml(targetLevel)} <span style="font-size: 0.75rem; color: #0284C7; font-weight: 600;">(Experience Based)</span>`;
     } else {
       targetEl.innerText = `Level ${targetLevel}`;
     }
   }
 
-  // Fetch candidate record authoritatively
+  renderDojEligibilityAlert(emp, currentLevel);
+
   try {
     const res = await fetch('/api/records', {
       headers: getAuthHeaders(),
@@ -528,12 +491,31 @@ async function loadEmployeeDashboard() {
     const myRecord = records[emp.empNo];
 
     renderAssessmentCardStatus(myRecord, currentLevel, targetLevel);
+    renderEmployeeProgressAndRoadmap(myRecord, currentLevel, targetLevel);
+    renderAttemptHistoryTable(myRecord);
   } catch (err) {
     console.error('Error fetching candidate records:', err);
+    renderEmployeeProgressAndRoadmap(null, currentLevel, targetLevel);
+    renderAttemptHistoryTable(null, true);
+  }
+}
+
+function renderDojEligibilityAlert(emp, currentLevel) {
+  const banner = document.getElementById('dashEligibilityBanner');
+  if (!banner || !window.ILUO_CONSTANTS || typeof window.ILUO_CONSTANTS.calculateDojEligibility !== 'function') return;
+  const elig = window.ILUO_CONSTANTS.calculateDojEligibility(emp.doj, currentLevel);
+  if (elig && elig.isDueForUpgrade) {
+    banner.style.display = 'block';
+    setText('dashEligibilityTitle', `DOJ Eligibility Notice: Ready for Level ${elig.eligibleLevel}`);
+    setText('dashEligibilityText', `With ${elig.days} days of plant service (DOJ: ${emp.doj}), you are eligible to qualify for Level ${elig.eligibleLevel} (${getLevelTitle(elig.eligibleLevel)}).`);
+  } else {
+    banner.style.display = 'none';
   }
 }
 
 function getLevelTitle(lvl) {
+  const levels = window.ILUO_CONSTANTS && window.ILUO_CONSTANTS.ILUO_LEVELS;
+  if (levels && levels[lvl]) return levels[lvl].title;
   switch (lvl) {
     case 'I': return 'Beginner';
     case 'L': return 'Learner';
@@ -543,11 +525,106 @@ function getLevelTitle(lvl) {
   }
 }
 
+function renderEmployeeProgressAndRoadmap(record, currentLevel, targetLevel) {
+  const order = { I: 1, L: 2, U: 3, O: 4 };
+  const effectiveLevel = (record && record.isCompleted && record.isPassed !== false && record.switchedLevel)
+    ? String(record.switchedLevel).toUpperCase()
+    : currentLevel;
+
+  const curRank = order[effectiveLevel] || 1;
+  const tgtRank = order[targetLevel] || curRank;
+
+  // Progress Ring Percentage: base level progress + latest score if completed
+  let ringPct = curRank * 25;
+  if (record && record.isCompleted) {
+    const scorePct = Number(record.markPct ?? record.percentage ?? 0);
+    ringPct = Math.max(curRank * 25, Math.min(100, scorePct));
+  }
+  const circle = document.getElementById('empProgressRingCircle');
+  const circumference = 2 * Math.PI * 54;
+  if (circle) {
+    const offset = circumference - (Math.max(0, Math.min(100, ringPct)) / 100) * circumference;
+    circle.style.strokeDasharray = String(circumference.toFixed(2));
+    circle.style.strokeDashoffset = String(offset.toFixed(2));
+    const colorMap = { I: '#64748B', L: '#F59E0B', U: '#005B9E', O: '#10B981' };
+    circle.style.stroke = colorMap[effectiveLevel] || '#005B9E';
+  }
+  setText('empProgressRingPct', `${Math.round(ringPct)}%`);
+  setText('empProgressRingSub', `Active Level ${effectiveLevel} (${getLevelTitle(effectiveLevel)})`);
+
+  ['I', 'L', 'U', 'O'].forEach((lvl) => {
+    const stepEl = document.getElementById(`step${lvl}`);
+    const actualEl = document.getElementById(`actual${lvl}`);
+    const rank = order[lvl];
+    if (!stepEl || !actualEl) return;
+
+    stepEl.classList.remove('done', 'target');
+    if (rank <= curRank) {
+      stepEl.classList.add('done');
+      actualEl.innerText = 'Achieved ✓';
+      actualEl.style.color = '#047857';
+    } else if (rank === tgtRank || rank === curRank + 1) {
+      stepEl.classList.add('target');
+      actualEl.innerText = 'Current Target';
+      actualEl.style.color = '#1D4ED8';
+    } else {
+      actualEl.innerText = 'Upcoming';
+      actualEl.style.color = 'var(--text-muted)';
+    }
+  });
+}
+
+function renderAttemptHistoryTable(record, hasError = false) {
+  const tbody = document.getElementById('empAttemptHistoryBody');
+  if (!tbody) return;
+
+  if (hasError) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#DC2626; padding:18px;">Unable to load attempt history. Check connection.</td></tr>';
+    return;
+  }
+
+  let history = [];
+  if (record && Array.isArray(record.attemptHistory) && record.attemptHistory.length > 0) {
+    history = record.attemptHistory.slice().reverse();
+  } else if (record && record.isCompleted) {
+    history = [{
+      date: record.attemptDate || '-',
+      targetLevel: record.targetLevel || 'L',
+      score: record.totalMark ?? record.score ?? 0,
+      totalQuestions: record.totalQuestions || 30,
+      markPct: record.markPct ?? record.percentage ?? 0,
+      status: record.status || (record.isPassed ? 'Pass' : 'Fail')
+    }];
+  }
+
+  if (history.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:18px;">No assessment attempts recorded yet. Click Start Assessment above to begin.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = history.map((h) => {
+    const pct = Number(h.markPct ?? 0);
+    const passed = pct >= getExamPassPct() || String(h.status || '').toLowerCase().includes('pass');
+    const badgeBg = passed ? '#DCFCE7' : '#FEE2E2';
+    const badgeCol = passed ? '#166534' : '#991B1B';
+    return `
+      <tr>
+        <td data-label="Date">${escapeEmpHtml(h.date || '-')}</td>
+        <td data-label="Target Level"><strong>Level ${escapeEmpHtml(h.targetLevel || '-')}</strong></td>
+        <td data-label="Score">${escapeEmpHtml(String(h.score ?? 0))} / ${escapeEmpHtml(String(h.totalQuestions ?? 30))}</td>
+        <td data-label="Percentage"><strong>${escapeEmpHtml(String(pct))}%</strong></td>
+        <td data-label="Status"><span style="padding:3px 10px;border-radius:12px;font-size:0.78rem;font-weight:700;background:${badgeBg};color:${badgeCol};">${escapeEmpHtml(h.status || (passed ? 'Pass' : 'Fail'))}</span></td>
+      </tr>
+    `;
+  }).join('');
+}
+
 function renderAssessmentCardStatus(record, currentLevel, targetLevel) {
   const badge = document.getElementById('dashExamStatusBadge');
   const btn = document.getElementById('btnStartExam');
   const resultCard = document.getElementById('dashResultContainer');
   const promoBanner = document.getElementById('dashPromotionBanner');
+  const passPct = getExamPassPct();
 
   if (record && record.isCompleted) {
     const isPassed = record.isPassed !== false;
@@ -564,11 +641,11 @@ function renderAssessmentCardStatus(record, currentLevel, targetLevel) {
         lvlBadge.innerText = finalLevel;
         lvlBadge.className = `iluo-badge iluo-badge-${finalLevel.toLowerCase()}`;
       }
-      setText('dashLevelText', `Level ${finalLevel}: ${getLevelTitle(finalLevel)} (Switched on Exam Pass)`);
+      setText('dashLevelText', `Level ${finalLevel}: ${getLevelTitle(finalLevel)} (Qualified)`);
       if (promoBanner) {
         promoBanner.style.display = 'block';
-        setText('dashPromoTitle', `Skill Level Switched to Level ${finalLevel}!`);
-        setText('dashPromoText', `Congratulations! Based on your experience and successful exam completion, your qualification has switched to Level ${finalLevel} (${getLevelTitle(finalLevel)}).`);
+        setText('dashPromoTitle', `Skill Level Qualified at Level ${finalLevel}!`);
+        setText('dashPromoText', `Congratulations! Based on your experience and exam pass (>= ${passPct}%), your qualification is Level ${finalLevel} (${getLevelTitle(finalLevel)}).`);
       }
     } else if (promoBanner) {
       promoBanner.style.display = 'none';
@@ -577,15 +654,12 @@ function renderAssessmentCardStatus(record, currentLevel, targetLevel) {
     if (btn) {
       btn.innerText = 'Retake Assessment';
       btn.className = 'btn-secondary';
-      btn.style.background = '#F1F5F9';
-      btn.style.color = '#334155';
-      btn.style.border = '1px solid #CBD5E1';
     }
     if (resultCard) {
       resultCard.style.display = 'block';
       const statusBadge = document.getElementById('dashResultStatusBadge');
       if (statusBadge) {
-        statusBadge.innerText = isPassed ? 'PASSED' : 'RETAKE REQUIRED';
+        statusBadge.innerText = isPassed ? `PASSED (>= ${passPct}%)` : `RETAKE REQUIRED (< ${passPct}%)`;
         statusBadge.style.background = isPassed ? '#DCFCE7' : '#FEE2E2';
         statusBadge.style.color = isPassed ? '#166534' : '#991B1B';
       }
@@ -606,8 +680,6 @@ function renderAssessmentCardStatus(record, currentLevel, targetLevel) {
     if (btn) {
       btn.innerText = 'Start Assessment »';
       btn.className = 'btn-primary';
-      btn.style.background = 'linear-gradient(135deg, #003D6B 0%, #005B9E 100%)';
-      btn.style.color = '#FFFFFF';
     }
     if (resultCard) resultCard.style.display = 'none';
   }
@@ -626,12 +698,22 @@ function setText(id, text) {
 // Start Assessment
 async function startEmployeeExam() {
   const emp = empState.employee;
-  if (!emp) return;
+  if (!emp || empState.isStartingExam) return;
 
   const targetLvl = emp.targetLevel || emp.currentLevel || emp.level || 'U';
+  const startBtn = document.getElementById('btnStartExam');
+  const originalBtnText = startBtn ? startBtn.innerText : '';
+  empState.isStartingExam = true;
+  if (startBtn) {
+    startBtn.disabled = true;
+    startBtn.innerText = 'Starting Assessment...';
+  }
 
-  try {
-    const res = await fetch('/api/exam/start', {
+  const doStartFetch = async () => {
+    if (!getCsrfToken()) {
+      await initCsrfToken();
+    }
+    return fetch('/api/exam/start', {
       method: 'POST',
       headers: getAuthHeaders(),
       credentials: 'include',
@@ -641,25 +723,35 @@ async function startEmployeeExam() {
         forceRetake: true
       })
     });
+  };
+
+  try {
+    let res;
+    try {
+      res = await doStartFetch();
+      if (res.status === 403) {
+        // Refresh CSRF token once if expired after server reload
+        await initCsrfToken();
+        res = await doStartFetch();
+      }
+    } catch (networkErr) {
+      // Transient proxy/network hiccup: wait briefly, refresh CSRF token, and retry once
+      await new Promise((r) => setTimeout(r, 600));
+      await initCsrfToken();
+      res = await doStartFetch();
+    }
 
     const data = await res.json();
-    if (data.success && data.activeExam) {
+    if (res.ok && data.success && data.activeExam) {
       empState.exam = data.activeExam;
       empState.examQuestions = data.activeExam.questions || [];
-      if (data.isResumed) {
-        empState.currentQIndex = data.activeExam.currentIndex || 0;
-        empState.userAnswers = data.activeExam.responses || {};
-        empState.tabSwitches = data.activeExam.tabSwitchCount || 0;
-        empState.timeRemainingSec = data.activeExam.remainingSeconds || (45 * 60);
-        showToast('Resumed active assessment from server session.', 'info');
-      } else {
-        empState.currentQIndex = 0;
-        empState.userAnswers = {};
-        empState.tabSwitches = 0;
-        empState.timeRemainingSec = (data.activeExam.durationMinutes || 45) * 60;
-      }
+      empState.currentQIndex = 0;
+      empState.userAnswers = {};
+      empState.tabSwitches = 0;
+      const durMin = data.activeExam.durationMinutes || empSettings.examDurationMinutes || 45;
+      empState.timeRemainingSec = Number(data.activeExam.durationSeconds || (durMin * 60));
 
-      setText('tabSwitchCountDisplay', '0 / 3');
+      setText('tabSwitchCountDisplay', `0 / ${getMaxTabSwitches()}`);
       startExamTimer();
       renderActiveQuestion();
       showEmployeeView('viewQuiz');
@@ -668,12 +760,17 @@ async function startEmployeeExam() {
     }
   } catch (err) {
     console.error('Start exam error:', err);
-    showToast('Failed to start exam. Please check server connection.', 'error');
+    showToast('Unable to reach assessment server. Please click Start Assessment again.', 'error');
+  } finally {
+    empState.isStartingExam = false;
+    if (startBtn) {
+      startBtn.disabled = false;
+      if (originalBtnText) startBtn.innerText = originalBtnText;
+    }
   }
 }
 window.startEmployeeExam = startEmployeeExam;
 
-// Start Countdown Timer
 function startExamTimer() {
   if (empState.examTimerInterval) clearInterval(empState.examTimerInterval);
 
@@ -684,6 +781,7 @@ function startExamTimer() {
 
     if (empState.timeRemainingSec <= 0) {
       clearInterval(empState.examTimerInterval);
+      empState.examTimerInterval = null;
       showToast('Exam time expired! Submitting answers automatically...', 'error');
       submitEmployeeExam(true);
     }
@@ -693,35 +791,76 @@ function startExamTimer() {
 function updateTimerDisplay() {
   const el = document.getElementById('timerDisplay');
   if (!el) return;
-  const mins = Math.floor(empState.timeRemainingSec / 60);
-  const secs = empState.timeRemainingSec % 60;
+  const safeSecs = Math.max(0, empState.timeRemainingSec);
+  const mins = Math.floor(safeSecs / 60);
+  const secs = safeSecs % 60;
   el.innerText = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  if (mins < 5) {
-    el.style.color = '#DC2626';
-  }
+  el.style.color = mins < 5 ? '#DC2626' : '#E31B23';
 }
 
-// Render active question
+function renderEmployeeQuizProgressSidebar() {
+  const listEl = document.getElementById('empQuizProgressList');
+  if (!listEl) return;
+  const questions = empState.examQuestions || [];
+  const currentIdx = empState.currentQIndex || 0;
+
+  listEl.innerHTML = questions.map((item, idx) => {
+    const isAnswered = empState.userAnswers && empState.userAnswers[item.id] !== undefined;
+    const isCurrent = idx === currentIdx;
+    let stateClass = 'is-upcoming';
+    let stateLabel = 'Upcoming';
+    if (isCurrent) {
+      stateClass = 'is-current';
+      stateLabel = isAnswered ? 'Selected' : 'Current';
+    } else if (idx < currentIdx || isAnswered) {
+      stateClass = 'is-done';
+      stateLabel = 'Done';
+    }
+    const num = String(idx + 1).padStart(2, '0');
+    const cat = escapeEmpHtml(item.category || 'General');
+    return `
+      <div class="emp-q-progress-row ${stateClass}" data-q-index="${idx}" aria-current="${isCurrent ? 'step' : 'false'}">
+        <span class="emp-q-num">${num}</span>
+        <span class="emp-q-cat">${cat}</span>
+        <span class="emp-q-state">${stateLabel}</span>
+      </div>
+    `;
+  }).join('');
+
+  const activeRow = listEl.querySelector('.emp-q-progress-row.is-current');
+  if (activeRow) activeRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
 function renderActiveQuestion() {
   const questions = empState.examQuestions;
   const index = empState.currentQIndex;
   if (!questions || index >= questions.length) return;
 
-  renderQuestionPalette();
-
   const q = questions[index];
   setText('quizProgressText', `Question ${index + 1} of ${questions.length}`);
   setText('qNumberBadge', `Q${index + 1}`);
-  setText('quizSubText', `Level ${empState.exam.targetLevel || 'U'} Skill Assessment`);
+  setText('quizSubText', `Level ${empState.exam.targetLevel || 'U'} Skill Assessment • Pass >= ${getExamPassPct()}%`);
   setText('qCategoryTag', q.category || 'General');
   setText('qTitleText', q.text || q.question || 'Question content');
+
+  const updateQuizProgressUi = () => {
+    const answeredCount = Object.keys(empState.userAnswers || {}).length;
+    const totalCount = questions.length || 1;
+    const pct = Math.round((answeredCount / totalCount) * 100);
+    setText('quizAnsweredCount', `Answered: ${answeredCount} / ${totalCount}`);
+    setText('quizProgressPct', `${pct}%`);
+    const fill = document.getElementById('quizProgressBarFill');
+    if (fill) fill.style.width = `${pct}%`;
+    renderEmployeeQuizProgressSidebar();
+  };
+  updateQuizProgressUi();
 
   const container = document.getElementById('optionsContainer');
   if (!container) return;
   container.innerHTML = '';
 
   const chosenAns = empState.userAnswers[q.id];
-    const btnNext = document.getElementById('btnNextQ');
+  const btnNext = document.getElementById('btnNextQ');
   if (btnNext) {
     btnNext.disabled = (chosenAns === undefined);
     btnNext.innerText = (index === questions.length - 1) ? 'Finish & Sign Assessment »' : 'Next Question »';
@@ -734,51 +873,51 @@ function renderActiveQuestion() {
     const optText = (typeof opt === 'object' && opt && opt.text) ? opt.text : String(opt);
     const isSelected = (chosenAns === optKey);
     const item = document.createElement('div');
-    item.className = `option-item ${isSelected ? 'selected' : ''}`;
-    item.style.display = 'flex';
-    item.style.alignItems = 'center';
-    item.style.gap = '12px';
-    item.style.padding = '14px 18px';
-    item.style.background = isSelected ? '#EFF6FF' : '#F8FAFC';
-    item.style.border = isSelected ? '2px solid #005B9E' : '1px solid #E2E8F0';
-    item.style.borderRadius = '10px';
-    item.style.cursor = 'pointer';
-    item.style.transition = 'all 0.15s ease';
+    item.className = `option-item emp-quiz-option ${isSelected ? 'selected' : ''}`;
+    item.setAttribute('role', 'radio');
+    item.setAttribute('aria-checked', String(isSelected));
+    item.tabIndex = 0;
 
     const radio = document.createElement('input');
     radio.type = 'radio';
     radio.name = `opt_${q.id}`;
     radio.value = optKey;
     radio.checked = isSelected;
-    radio.style.accentColor = '#005B9E';
+    radio.style.accentColor = 'var(--primary-color)';
     radio.style.width = '18px';
     radio.style.height = '18px';
-
-    item.onclick = (e) => {
-      radio.checked = true;
-      empState.userAnswers[q.id] = optKey;
-      triggerEmployeeAutosave();
-      if (btnNext) btnNext.disabled = false;
-      document.querySelectorAll('#optionsContainer .option-item').forEach(el => {
-        el.classList.remove('selected');
-        el.style.background = '#F8FAFC';
-        el.style.border = '1px solid #E2E8F0';
-      });
-      item.classList.add('selected');
-      item.style.background = '#EFF6FF';
-      item.style.border = '2px solid #005B9E';
-    };
+    radio.style.flexShrink = '0';
 
     const keyBadge = document.createElement('strong');
     keyBadge.style.minWidth = '24px';
-    keyBadge.style.color = '#005B9E';
+    keyBadge.style.color = 'var(--primary-color)';
+    keyBadge.style.fontVariantNumeric = 'tabular-nums';
     keyBadge.innerText = `${optKey}.`;
 
     const span = document.createElement('span');
-    span.style.fontSize = '0.94rem';
-    span.style.fontWeight = isSelected ? '700' : '500';
-    span.style.color = isSelected ? '#003D6B' : '#0F172A';
+    span.className = 'option-label-text';
     span.innerText = optText;
+
+    const selectThisOption = () => {
+      radio.checked = true;
+      empState.userAnswers[q.id] = optKey;
+      if (btnNext) btnNext.disabled = false;
+      document.querySelectorAll('#optionsContainer .option-item').forEach((el) => {
+        el.classList.remove('selected');
+        el.setAttribute('aria-checked', 'false');
+      });
+      item.classList.add('selected');
+      item.setAttribute('aria-checked', 'true');
+      updateQuizProgressUi();
+    };
+
+    item.onclick = selectThisOption;
+    item.onkeydown = (evt) => {
+      if (evt.key === 'Enter' || evt.key === ' ') {
+        evt.preventDefault();
+        selectThisOption();
+      }
+    };
 
     item.appendChild(radio);
     item.appendChild(keyBadge);
@@ -787,20 +926,18 @@ function renderActiveQuestion() {
   });
 }
 
-// Next Question / Finish handler
 function handleNextQuestion() {
   const questions = empState.examQuestions;
   if (empState.currentQIndex < questions.length - 1) {
     empState.currentQIndex++;
     renderActiveQuestion();
   } else {
-    // Open candidate manual signature modal before final submission
     openSignatureModal();
   }
 }
 window.handleNextQuestion = handleNextQuestion;
 
-// Signature State & Handlers (Unified Touch & Mouse Drawing)
+// Signature Canvas
 let signatureState = {
   isDrawing: false,
   hasSigned: false,
@@ -828,7 +965,6 @@ function initSignatureCanvas() {
   ctx.scale(dpr, dpr);
   signatureState.ctx = ctx;
   signatureState.hasSigned = false;
-
   ctx.clearRect(0, 0, width, height);
 
   if (signatureState.initialized) return;
@@ -847,10 +983,7 @@ function initSignatureCanvas() {
       clientX = e.clientX;
       clientY = e.clientY;
     }
-    return {
-      x: clientX - cRect.left,
-      y: clientY - cRect.top
-    };
+    return { x: clientX - cRect.left, y: clientY - cRect.top };
   }
 
   function start(e) {
@@ -865,21 +998,19 @@ function initSignatureCanvas() {
     if (!signatureState.isDrawing) return;
     e.preventDefault();
     const pos = getPos(e);
-    const ctx = signatureState.ctx;
-
-    ctx.beginPath();
-    ctx.moveTo(signatureState.lastX, signatureState.lastY);
-    ctx.lineTo(pos.x, pos.y);
-    ctx.strokeStyle = '#002B49'; // Yokohama ATG deep dark blue ink
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.stroke();
+    const c = signatureState.ctx;
+    c.beginPath();
+    c.moveTo(signatureState.lastX, signatureState.lastY);
+    c.lineTo(pos.x, pos.y);
+    c.strokeStyle = '#002B49';
+    c.lineWidth = 2.5;
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    c.stroke();
 
     signatureState.lastX = pos.x;
     signatureState.lastY = pos.y;
     signatureState.hasSigned = true;
-
     const guide = document.getElementById('signatureGuideText');
     if (guide) guide.style.display = 'none';
   }
@@ -891,18 +1022,13 @@ function initSignatureCanvas() {
     }
   }
 
-  // Pointer events (native touch & mouse unified)
   canvas.addEventListener('pointerdown', start);
   canvas.addEventListener('pointermove', move);
   canvas.addEventListener('pointerup', stop);
   canvas.addEventListener('pointercancel', stop);
-
-  // Touch fallback
   canvas.addEventListener('touchstart', start, { passive: false });
   canvas.addEventListener('touchmove', move, { passive: false });
   canvas.addEventListener('touchend', stop, { passive: false });
-
-  // Mouse fallback
   canvas.addEventListener('mousedown', start);
   canvas.addEventListener('mousemove', move);
   canvas.addEventListener('mouseup', stop);
@@ -918,15 +1044,10 @@ function openSignatureModal() {
     setText('signModalEmpName', empState.employee.name || 'Candidate');
     setText('signModalEmpNo', empState.employee.empNo || '');
   }
-  const dateStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  setText('signModalDate', dateStr);
-
+  setText('signModalDate', new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }));
   const guide = document.getElementById('signatureGuideText');
   if (guide) guide.style.display = 'block';
-
-  setTimeout(() => {
-    initSignatureCanvas();
-  }, 50);
+  setTimeout(initSignatureCanvas, 50);
 }
 window.openSignatureModal = openSignatureModal;
 
@@ -939,11 +1060,8 @@ window.closeSignatureModal = closeSignatureModal;
 function clearSignatureCanvas() {
   if (!signatureState.canvas || !signatureState.ctx) return;
   const rect = signatureState.canvas.getBoundingClientRect();
-  const width = rect.width || 470;
-  const height = 180;
-  signatureState.ctx.clearRect(0, 0, width, height);
+  signatureState.ctx.clearRect(0, 0, rect.width || 470, 180);
   signatureState.hasSigned = false;
-
   const guide = document.getElementById('signatureGuideText');
   if (guide) guide.style.display = 'block';
 }
@@ -954,30 +1072,133 @@ function confirmSignatureAndSubmit() {
     showToast('Please provide your signature before finishing.', 'error');
     return;
   }
-
   const signatureDataUrl = signatureState.canvas ? signatureState.canvas.toDataURL('image/png') : '';
   closeSignatureModal();
   submitEmployeeExam(false, signatureDataUrl);
 }
 window.confirmSignatureAndSubmit = confirmSignatureAndSubmit;
 
-// Submit Exam
+// Offline Exam Queue Helpers
+function getOfflineExamQueue() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_OFFLINE_QUEUE);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveOfflineExamQueue(arr) {
+  try {
+    if (!arr || arr.length === 0) {
+      localStorage.removeItem(STORAGE_KEY_OFFLINE_QUEUE);
+    } else {
+      localStorage.setItem(STORAGE_KEY_OFFLINE_QUEUE, JSON.stringify(arr));
+    }
+  } catch (e) {}
+  updateOfflineQueueBanner();
+}
+
+function updateOfflineQueueBanner() {
+  const banner = document.getElementById('offlineQueueBanner');
+  const textEl = document.getElementById('offlineQueueText');
+  const queue = getOfflineExamQueue();
+  if (!banner) return;
+  if (queue.length > 0) {
+    banner.style.display = 'flex';
+    if (textEl) textEl.innerText = `${queue.length} offline exam submission(s) saved locally and awaiting network sync.`;
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+function queueOfflineExamPayload(payload) {
+  const q = getOfflineExamQueue();
+  const filtered = q.filter((item) => item.empNo !== payload.empNo);
+  filtered.push({ ...payload, queuedAt: new Date().toISOString() });
+  saveOfflineExamQueue(filtered);
+}
+
+async function flushOfflineExamQueue() {
+  const queue = getOfflineExamQueue();
+  updateOfflineQueueBanner();
+  if (queue.length === 0 || (typeof navigator !== 'undefined' && navigator.onLine === false) || !empState.token) {
+    return;
+  }
+
+  const remaining = [];
+  let syncedCount = 0;
+  for (const item of queue) {
+    try {
+      const res = await fetch('/api/exam/submit', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({
+          empNo: item.empNo,
+          answers: item.answers,
+          candidateSignature: item.candidateSignature || '',
+          tabSwitchCount: item.tabSwitchCount || 0
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        syncedCount++;
+      } else if (res.status === 409) {
+        // Already submitted on server; drop duplicate queue entry
+      } else {
+        remaining.push(item);
+      }
+    } catch (e) {
+      remaining.push(item);
+    }
+  }
+  saveOfflineExamQueue(remaining);
+  if (syncedCount > 0) {
+    showToast(`Synced ${syncedCount} offline exam submission(s) to server!`, 'success');
+    await loadEmployeeDashboard();
+  }
+}
+window.flushOfflineExamQueue = flushOfflineExamQueue;
+
+function setupOfflineSyncListeners() {
+  updateOfflineQueueBanner();
+  window.addEventListener('online', () => {
+    flushOfflineExamQueue();
+  });
+}
+
+// Submit Exam (offline tolerant)
 async function submitEmployeeExam(isAuto = false, candidateSignature = '') {
   if (empState.isSubmitting) return;
   empState.isSubmitting = true;
 
-  if (empState.examTimerInterval) clearInterval(empState.examTimerInterval);
+  if (empState.examTimerInterval) {
+    clearInterval(empState.examTimerInterval);
+    empState.examTimerInterval = null;
+  }
+
+  const payload = {
+    empNo: empState.employee.empNo,
+    answers: empState.userAnswers,
+    candidateSignature: candidateSignature || '',
+    tabSwitchCount: empState.tabSwitches || 0
+  };
 
   try {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      queueOfflineExamPayload(payload);
+      showToast('Offline detected: your exam responses were safely saved and will auto-sync when online.', 'info');
+      showEmployeeView('viewEmpDashboard');
+      return;
+    }
+
     const res = await fetch('/api/exam/submit', {
       method: 'POST',
       headers: getAuthHeaders(),
       credentials: 'include',
-      body: JSON.stringify({
-        empNo: empState.employee.empNo,
-        answers: empState.userAnswers,
-        candidateSignature: candidateSignature || ''
-      })
+      body: JSON.stringify(payload)
     });
 
     const data = await res.json();
@@ -985,11 +1206,9 @@ async function submitEmployeeExam(isAuto = false, candidateSignature = '') {
       if (candidateSignature && !data.record.candidateSignature) {
         data.record.candidateSignature = candidateSignature;
       }
-      if (data.record.isPassed) {
+      if (data.record.isPassed && empState.employee) {
         const newLevel = data.record.switchedLevel || data.record.targetLevel;
-        if (newLevel && empState.employee) {
-          empState.employee.currentLevel = newLevel;
-        }
+        if (newLevel) empState.employee.currentLevel = newLevel;
       }
       showResultView(data.record);
     } else {
@@ -999,24 +1218,26 @@ async function submitEmployeeExam(isAuto = false, candidateSignature = '') {
     }
   } catch (err) {
     console.error('Submit exam error:', err);
-    showToast('Failed to submit exam. Please contact supervisor.', 'error');
+    queueOfflineExamPayload(payload);
+    showToast('Network unreachable: exam submission queued locally for auto-sync.', 'error');
+    showEmployeeView('viewEmpDashboard');
   } finally {
     empState.isSubmitting = false;
   }
 }
 
-// Render Results View
 function showResultView(record) {
   const total = record.totalQuestions || 30;
-  const score = record.score || 0;
-  const percentage = record.percentage || Math.round((score / total) * 100);
+  const score = record.totalMark ?? record.score ?? 0;
+  const percentage = record.markPct ?? record.percentage ?? Math.round((score / total) * 100);
   const isPassed = record.isPassed !== false;
+  const passPct = getExamPassPct();
 
   setText('resultScoreLarge', `${score} / ${total} (${percentage}%)`);
 
   const passBadge = document.getElementById('resultPassBadge');
   if (passBadge) {
-    passBadge.innerText = isPassed ? 'PASSED (Threshold: 50%)' : 'RETAKE REQUIRED (< 50%)';
+    passBadge.innerText = isPassed ? `PASSED (Threshold: ${passPct}%)` : `RETAKE REQUIRED (< ${passPct}%)`;
     passBadge.style.background = isPassed ? '#DCFCE7' : '#FEE2E2';
     passBadge.style.color = isPassed ? '#166534' : '#991B1B';
   }
@@ -1026,7 +1247,7 @@ function showResultView(record) {
     if (isPassed) {
       const switchedTo = record.switchedLevel || record.targetLevel || 'O';
       switchNotice.style.display = 'block';
-      switchNotice.innerHTML = `🎉 <strong>Skill Level Switched!</strong> Qualified at <strong>Level ${switchedTo}</strong> (${getLevelTitle(switchedTo)}) based on experience &amp; exam completion.`;
+      switchNotice.innerHTML = `<strong>Skill Level Qualified!</strong> Achieved <strong>Level ${escapeEmpHtml(switchedTo)}</strong> (${escapeEmpHtml(getLevelTitle(switchedTo))}) based on experience &amp; exam completion.`;
     } else {
       switchNotice.style.display = 'none';
     }
@@ -1038,7 +1259,6 @@ function showResultView(record) {
   setText('resProcess', formatCatScore(catMarks.process, 10));
   setText('resCiTpm', formatCatScore(catMarks.ciTpm, 5));
 
-  // Display verified candidate signature
   const sigBox = document.getElementById('resultSignatureBox');
   const sigImg = document.getElementById('resultSignatureImg');
   if (sigBox && sigImg && record.candidateSignature) {
@@ -1051,79 +1271,100 @@ function showResultView(record) {
   showEmployeeView('viewResult');
 }
 
-// Return to Dashboard and reload fresh employee profile
 async function handleReturnToDashboard() {
   await loadEmployeeDashboard();
   showEmployeeView('viewEmpDashboard');
 }
 window.handleReturnToDashboard = handleReturnToDashboard;
 
-// Anti-cheating tab switch monitor
+// QR Certificate Viewer Modal
+async function openEmployeeCertificate() {
+  if (!empState.employee || !empState.employee.empNo) return;
+  const modal = document.getElementById('empCertificateModal');
+  const content = document.getElementById('empCertContent');
+  if (!modal || !content) return;
+
+  content.innerHTML = '<div style="text-align:center; padding: 24px; color: var(--text-muted);">Generating verifiable QR Certificate...</div>';
+  modal.style.display = 'flex';
+
+  try {
+    const res = await fetch(`/api/certificate/${encodeURIComponent(empState.employee.empNo)}`, {
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success || !data.certificate) {
+      content.innerHTML = `<div style="text-align:center; padding: 20px; color:#DC2626;">${escapeEmpHtml(data.message || 'Unable to load certificate.')}</div>`;
+      return;
+    }
+    const c = data.certificate;
+    content.innerHTML = `
+      <div class="certificate-card">
+        <div style="font-size:0.78rem; font-weight:800; color:#005B9E; letter-spacing:1.4px;">YOKOHAMA ATC TIRES &bull; ILUO QUALIFICATION</div>
+        <h2 style="margin:6px 0 4px; color:#003D6B; font-size:1.35rem;">Skill Competency Certificate</h2>
+        <div style="font-size:0.78rem; color:#64748B; margin-bottom:14px;">Certificate No: <strong>${escapeEmpHtml(c.certificateNo)}</strong></div>
+        <div style="font-size:1.25rem; font-weight:800; color:#0F172A;">${escapeEmpHtml(c.name)}</div>
+        <div style="font-size:0.86rem; color:#334155; margin-top:4px;">ID: <strong>${escapeEmpHtml(c.empNo)}</strong> &bull; ${escapeEmpHtml(c.dept)} &bull; ${escapeEmpHtml(c.section)}</div>
+        <div style="margin:14px auto; display:inline-block; padding:8px 18px; border-radius:8px; background:#EFF6FF; color:#005B9E; font-weight:800; font-size:1rem;">
+          Qualified Level ${escapeEmpHtml(c.qualifiedLevel)} &mdash; ${escapeEmpHtml(c.levelTitle)}
+        </div>
+        <div style="display:flex; justify-content:center; gap:20px; font-size:0.84rem; color:#475569; margin-bottom:14px; flex-wrap:wrap;">
+          <span>MCQ Exam: <strong>${c.examPct !== null && c.examPct !== undefined ? escapeEmpHtml(String(c.examPct)) + '%' : 'Pending'}</strong></span>
+          <span>OJT Practical: <strong>${c.ojtPct !== null && c.ojtPct !== undefined ? escapeEmpHtml(String(c.ojtPct)) + '%' : 'Pending'}</strong></span>
+          <span>Date: <strong>${escapeEmpHtml(c.attemptDate || '-')}</strong></span>
+        </div>
+        <div>
+          <img src="${escapeEmpHtml(c.qrDataUrl)}" alt="Certificate Verification QR Code" style="width:130px;height:130px;border:1px solid #E2E8F0;border-radius:8px;padding:4px;background:#fff;">
+        </div>
+        <div style="font-size:0.72rem; color:#64748B; margin-top:6px;">Scan QR to verify authenticity online</div>
+      </div>
+    `;
+  } catch (err) {
+    content.innerHTML = '<div style="text-align:center; padding: 20px; color:#DC2626;">Network error loading certificate.</div>';
+  }
+}
+window.openEmployeeCertificate = openEmployeeCertificate;
+
+function closeEmployeeCertificateModal() {
+  const modal = document.getElementById('empCertificateModal');
+  if (modal) modal.style.display = 'none';
+}
+window.closeEmployeeCertificateModal = closeEmployeeCertificateModal;
+
+// Server-Synced Anti-Cheating Tab Switch Monitor
 function setupTabSwitchDetection() {
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && empState.examTimerInterval) {
+  document.addEventListener('visibilitychange', async () => {
+    if (document.hidden && empState.examTimerInterval && empState.employee) {
       empState.tabSwitches++;
-      setText('tabSwitchCountDisplay', `${empState.tabSwitches} / 3`);
-        triggerEmployeeAutosave();
-      if (empState.tabSwitches >= 3) {
-        showToast('Maximum tab switches exceeded. Exam logged.', 'error');
+      let maxAllowed = getMaxTabSwitches();
+      let action = empSettings.tabSwitchAction || 'terminate';
+      let limitReached = empState.tabSwitches >= maxAllowed;
+
+      try {
+        const res = await fetch('/api/exam/tab-switch', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          credentials: 'include',
+          body: JSON.stringify({ empNo: empState.employee.empNo })
+        });
+        const data = await res.json();
+        if (data && data.success) {
+          empState.tabSwitches = Number(data.tabSwitchCount || empState.tabSwitches);
+          maxAllowed = Number(data.maxTabSwitches || maxAllowed);
+          action = data.action || action;
+          limitReached = Boolean(data.limitReached);
+        }
+      } catch (e) {}
+
+      setText('tabSwitchCountDisplay', `${empState.tabSwitches} / ${maxAllowed}`);
+      if (limitReached && action === 'terminate') {
+        showToast('Maximum tab switches exceeded. Auto-submitting assessment...', 'error');
+        submitEmployeeExam(true);
+      } else if (limitReached) {
+        showToast(`Warning: Tab switch limit (${empState.tabSwitches}/${maxAllowed}) reached and logged.`, 'error');
       } else {
-        showToast(`Warning: Tab switch detected (${empState.tabSwitches}/3). Stay on assessment screen.`, 'error');
+        showToast(`Warning: Tab switch detected (${empState.tabSwitches}/${maxAllowed}). Stay on assessment screen.`, 'error');
       }
     }
   });
 }
-
-
-
-function renderQuestionPalette() {
-  const grid = document.getElementById('questionPaletteGrid');
-  if (!grid || !empState.examQuestions) return;
-
-  const total = empState.examQuestions.length;
-  let buttonsHtml = '';
-
-  for (let i = 0; i < total; i++) {
-    const q = empState.examQuestions[i];
-    const isAnswered = empState.userAnswers[q.id] !== undefined;
-    const isCurrent = i === empState.currentQIndex;
-
-    let style = 'width: 36px; height: 36px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.15s ease; border: 1.5px solid #CBD5E1;';
-    if (isCurrent) {
-      style += ' background: #005B9E; color: #FFFFFF; border-color: #003D6B; box-shadow: 0 0 0 2px rgba(0,91,158,0.3);';
-    } else if (isAnswered) {
-      style += ' background: #ECFDF5; color: #065F46; border-color: #10B981;';
-    } else {
-      style += ' background: #F8FAFC; color: #64748B; border-color: #E2E8F0;';
-    }
-
-    buttonsHtml += `<button type="button" class="palette-btn" style="${style}" onclick="jumpToExamQuestion(${i})" aria-label="Jump to Question ${i + 1}">${i + 1}</button>`;
-  }
-
-  grid.innerHTML = buttonsHtml;
-}
-
-function jumpToExamQuestion(targetIndex) {
-  if (!empState.examQuestions || targetIndex < 0 || targetIndex >= empState.examQuestions.length) return;
-  empState.currentQIndex = targetIndex;
-  renderActiveQuestion();
-}
-window.jumpToExamQuestion = jumpToExamQuestion;
-window.renderQuestionPalette = renderQuestionPalette;
-
-
-// Global ESC key listener to dismiss open modals/overlays (Acceptance Criteria)
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    const sopModal = document.getElementById('sopModal');
-    if (sopModal && sopModal.style.display !== 'none') {
-      if (typeof closeSopModal === 'function') closeSopModal();
-      else sopModal.style.display = 'none';
-    }
-    const sigModal = document.getElementById('signatureModal');
-    if (sigModal && sigModal.style.display !== 'none') {
-      if (typeof closeSignatureModal === 'function') closeSignatureModal();
-      else sigModal.style.display = 'none';
-    }
-  }
-});

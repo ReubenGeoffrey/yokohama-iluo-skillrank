@@ -2228,9 +2228,13 @@
         {
           "key": "C",
           "text": "Shine / தூய்மைப்படுத்த"
+        },
+        {
+          "key": "D",
+          "text": "Standardize / நிலையாக்கு"
         }
       ],
-      "correctAnswer": "A"
+      "correctAnswer": "B"
     },
     {
       "id": "L_Solid_Tire_QA_7",
@@ -3390,6 +3394,14 @@
         {
           "key": "B",
           "text": "Catalogue & date / கேட்டலாக் மற்றும் தேதி"
+        },
+        {
+          "key": "C",
+          "text": "GT code & catalogue / GT குறியீடு மற்றும் கேட்டலாக்"
+        },
+        {
+          "key": "D",
+          "text": "GT code & date / GT குறியீடு மற்றும் தேதி Why is Green Tire Jamming required? / கிரீன் டயர் ஜாம்மிங் ஏன் தேவை?"
         }
       ],
       "correctAnswer": "A"
@@ -3401,6 +3413,10 @@
       "category": "QA & Process",
       "question": "Why is Green Tire Jamming required? / கிரீன் டயர் ஜாம்மிங் ஏன் தேவை?",
       "options": [
+        {
+          "key": "A",
+          "text": "To ensure zero defect / பூஜ்ய குறைபாடுகளை உறுதி செய்ய"
+        },
         {
           "key": "B",
           "text": "To avoid splice open defect / ஸ்பிளைஸ் திறப்பு குறையைத் தவிர்க்க"
@@ -3424,6 +3440,10 @@
       "question": "13. What information is available on the Unique Serial Plate? / யுனிக் சீரியல் பிளேட்டில் என்ன தகவல் இருக்கும்?",
       "options": [
         {
+          "key": "A",
+          "text": "Month & Year / மாதமும் ஆண்டும்"
+        },
+        {
           "key": "B",
           "text": "Day & Month / நாளும் மாதமும்"
         },
@@ -3445,6 +3465,10 @@
       "category": "QA & Process",
       "question": "14. Why is GT Poking required? / GT போக்கிங் ஏன் செய்யப்படுகிறது?",
       "options": [
+        {
+          "key": "A",
+          "text": "To identify loading point / ஏற்றுமதி இடத்தை அடையாளம் காண"
+        },
         {
           "key": "B",
           "text": "To release air entrapped in GT / GT-இல் சிக்கிய காற்றை வெளியேற்ற"
@@ -3468,6 +3492,10 @@
       "question": "15. How many times should Nerve Breaking be done for a new bladder? / புதிய பிளாடருக்கு நர்வ் பிரேக்கிங் எத்தனை முறை செய்ய வேண்டும்?",
       "options": [
         {
+          "key": "A",
+          "text": "9 / 9 முறை"
+        },
+        {
           "key": "B",
           "text": "10+ / 10க்கும் மேல்"
         },
@@ -3489,6 +3517,10 @@
       "category": "QA & Process",
       "question": "16. What is meant by Poke Yoke? / போக் யோக் என்றால் என்ன?",
       "options": [
+        {
+          "key": "A",
+          "text": "Error proofing / தவறுகளை தடுக்கும் முறை"
+        },
         {
           "key": "B",
           "text": "Early warning / முன்னறிவிப்பு எச்சரிக்கை"
@@ -3512,6 +3544,10 @@
       "question": "17. What is the effect of Poor Warm Up? / மோசமான வார்ம்அப்பின் விளைவு என்ன?",
       "options": [
         {
+          "key": "A",
+          "text": "Cured tire with under cure / குறைவான கியூருடன் டயர்"
+        },
+        {
           "key": "B",
           "text": "Cured tire with Bent Bead defect / வளைந்த பிடி குறைபாடு"
         },
@@ -3533,6 +3569,10 @@
       "category": "QA & Process",
       "question": "18. What is meant by Troubleshooting? / டிரபிள்ஷூட்டிங் என்றால் என்ன?",
       "options": [
+        {
+          "key": "A",
+          "text": "Problem solving / பிரச்சனை தீர்வு"
+        },
         {
           "key": "B",
           "text": "Methodology / முறையியல்"
@@ -3556,6 +3596,10 @@
       "question": "19. What is the purpose of Q-Alert in Tire Curing? / டயர் கியூரிங்கில் Q-அலர்ட் ஏன் எடுக்கப்படுகிறது?",
       "options": [
         {
+          "key": "A",
+          "text": "For Non-conformance materials / நான்-கான்ஃபார்மன்ஸ் பொருட்கள்"
+        },
+        {
           "key": "B",
           "text": "For Non-conformance GTs / நான்-கான்ஃபார்மன்ஸ் GT கள்"
         },
@@ -3577,6 +3621,10 @@
       "category": "QA & Process",
       "question": "20. Bladder ring no 2 & 3 how to identify? / பிளாடர் ரிங் எண் 2 மற்றும் 3 எவ்வாறு அடையாளம் காணப்படுகிறது?",
       "options": [
+        {
+          "key": "A",
+          "text": "K & E / K மற்றும் E"
+        },
         {
           "key": "B",
           "text": "T & E / T மற்றும் E"
@@ -4694,6 +4742,10 @@
       "question": "What is the defect? /குறைபாடு என்றால் என்ன?",
       "options": [
         {
+          "key": "A",
+          "text": "Not meeting specification requirements / விவரக்குறிப்பு தேவைகளை பூர்த்தி செய்யாதது"
+        },
+        {
           "key": "B",
           "text": "Not meeting SOP requirements / SOP தேவைகளை பூர்த்தி செய்யாதது"
         },
@@ -4845,6 +4897,10 @@
       "category": "QA & Process",
       "question": "Indicates ? / குறி காட்டுவது என்ன?",
       "options": [
+        {
+          "key": "A",
+          "text": "Direction of rotation / சுழற்சி திசை"
+        },
         {
           "key": "B",
           "text": "Brand emblem / பிராண்ட் சின்னம்"
@@ -9961,8 +10017,12 @@
       "level": "U",
       "section": "Warehouse QA",
       "category": "QA & Process",
-      "question": "Sequence of activities at PDI? PDI-ல் செயல்முறைகள் வரிசை:\na Load scanning, QA inspection, Container inspection, Tire cleaning, Stuffing / லோடு ஸ்கேனிங், QA இன்ஸ்பெக்‌ஷன், கண்டெய்னர் இன்ஸ்பெக்‌ஷன், டயர் கிளீனிங், ஸ்டஃபிங்",
+      "question": "Sequence of activities at PDI? PDI-ல் செயல்முறைகள் வரிசை:",
       "options": [
+        {
+          "key": "A",
+          "text": "Load scanning, QA inspection, Container inspection, Tire cleaning, Stuffing / லோடு ஸ்கேனிங், QA இன்ஸ்பெக்‌ஷன், கண்டெய்னர் இன்ஸ்பெக்‌ஷன், டயர் கிளீனிங், ஸ்டஃபிங்"
+        },
         {
           "key": "B",
           "text": "Tire stuffing, QA inspection, Cleaning, Container inspection, Load scanning / டயர் ஸ்டஃபிங், QA இன்ஸ்பெக்‌ஷன், கிளீனிங், கண்டெய்னர் இன்ஸ்பெக்‌ஷன், லோடு ஸ்கேனிங்"
@@ -10950,6 +11010,10 @@
       "question": "Indicates?/ இந்தக் குறி குறிக்கும் பொருள் என்ன?",
       "options": [
         {
+          "key": "A",
+          "text": "Free rolling / சுதந்திரமாக சுற்றும்"
+        },
+        {
           "key": "B",
           "text": "Drive wheel / ஓட்டும் சக்கரம்"
         },
@@ -10971,6 +11035,10 @@
       "category": "QA & Process",
       "question": "Indicates?/ இந்தக் குறி குறிக்கும் பொருள் என்ன?",
       "options": [
+        {
+          "key": "A",
+          "text": "Free rolling / சுதந்திரமாக சுற்றும்"
+        },
         {
           "key": "B",
           "text": "Drive wheel / ஓட்டும் சக்கரம்"
@@ -11097,6 +11165,10 @@
       "category": "QA & Process",
       "question": "What is the defect? /குறைபாடு என்றால் என்ன?",
       "options": [
+        {
+          "key": "A",
+          "text": "Not meeting specification requirements / விவரக்குறிப்பு தேவைகளை பூர்த்தி செய்யாதது"
+        },
         {
           "key": "B",
           "text": "Not meeting SOP requirements / SOP தேவைகளை பூர்த்தி செய்யாதது"
@@ -11275,6 +11347,10 @@
       "category": "QA & Process",
       "question": "Indicates ? / குறி காட்டுவது என்ன?",
       "options": [
+        {
+          "key": "A",
+          "text": "Direction of rotation / சுழற்சி திசை"
+        },
         {
           "key": "B",
           "text": "Brand emblem / பிராண்ட் சின்னம்"
@@ -17070,6 +17146,10 @@
       "question": "How to check the Route Card vs Specification? / ரூட் கார்டை விவரக்குறிப்புடன் எவ்வாறு சரிபார்க்கலாம்?",
       "options": [
         {
+          "key": "A",
+          "text": "Revision number & date / திருத்த எண் மற்றும் தேதி"
+        },
+        {
           "key": "B",
           "text": "Catalogue & date / கேட்டலாக் மற்றும் தேதி"
         },
@@ -17091,6 +17171,10 @@
       "category": "QA & Process",
       "question": "Why is Green Tire Jamming required? / கிரீன் டயர் ஜாம்மிங் ஏன் தேவை?",
       "options": [
+        {
+          "key": "A",
+          "text": "To ensure zero defect / பூஜ்ய குறைபாடுகளை உறுதி செய்ய"
+        },
         {
           "key": "B",
           "text": "To avoid splice open defect / ஸ்பிளைஸ் திறப்பு குறையைத் தவிர்க்க"
@@ -17114,6 +17198,10 @@
       "question": "What information is available on the Unique Serial Plate? / யுனிக் சீரியல் பிளேட்டில் என்ன தகவல் இருக்கும்?",
       "options": [
         {
+          "key": "A",
+          "text": "Month & Year / மாதமும் ஆண்டும்"
+        },
+        {
           "key": "B",
           "text": "Day & Month / நாளும் மாதமும்"
         },
@@ -17136,12 +17224,20 @@
       "question": "Why is GT Poking required? / GT போக்கிங் ஏன் செய்யப்படுகிறது?",
       "options": [
         {
+          "key": "A",
+          "text": "To identify loading point / ஏற்றுமதி இடத்தை அடையாளம் காண"
+        },
+        {
           "key": "B",
           "text": "To release air entrapped in GT / GT-இல் சிக்கிய காற்றை வெளியேற்ற"
         },
         {
           "key": "C",
           "text": "To prevent defects in GT / GT இல் குறைகளைத் தடுக்கும்"
+        },
+        {
+          "key": "D",
+          "text": "None of the above / மேலே எதுவும் இல்லை How many times should Nerve Breaking be done for a new bladder? / புதிய பிளாடருக்கு நர்வ் பிரேக்கிங் எத்தனை முறை செய்ய வேண்டும்?"
         }
       ],
       "correctAnswer": "A"
@@ -17153,6 +17249,10 @@
       "category": "QA & Process",
       "question": "How many times should Nerve Breaking be done for a new bladder? / புதிய பிளாடருக்கு நர்வ் பிரேக்கிங் எத்தனை முறை செய்ய வேண்டும்?",
       "options": [
+        {
+          "key": "A",
+          "text": "9 / 9 முறை"
+        },
         {
           "key": "B",
           "text": "10+ / 10க்கும் மேல்"
@@ -17176,6 +17276,10 @@
       "question": "What is meant by Poke Yoke? / போக் யோக் என்றால் என்ன?",
       "options": [
         {
+          "key": "A",
+          "text": "Error proofing / தவறுகளை தடுக்கும் முறை"
+        },
+        {
           "key": "B",
           "text": "Early warning / முன்னறிவிப்பு எச்சரிக்கை"
         },
@@ -17197,6 +17301,10 @@
       "category": "QA & Process",
       "question": "What is the effect of Poor Warm Up? / மோசமான வார்ம்அப்பின் விளைவு என்ன?",
       "options": [
+        {
+          "key": "A",
+          "text": "Cured tire with under cure / குறைவான கியூருடன் டயர்"
+        },
         {
           "key": "B",
           "text": "Cured tire with Bent Bead defect / வளைந்த பிடி குறைபாடு"
@@ -17220,6 +17328,10 @@
       "question": "What is meant by Troubleshooting? / டிரபிள்ஷூட்டிங் என்றால் என்ன?",
       "options": [
         {
+          "key": "A",
+          "text": "Problem solving / பிரச்சனை தீர்வு"
+        },
+        {
           "key": "B",
           "text": "Methodology / முறையியல்"
         },
@@ -17241,6 +17353,10 @@
       "category": "QA & Process",
       "question": "What is the purpose of Q-Alert in Tire Curing? / டயர் கியூரிங்கில் Q-அலர்ட் ஏன் எடுக்கப்படுகிறது?",
       "options": [
+        {
+          "key": "A",
+          "text": "For Non-conformance materials / நான்-கான்ஃபார்மன்ஸ் பொருட்கள்"
+        },
         {
           "key": "B",
           "text": "For Non-conformance GTs / நான்-கான்ஃபார்மன்ஸ் GT கள்"
@@ -17264,6 +17380,10 @@
       "question": "Bladder ring no 2 & 3 how to identify? / பிளாடர் ரிங் எண் 2 மற்றும் 3 எவ்வாறு அடையாளம் காணப்படுகிறது?",
       "options": [
         {
+          "key": "A",
+          "text": "K & E / K மற்றும் E"
+        },
+        {
           "key": "B",
           "text": "T & E / T மற்றும் E"
         },
@@ -17285,6 +17405,10 @@
       "category": "QA & Process",
       "question": "What is the warm-up time for dome press after mould change? / மோல்ட் மாற்றத்திற்கு பின் டோம் ப்ரெஸ்ஸின் வார்ம்அப் நேரம் என்ன?",
       "options": [
+        {
+          "key": "A",
+          "text": "30 mins / 30 நிமிடங்கள்"
+        },
         {
           "key": "B",
           "text": "40 mins / 40 நிமிடங்கள்"
@@ -17334,6 +17458,10 @@
       "question": "What is the importance of Calibration? / அளவீட்டின் முக்கியத்துவம் என்ன?",
       "options": [
         {
+          "key": "A",
+          "text": "Providing accurate readings / துல்லியமான அளவுகளை வழங்குதல்"
+        },
+        {
           "key": "B",
           "text": "Ensuring instruments work properly / கருவிகள் நன்றாக செயல்படுவதை உறுதி செய்தல்"
         },
@@ -17355,6 +17483,10 @@
       "category": "QA & Process",
       "question": "Inner / Outer blister defect in cured tire? What need to do? / கியூரிங் டயரில் உள்ள / வெளிப்புற பிளிஸ்டர் குறைபாடு? என்ன செய்ய வேண்டும்?",
       "options": [
+        {
+          "key": "A",
+          "text": "Tire marked and sent to FID / டயர் குறிக்கப்பட்டு FID க்கு அனுப்பப்படுகிறது"
+        },
         {
           "key": "B",
           "text": "Air release by needle / பிடியின் மூலம் காற்றை வெளியேற்றுதல்"
@@ -17378,6 +17510,10 @@
       "question": "What is the effect of poking in cured tire? / கியூரிங் டயரில் போக்கிங் செய்வதால் என்ன விளைவு?",
       "options": [
         {
+          "key": "A",
+          "text": "Air leak from tire / டயரிலிருந்து காற்று ஒழுங்காக வெளியேறும்"
+        },
+        {
           "key": "B",
           "text": "Customer dissatisfaction / வாடிக்கையாளர் திருப்தி குறைவு"
         },
@@ -17399,6 +17535,10 @@
       "category": "QA & Process",
       "question": "How to identify Nitrogen drop in graph? / கிராஃபில் நைட்ரஜன் குறைவு எப்படிப் பரிசோதிக்கலாம்?",
       "options": [
+        {
+          "key": "A",
+          "text": "Below Specification range from 28+2, -0.5 kg/cm² / 28+2, -0.5 kg/cm² என்ற விவரக்குறிப்பின் கீழ்"
+        },
         {
           "key": "B",
           "text": "Below Specification range from 28 kg/cm² / 28 kg/cm² என்ற விவரக்குறிப்பின் கீழ்"
@@ -17422,6 +17562,10 @@
       "question": "Dirty Mould Grading system / சுவாரஸ்யமான மொல்ட் கிரேடிங் முறை",
       "options": [
         {
+          "key": "A",
+          "text": "Rating no. 3 immediately cleaning required / கிரேட்டிங் எண் 3 உடனடியாக சுத்தம் செய்யப்பட வேண்டும்"
+        },
+        {
           "key": "B",
           "text": "Rating no. 1 immediately cleaning required / கிரேட்டிங் எண் 1 உடனடியாக சுத்தம் செய்யப்பட வேண்டும்"
         },
@@ -17444,6 +17588,10 @@
       "question": "Purpose of V-Guide / V-கைடு நோக்கம் என்ன?",
       "options": [
         {
+          "key": "A",
+          "text": "To check matching of Top mould / மேல் மொல்ட்டின் பொருத்தத்தை சரிபார்க்க"
+        },
+        {
           "key": "B",
           "text": "To check matching of Bottom mould / கீழ் மொல்ட்டின் பொருத்தத்தை சரிபார்க்க"
         },
@@ -17465,6 +17613,10 @@
       "category": "QA & Process",
       "question": "How to verify Bladder life? / பிளாடரின் ஆயுள் எவ்வாறு சரிபார்க்கலாம்?",
       "options": [
+        {
+          "key": "A",
+          "text": "To check specification Vs actual in route card / ரூட் கார்டில் விவரக்குறிப்புகள் Vs உண்மையில் சரிபார்க்க"
+        },
         {
           "key": "B",
           "text": "To check HMI display / HMI திரையை சரிபார்க்க"
@@ -18336,7 +18488,7 @@
           "text": "Sand / மணல்"
         }
       ],
-      "correctAnswer": "A"
+      "correctAnswer": "C"
     },
     {
       "id": "O_Warehouse_QA_32",
@@ -18362,7 +18514,7 @@
           "text": "Cover with blanket / போர்வையால் மூடு"
         }
       ],
-      "correctAnswer": "A"
+      "correctAnswer": "B"
     },
     {
       "id": "O_Warehouse_QA_33",
@@ -18388,7 +18540,7 @@
           "text": "To train workers / தொழிலாளர்களை பயிற்சி அளிக்க"
         }
       ],
-      "correctAnswer": "A"
+      "correctAnswer": "C"
     },
     {
       "id": "O_Warehouse_QA_34",
@@ -18440,7 +18592,7 @@
           "text": "Blue / நீலம்"
         }
       ],
-      "correctAnswer": "A"
+      "correctAnswer": "C"
     },
     {
       "id": "O_Warehouse_QA_36",
@@ -18466,7 +18618,7 @@
           "text": "To promote products / பொருட்களை விளம்பரப்படுத்த"
         }
       ],
-      "correctAnswer": "A"
+      "correctAnswer": "C"
     },
     {
       "id": "O_Warehouse_QA_37",
@@ -18492,7 +18644,7 @@
           "text": "Physical / பௌதீக"
         }
       ],
-      "correctAnswer": "A"
+      "correctAnswer": "D"
     },
     {
       "id": "O_Warehouse_QA_38",
@@ -18518,7 +18670,7 @@
           "text": "Goggles / கண்ணாடி"
         }
       ],
-      "correctAnswer": "A"
+      "correctAnswer": "C"
     },
     {
       "id": "O_Warehouse_QA_39",
@@ -18544,7 +18696,7 @@
           "text": "Hydrometer / நீரின் அடர்த்தி அளவீட்டுக் கருவி"
         }
       ],
-      "correctAnswer": "A"
+      "correctAnswer": "B"
     },
     {
       "id": "O_Warehouse_QA_40",
@@ -18570,7 +18722,7 @@
           "text": "Study of air / காற்று பற்றிய ஆய்வு"
         }
       ],
-      "correctAnswer": "A"
+      "correctAnswer": "C"
     }
   ]
 }

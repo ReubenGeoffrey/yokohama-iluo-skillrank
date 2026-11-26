@@ -3,12 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ATC Tires — Employee Skill Assessment Portal</title>
+  <title>ILUO Skill Assessment Portal &bull; Employee Portal</title>
+  <meta name="description" content="Yokohama ATC Tires Employee ILUO Skill Assessment, Roadmap &amp; QR Certification Portal">
+  <meta property="og:title" content="ILUO Skill Assessment Portal">
+  <meta property="og:description" content="Yokohama ATC Tires Employee ILUO Skill Assessment, Roadmap &amp; QR Certification Portal">
   <link rel="icon" type="image/png" href="atg_logo.png">
   <link rel="apple-touch-icon" href="atg_logo.png">
   <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#0F172A">
-  <link rel="stylesheet" href="styles.css">
+  <meta name="theme-color" content="#005B9E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Tamil:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=61.0">
   <style>
     /* Employee Portal Specific Enhancements */
     .emp-portal-banner {
@@ -17,7 +23,7 @@
       padding: 18px 24px;
       border-radius: var(--radius-md);
       box-shadow: var(--shadow-md);
-      margin-bottom: 24px;
+      margin-bottom: 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -26,7 +32,7 @@
     }
     .emp-profile-meta {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: 12px 18px;
       margin-top: 14px;
       padding-top: 14px;
@@ -36,7 +42,7 @@
       font-size: 0.72rem;
       text-transform: uppercase;
       letter-spacing: 0.8px;
-      opacity: 0.8;
+      opacity: 0.85;
       font-weight: 600;
     }
     .emp-meta-item .meta-value {
@@ -58,7 +64,7 @@
       right: 10px;
       background: transparent;
       border: none;
-      color: #64748B;
+      color: var(--text-muted);
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -67,17 +73,43 @@
       border-radius: 4px;
     }
     .btn-toggle-password:hover {
-      color: #0F172A;
+      color: var(--text-main);
+    }
+    .emp-auth-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 18px;
+      background: var(--surface-subtle);
+      padding: 4px;
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+    }
+    .emp-auth-tab {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-weight: 700;
+      font-size: 0.84rem;
+      padding: 9px 10px;
+      border-radius: 7px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .emp-auth-tab.active {
+      background: var(--surface-card);
+      color: var(--primary-color);
+      box-shadow: var(--shadow-sm);
     }
     .category-breakdown-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
       gap: 14px;
       margin-top: 16px;
     }
     .category-box {
-      background: #F8FAFC;
-      border: 1px solid #E2E8F0;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border-color);
       border-radius: 10px;
       padding: 14px 16px;
       border-left: 4px solid #005B9E;
@@ -90,14 +122,45 @@
       font-size: 0.78rem;
       font-weight: 700;
       text-transform: uppercase;
-      color: #64748B;
+      color: var(--text-muted);
       letter-spacing: 0.5px;
     }
     .category-score {
       font-size: 1.25rem;
       font-weight: 800;
-      color: #0F172A;
+      color: var(--text-main);
       margin-top: 4px;
+    }
+    .emp-surface-card {
+      background: var(--surface-card);
+      border-radius: 14px;
+      border: 1px solid var(--border-color);
+      padding: 22px;
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 20px;
+      color: var(--text-main);
+    }
+    .emp-subtle-box {
+      background: var(--surface-subtle);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .emp-link-btn {
+      background: none;
+      border: none;
+      color: var(--primary-color);
+      font-weight: 600;
+      font-size: 0.82rem;
+      cursor: pointer;
+      padding: 4px 2px;
+      text-decoration: underline;
+    }
+    @media print {
+      body * { visibility: hidden; }
+      #empCertificateModal, #empCertificateModal * { visibility: visible; }
+      #empCertificateModal { position: absolute; inset: 0; background: #fff !important; }
+      .no-print { display: none !important; }
     }
   </style>
 </head>
@@ -107,64 +170,76 @@
   <header class="navbar">
     <div class="brand-section">
       <div class="brand-logo">
-        <img src="atg_logo.png" alt="ATC Tires ILUO Portal Logo" class="brand-app-logo" width="38" height="38" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline-flex';">
-        <span class="brand-logo-fallback" style="display:none; width: 38px; height: 38px; font-size: 13px;" aria-hidden="true">ATG</span>
+        <img src="atg_logo.png" alt="Yokohama ATG Logo" class="brand-app-logo">
         <span>ATC TIRES</span>
       </div>
       <span class="brand-badge">ILUO</span>
-      <span class="system-title">Employee Skill Assessment Portal</span>
+      <span class="system-title" id="empNavSystemTitle" data-i18n="portalSubtitle">Employee Skill Assessment Portal</span>
     </div>
 
     <div class="nav-actions">
-      <div class="user-badge" id="empNavUserBadge" style="display: none;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        <span id="empNavUserName" style="font-weight: 600;">Employee</span>
-        <span id="empNavEmpNo" style="opacity: 0.75; font-size: 0.8rem;"></span>
+      <div class="nav-utility-group">
+        <button type="button" class="nav-utility-btn" id="empBtnToggleLang" onclick="toggleEmployeeLanguage()" aria-label="Switch Language">EN / தமிழ்</button>
+        <button type="button" class="nav-utility-btn" id="empBtnToggleTheme" onclick="toggleEmployeeTheme()" aria-label="Toggle Dark Mode">Dark</button>
       </div>
-      <button class="btn-nav" id="btnEmpSignOut" style="display: none;" onclick="handleEmployeeLogout()">Sign Out</button>
+      <div class="user-badge" id="empNavUserBadge" style="display: none;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span id="empNavUserName" style="font-weight: 600;"></span>
+        <span id="empNavEmpNo" style="opacity: 0.8; font-size: 0.8rem;"></span>
+      </div>
+      <button type="button" class="btn-nav" id="btnEmpSignOut" style="display: none;" onclick="handleEmployeeLogout()" data-i18n="signOut">Sign Out</button>
     </div>
   </header>
 
   <!-- App Main Container -->
-  <main class="app-container" style="max-width: 960px; margin: 0 auto; padding: 24px 16px; width: 100%;">
+  <main class="app-container" style="max-width: 980px; margin: 0 auto; padding: 24px 16px; width: 100%;">
+
+    <!-- Offline Submission Sync Queue Banner -->
+    <div id="offlineQueueBanner" class="offline-queue-banner" style="display: none;" role="status" aria-live="polite">
+      <span id="offlineQueueText">Pending offline exam submission waiting for network reconnection...</span>
+      <button type="button" id="btnRetryOfflineSubmit" class="btn-secondary" style="padding: 6px 12px; font-size: 0.8rem;" onclick="flushOfflineExamQueue()">Retry Sync Now</button>
+    </div>
 
     <!-- VIEW 1: Employee Login -->
-    <section class="view-section active" id="viewEmpLogin">
-      <div class="login-wrapper" style="max-width: 440px; margin: 40px auto 0;">
-        <div class="login-card" style="background: white; border-radius: 16px; box-shadow: var(--shadow-lg); overflow: hidden; border: 1px solid #E2E8F0;">
-          <div class="login-header" style="background: linear-gradient(135deg, #003D6B 0%, #005B9E 100%); color: white; padding: 28px 24px; text-align: center;">
-            <img src="atg_logo.png" alt="ATC Tires ILUO Portal Logo" width="58" height="58" style="border-radius: 12px; margin-bottom: 12px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.25);" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline-flex';">
-            <span class="brand-logo-fallback" style="display:none; width: 58px; height: 58px; font-size: 18px; margin: 0 auto 12px;" aria-hidden="true">ATG</span>
-            <h2 style="font-size: 1.4rem; font-weight: 800; margin: 0;">Employee Portal</h2>
-            <p style="font-size: 0.85rem; opacity: 0.9; margin-top: 6px;">Sign in with your Employee ID to access your skill evaluations &amp; exams</p>
+    <section class="view-section active" id="viewEmpLogin" aria-label="Employee Sign In">
+      <div class="login-wrapper" style="max-width: 460px; margin: 28px auto 0;">
+        <div class="login-card" style="background: var(--surface-card); border-radius: 16px; box-shadow: var(--shadow-lg); overflow: hidden; border: 1px solid var(--border-color);">
+          <div class="login-header" style="background: linear-gradient(135deg, #003D6B 0%, #005B9E 100%); color: white; padding: 26px 24px; text-align: center;">
+            <img src="atg_logo.png" alt="App Logo" style="width: 56px; height: 56px; border-radius: 12px; margin-bottom: 10px; background: white; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.25);">
+            <h1 style="font-size: 1.4rem; font-weight: 800; margin: 0;" data-i18n="empPortalHeading">Employee Portal</h1>
+            <p style="font-size: 0.85rem; opacity: 0.92; margin-top: 6px;" data-i18n="empPortalLead">Sign in with your Employee Number to access your skill roadmap, exams &amp; certificate</p>
           </div>
 
           <div class="login-body" style="padding: 24px;">
             <form id="empLoginForm" onsubmit="handleEmployeeLogin(event)">
-              <div class="form-group" style="margin-bottom: 16px;">
-                <label for="empIdInput" style="font-size: 0.85rem; font-weight: 600; color: #334155; display: block; margin-bottom: 6px;">Employee ID</label>
+              <div class="form-group" style="margin-bottom: 14px;">
+                <label for="empIdInput" style="font-size: 0.85rem; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 6px;" data-i18n="employeeIdLabel">Employee Number</label>
                 <input type="text" id="empIdInput" class="form-control" placeholder="e.g. LN0039, 900191, 900262" required autofocus style="font-weight: 600;" autocomplete="username">
               </div>
 
-              <div class="form-group" style="margin-bottom: 20px;">
-                <label for="empPasswordInput" style="font-size: 0.85rem; font-weight: 600; color: #334155; display: block; margin-bottom: 6px;">Password</label>
+              <div class="form-group" style="margin-bottom: 16px;">
+                <label for="empPasswordInput" style="font-size: 0.85rem; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 6px;" data-i18n="passwordLabel">Password</label>
                 <div class="password-input-wrap">
-                  <input type="password" id="empPasswordInput" class="form-control" placeholder="Enter Password" style="font-weight: 600;" autocomplete="current-password">
-                  <button type="button" class="btn-toggle-password" onclick="togglePasswordVisibility('empPasswordInput', this)" title="Toggle password visibility">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <input type="password" id="empPasswordInput" class="form-control" placeholder="Enter your Employee Number (default password)" required style="font-weight: 600;" autocomplete="current-password">
+                  <button type="button" class="btn-toggle-password" onclick="togglePasswordVisibility('empPasswordInput', this)" aria-label="Toggle password visibility" title="Toggle password visibility">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                       <circle cx="12" cy="12" r="3"></circle>
                     </svg>
                   </button>
                 </div>
+                <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 6px;" data-i18n="defaultPasswordHint">
+                  Default login: Username and Password are your Employee Number.
+                </div>
               </div>
 
-              <button type="submit" class="btn-primary" style="width: 100%; padding: 13px; font-weight: 700; font-size: 0.95rem; background: linear-gradient(135deg, #003D6B 0%, #005B9E 100%);">
+              <button type="submit" id="btnEmpLoginSubmit" class="btn-primary" style="width: 100%; padding: 13px; font-weight: 700; font-size: 0.95rem; background: linear-gradient(135deg, #003D6B 0%, #005B9E 100%);" data-i18n="signInBtn">
                 Sign In to Employee Portal
               </button>
             </form>
+
             <div style="text-align: center; margin-top: 16px;">
-              <a href="/" style="color: #005B9E; font-weight: 600; font-size: 0.88rem; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+              <a href="/" style="color: var(--primary-color); font-weight: 600; font-size: 0.88rem; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;" data-i18n="backToHub">
                 &larr; Back to Portal Hub
               </a>
             </div>
@@ -174,11 +249,11 @@
     </section>
 
     <!-- VIEW 2: Employee Dashboard -->
-    <section class="view-section" id="viewEmpDashboard" style="display: none;">
+    <section class="view-section" id="viewEmpDashboard" style="display: none;" aria-label="Employee Dashboard">
       <!-- Hero Banner & Profile Card -->
       <div class="emp-portal-banner">
         <div style="flex: 1; min-width: 260px;">
-          <div style="font-size: 0.78rem; font-weight: 700; opacity: 0.85; letter-spacing: 1px;">ATC TIRES &bull; SKILL QUALIFICATION</div>
+          <div style="font-size: 0.78rem; font-weight: 700; opacity: 0.85; letter-spacing: 1px;">YOKOHAMA ATC TIRES &bull; SKILL QUALIFICATION</div>
           <h2 id="dashEmpName" style="font-size: 1.45rem; font-weight: 800; margin-top: 4px; color: white;">Candidate Name</h2>
           <div style="display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
             <span id="dashEmpDesignation" style="background: rgba(255,255,255,0.2); padding: 2px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">QA Inspector</span>
@@ -187,113 +262,143 @@
 
           <div class="emp-profile-meta">
             <div class="emp-meta-item">
-              <div class="meta-label">Employee ID</div>
+              <div class="meta-label" data-i18n="metaEmpId">Employee ID</div>
               <div class="meta-value" id="dashEmpNo">-</div>
             </div>
             <div class="emp-meta-item">
-              <div class="meta-label">Date of Joining</div>
+              <div class="meta-label" data-i18n="metaDoj">Date of Joining</div>
               <div class="meta-value" id="dashEmpDoj">-</div>
             </div>
             <div class="emp-meta-item">
-              <div class="meta-label">Re-Assessment Due</div>
+              <div class="meta-label" data-i18n="metaDue">Re-Assessment Due</div>
               <div class="meta-value" id="dashEmpDueDate">-</div>
             </div>
           </div>
         </div>
 
-        <div style="text-align: center; background: rgba(0,0,0,0.22); padding: 14px 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); min-width: 140px;">
-          <div style="font-size: 0.72rem; letter-spacing: 1px; font-weight: 700; opacity: 0.9;">CURRENT LEVEL</div>
+        <div style="text-align: center; background: rgba(0,0,0,0.22); padding: 14px 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); min-width: 148px;">
+          <div style="font-size: 0.72rem; letter-spacing: 1px; font-weight: 700; opacity: 0.9;" data-i18n="currentLevelLabel">CURRENT LEVEL</div>
           <div id="dashLevelBadge" class="iluo-badge iluo-badge-u" style="width: 48px; height: 48px; font-size: 1.4rem; margin: 8px auto; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">U</div>
           <div id="dashLevelText" style="font-size: 0.82rem; font-weight: 700;">Level U: Executor</div>
         </div>
       </div>
 
-      <!-- Promotion / Skill Level Switch Banner (Visible when passed) -->
-      <div id="dashPromotionBanner" style="display: none; background: #ECFDF5; border: 1.5px solid #10B981; border-radius: 12px; padding: 14px 20px; margin-bottom: 20px; box-shadow: var(--shadow-sm);">
+      <!-- DOJ Eligibility Upgrade Alert -->
+      <div id="dashEligibilityBanner" style="display: none; background: #EFF6FF; border: 1.5px solid #3B82F6; border-radius: 12px; padding: 14px 18px; margin-bottom: 18px; color: #1E3A8A;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <div style="font-size: 0.94rem; font-weight: 800;" id="dashEligibilityTitle">Upgrade Eligibility Active</div>
+            <div style="font-size: 0.83rem; margin-top: 2px;" id="dashEligibilityText">Based on your tenure, you are eligible to complete your next ILUO qualification level.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Promotion / Skill Level Switch Banner -->
+      <div id="dashPromotionBanner" style="display: none; background: #ECFDF5; border: 1.5px solid #10B981; border-radius: 12px; padding: 14px 20px; margin-bottom: 18px; box-shadow: var(--shadow-sm);">
         <div style="display: flex; align-items: center; gap: 12px;">
-          <span style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; background: #DCFCE7; border-radius: 12px;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg></span>
+          <span style="font-size: 1.5rem;" aria-hidden="true">🎉</span>
           <div>
             <div style="font-size: 0.95rem; font-weight: 800; color: #065F46;" id="dashPromoTitle">Skill Level Successfully Switched!</div>
-            <div style="font-size: 0.84rem; color: #047857; margin-top: 2px;" id="dashPromoText">Based on your experience and successful exam completion, your skill qualification has been upgraded.</div>
+            <div style="font-size: 0.84rem; color: #047857; margin-top: 2px;" id="dashPromoText">Your skill qualification has been updated based on assessment completion.</div>
           </div>
         </div>
       </div>
 
       <!-- Assigned Assessment Action Card -->
-      <div style="background: white; border-radius: 14px; border: 2px solid #005B9E; padding: 24px; box-shadow: var(--shadow-sm); margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
+      <div class="emp-surface-card" style="border: 2px solid #005B9E; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
         <div style="flex: 1; min-width: 280px;">
-          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-            <div style="font-size: 0.78rem; font-weight: 800; color: #005B9E; letter-spacing: 1px;">ASSIGNED ASSESSMENT</div>
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap;">
+            <div style="font-size: 0.78rem; font-weight: 800; color: var(--primary-color); letter-spacing: 1px;" data-i18n="assignedAssessment">ASSIGNED ASSESSMENT</div>
             <span id="dashExamStatusBadge" style="background: #EFF6FF; color: #1D4ED8; font-size: 0.76rem; font-weight: 700; padding: 3px 8px; border-radius: 4px;">Pending</span>
           </div>
-          <h3 id="dashExamTitle" style="color: var(--primary-dark); font-size: 1.3rem; margin-bottom: 6px;">Knowledge Test Assessment</h3>
-          <p style="font-size: 0.88rem; color: #64748B; margin-bottom: 12px; line-height: 1.5;">
-            Timed 45-minute technical multiple-choice assessment covering Safety, 5S &amp; TPM, and Quality parameters.
+          <h3 id="dashExamTitle" style="color: var(--primary-dark); font-size: 1.3rem; margin-bottom: 6px;" data-i18n="knowledgeTestTitle">Knowledge Test Assessment</h3>
+          <p id="dashExamDescription" style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5;">
+            Timed technical multiple-choice assessment covering Safety, 5S &amp; TPM, Quality, and Process parameters.
           </p>
-          <div style="display: flex; gap: 16px; flex-wrap: wrap; background: #F8FAFC; border-radius: 8px; padding: 10px 14px; border: 1px solid #E2E8F0;">
-            <div style="font-size: 0.84rem; color: #475569;">Target Skill Level: <strong id="dashTargetLevel" style="color: var(--accent-red); font-weight: 800;">-</strong></div>
-            <div style="font-size: 0.84rem; color: #475569;">Duration: <strong>45 Minutes</strong></div>
-            <div style="font-size: 0.84rem; color: #475569;">Questions: <strong>30 Questions</strong></div>
+          <div class="emp-subtle-box" style="display: flex; gap: 16px; flex-wrap: wrap;">
+            <div style="font-size: 0.84rem; color: var(--text-muted);">Target Level: <strong id="dashTargetLevel" style="color: var(--accent-red); font-weight: 800;">-</strong></div>
+            <div style="font-size: 0.84rem; color: var(--text-muted);">Duration: <strong id="dashExamDuration">45 Minutes</strong></div>
+            <div style="font-size: 0.84rem; color: var(--text-muted);">Questions: <strong id="dashExamQuestionCount">30 Questions</strong></div>
+            <div style="font-size: 0.84rem; color: var(--text-muted);">Pass Thresholds: <strong id="dashExamPassThresholds">Exam 50% / OJT 70%</strong></div>
           </div>
         </div>
 
-        <div style="min-width: 220px;">
-          <button id="btnStartExam" class="btn-primary" style="width: 100%; padding: 14px 22px; font-weight: 700; font-size: 0.98rem; background: linear-gradient(135deg, #003D6B 0%, #005B9E 100%);" onclick="startEmployeeExam()">
+        <div style="min-width: 220px; display: flex; flex-direction: column; gap: 10px;">
+          <button type="button" id="btnStartExam" class="btn-primary" style="width: 100%; padding: 13px 20px; font-weight: 700; font-size: 0.96rem; background: linear-gradient(135deg, #003D6B 0%, #005B9E 100%);" onclick="startEmployeeExam()" data-i18n="startExamBtn">
             Start Assessment &raquo;
+          </button>
+          <button type="button" id="btnViewCertificate" class="btn-secondary" style="width: 100%; padding: 10px 16px; font-weight: 700; font-size: 0.88rem;" onclick="openEmployeeCertificate()" data-i18n="viewCertBtn">
+            View QR Certificate
           </button>
         </div>
       </div>
 
-      <!-- ILUO Milestone Progression Card -->
-      <div class="training-plan-card" style="background: white; border-radius: 14px; border: 1px solid #E2E8F0; padding: 22px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
-        <h3 style="font-size: 1.15rem; color: var(--primary-dark); margin-bottom: 4px;">ILUO Skill Qualification Milestone Track</h3>
-        <p style="font-size: 0.82rem; color: #64748B; margin-bottom: 18px;">Progression path across ATC Tires technical skill levels</p>
-
-        <div class="timeline-track" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
-          <div class="timeline-step" id="stepI" style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-weight: 700; font-size: 0.88rem;">Level I: Beginner</span>
-              <span class="iluo-badge iluo-badge-i" style="width: 24px; height: 24px; font-size: 0.75rem;">I</span>
-            </div>
-            <div style="font-size: 0.78rem; color: #64748B;">Schedule: Month 1</div>
-            <div style="font-size: 0.78rem; font-weight: 600; color: #15803D;" id="actualI">Completed &check;</div>
+      <!-- P2 Progress Ring + ILUO Roadmap Grid -->
+      <div class="emp-p2-summary-grid">
+        <div class="progress-ring-wrap">
+          <svg width="132" height="132" viewBox="0 0 132 132" role="img" aria-label="Skill Readiness Ring">
+            <circle cx="66" cy="66" r="54" fill="none" stroke="var(--border-color)" stroke-width="11"></circle>
+            <circle id="empProgressRingCircle" cx="66" cy="66" r="54" fill="none" stroke="#005B9E" stroke-width="11"
+              stroke-linecap="round" stroke-dasharray="339.29" stroke-dashoffset="339.29"
+              transform="rotate(-90 66 66)" style="transition: stroke-dashoffset 0.5s ease, stroke 0.3s ease;"></circle>
+            <text id="empProgressRingPct" x="66" y="64" text-anchor="middle" font-size="22" font-weight="800" fill="currentColor">0%</text>
+            <text id="empProgressRingLabel" x="66" y="83" text-anchor="middle" font-size="10" font-weight="700" fill="var(--text-muted)">ILUO READINESS</text>
+          </svg>
+          <div id="empProgressRingSub" style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin-top: 8px; text-align: center;">
+            Loading readiness...
           </div>
+        </div>
 
-          <div class="timeline-step" id="stepL" style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-weight: 700; font-size: 0.88rem;">Level L: Learner</span>
-              <span class="iluo-badge iluo-badge-l" style="width: 24px; height: 24px; font-size: 0.75rem;">L</span>
-            </div>
-            <div style="font-size: 0.78rem; color: #64748B;">Schedule: Month 3</div>
-            <div style="font-size: 0.78rem; font-weight: 600; color: #0284C7;" id="actualL">In Progress</div>
-          </div>
+        <div class="emp-surface-card" style="margin-bottom: 0;">
+          <h3 style="font-size: 1.08rem; color: var(--primary-dark); margin-bottom: 4px;" data-i18n="roadmapTitle">ILUO Skill Qualification Roadmap</h3>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px;" data-i18n="roadmapSubtitle">Progression milestones across I (Grey) &rarr; L (Amber) &rarr; U (Blue) &rarr; O (Green)</p>
 
-          <div class="timeline-step" id="stepU" style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-weight: 700; font-size: 0.88rem;">Level U: Executor</span>
-              <span class="iluo-badge iluo-badge-u" style="width: 24px; height: 24px; font-size: 0.75rem;">U</span>
+          <div class="roadmap-track">
+            <div class="roadmap-node" id="stepI">
+              <div style="display: flex; justify-content: center; margin-bottom: 6px;">
+                <span class="iluo-badge iluo-badge-i">I</span>
+              </div>
+              <div style="font-weight: 700;">Level I</div>
+              <div style="font-size: 0.74rem; color: var(--text-muted);">Beginner (0-6d)</div>
+              <div style="font-size: 0.75rem; font-weight: 700; margin-top: 6px;" id="actualI">Pending</div>
             </div>
-            <div style="font-size: 0.78rem; color: #64748B;">Schedule: Month 6</div>
-            <div style="font-size: 0.78rem; font-weight: 600; color: #64748B;" id="actualU">Target Goal</div>
-          </div>
 
-          <div class="timeline-step" id="stepO" style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-weight: 700; font-size: 0.88rem;">Level O: Expert</span>
-              <span class="iluo-badge iluo-badge-o" style="width: 24px; height: 24px; font-size: 0.75rem;">O</span>
+            <div class="roadmap-node" id="stepL">
+              <div style="display: flex; justify-content: center; margin-bottom: 6px;">
+                <span class="iluo-badge iluo-badge-l">L</span>
+              </div>
+              <div style="font-weight: 700;">Level L</div>
+              <div style="font-size: 0.74rem; color: var(--text-muted);">Learner (7-90d)</div>
+              <div style="font-size: 0.75rem; font-weight: 700; margin-top: 6px;" id="actualL">Pending</div>
             </div>
-            <div style="font-size: 0.78rem; color: #64748B;">Schedule: Month 12</div>
-            <div style="font-size: 0.78rem; font-weight: 600; color: #64748B;" id="actualO">Future Goal</div>
+
+            <div class="roadmap-node" id="stepU">
+              <div style="display: flex; justify-content: center; margin-bottom: 6px;">
+                <span class="iluo-badge iluo-badge-u">U</span>
+              </div>
+              <div style="font-weight: 700;">Level U</div>
+              <div style="font-size: 0.74rem; color: var(--text-muted);">Executor (3M-2Y)</div>
+              <div style="font-size: 0.75rem; font-weight: 700; margin-top: 6px;" id="actualU">Pending</div>
+            </div>
+
+            <div class="roadmap-node" id="stepO">
+              <div style="display: flex; justify-content: center; margin-bottom: 6px;">
+                <span class="iluo-badge iluo-badge-o">O</span>
+              </div>
+              <div style="font-weight: 700;">Level O</div>
+              <div style="font-size: 0.74rem; color: var(--text-muted);">Expert (&gt;4Y)</div>
+              <div style="font-size: 0.75rem; font-weight: 700; margin-top: 6px;" id="actualO">Pending</div>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Assessment Result Summary (Rendered if exam completed) -->
-      <div id="dashResultContainer" style="display: none; background: white; border-radius: 14px; border: 1px solid #E2E8F0; padding: 22px; box-shadow: var(--shadow-sm); margin-bottom: 24px;">
+      <!-- Latest Assessment Score Summary (Rendered if exam completed) -->
+      <div id="dashResultContainer" class="emp-surface-card" style="display: none;">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
           <div>
-            <div style="font-size: 0.78rem; font-weight: 700; color: #64748B; text-transform: uppercase;">LATEST ASSESSMENT SCORE</div>
-            <h3 style="font-size: 1.25rem; color: #0F172A; margin-top: 4px;">Technical Knowledge Evaluation Results</h3>
+            <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">LATEST ASSESSMENT SCORE</div>
+            <h3 style="font-size: 1.2rem; color: var(--text-main); margin-top: 4px;">Technical Knowledge Evaluation Results</h3>
           </div>
           <span id="dashResultStatusBadge" style="padding: 6px 14px; border-radius: 20px; font-weight: 800; font-size: 0.85rem; background: #DCFCE7; color: #166534;">PASSED</span>
         </div>
@@ -317,95 +422,129 @@
           </div>
         </div>
       </div>
+
+      <!-- Attempt History Card -->
+      <div class="emp-surface-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+          <div>
+            <h3 style="font-size: 1.1rem; color: var(--primary-dark); margin: 0;" data-i18n="historyTitle">Assessment Attempt History</h3>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;" data-i18n="historySubtitle">Recorded MCQ exam attempts &amp; practical OJT evaluation status</p>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table responsive-cards" aria-label="Assessment Attempt History">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Target Level</th>
+                <th>Score</th>
+                <th>Percentage</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="empAttemptHistoryBody">
+              <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 18px;">Loading attempt history...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
-    <!-- VIEW 3: Active Assessment Quiz Screen -->
-    <section class="view-section" id="viewQuiz" style="display: none;">
-      <!-- Quiz Navigation & Header Bar -->
-      <div class="quiz-header-bar" style="background: white; border-radius: 12px; padding: 16px 20px; box-shadow: var(--shadow-sm); border: 1px solid #E2E8F0; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
-        <div>
-          <div class="quiz-progress-text" id="quizProgressText" style="font-weight: 800; font-size: 1.1rem; color: #0F172A;">Question 1 of 30</div>
-          <div style="font-size: 0.8rem; color: #64748B;" id="quizSubText">MCQ Assessment</div>
-        </div>
+    <!-- VIEW 3: Active Assessment Quiz Screen (Split-View Panel + Persistent Progress Sidebar) -->
+    <section class="view-section" id="viewQuiz" style="display: none;" aria-label="Active Examination">
+      <div class="emp-quiz-split">
+        <!-- Persistent Left Sidebar: Vitals & Per-Question Progress -->
+        <aside class="emp-quiz-sidebar" aria-label="Question Progress Sidebar">
+          <div class="emp-quiz-sidebar-head">
+            <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px;">
+              <div style="font-size: 0.9rem; font-weight: 700; color: var(--text-main);">Question Progress</div>
+              <span id="quizProgressPct" style="font-size: 0.78rem; font-weight: 700; color: var(--primary-color); font-variant-numeric: tabular-nums;">0%</span>
+            </div>
 
-        <div style="display: flex; align-items: center; gap: 16px;">
-          <!-- Security Tab Warning Indicator -->
-          <div class="security-badge" id="tabWarningBadge" style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem; background: #FEF2F2; color: #991B1B; padding: 6px 12px; border-radius: 8px; border: 1px solid #FECACA;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>Tab Switches:</span>
-            <strong id="tabSwitchCountDisplay">0 / 3</strong>
+            <div>
+              <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px; font-weight: 600; font-variant-numeric: tabular-nums;">
+                <span id="quizAnsweredCount">Answered: 0 / 30</span>
+                <span id="quizProgressText">Question 1 of 30</span>
+              </div>
+              <div style="width: 100%; height: 6px; background: var(--border-color); border-radius: 999px; overflow: hidden;">
+                <div id="quizProgressBarFill" style="height: 100%; width: 0%; background: var(--primary-color); border-radius: 999px; transition: width 0.25s ease;"></div>
+              </div>
+            </div>
+
+            <div class="emp-quiz-vitals">
+              <div class="emp-vital-cell" role="timer" aria-live="off">
+                <span class="emp-vital-label">Time Left</span>
+                <span class="emp-vital-value" id="timerDisplay" style="color: var(--accent-red);">45:00</span>
+              </div>
+              <div class="emp-vital-cell" id="tabWarningBadge">
+                <span class="emp-vital-label">Tab Switches</span>
+                <span class="emp-vital-value" id="tabSwitchCountDisplay">0 / 3</span>
+              </div>
+            </div>
           </div>
 
-          <!-- Countdown Timer -->
-          <div class="timer-badge" style="display: flex; align-items: center; gap: 8px; font-size: 1.1rem; font-weight: 800; color: #E31B23; background: #FFF1F2; padding: 6px 14px; border-radius: 8px; border: 1px solid #FFE4E6;">
-            <span>⏱️</span>
-            <span id="timerDisplay">45:00</span>
+          <div class="emp-q-progress-list" id="empQuizProgressList" aria-label="List of assessment questions">
+            <!-- Populated dynamically with Completed / Current / Upcoming status -->
+          </div>
+
+          <div class="emp-quiz-sidebar-legend">
+            <span>Done · Current · Upcoming</span>
+            <span style="font-variant-numeric: tabular-nums;">Forward lock</span>
+          </div>
+        </aside>
+
+        <!-- Right-Hand Active Question Stage -->
+        <div class="emp-quiz-stage">
+          <div class="question-card emp-surface-card" id="questionCard" style="padding: 28px; user-select: none; margin-bottom: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding-bottom: 14px; margin-bottom: 18px; border-bottom: 1px solid var(--border-color);">
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.82rem; color: var(--text-muted); font-variant-numeric: tabular-nums;">
+                <strong id="qNumberBadge" style="color: var(--text-main);">Q1</strong>
+                <span aria-hidden="true">·</span>
+                <span id="qCategoryTag" style="color: var(--primary-color); font-weight: 700;">Safety</span>
+                <span aria-hidden="true">·</span>
+                <span id="quizSubText">MCQ Assessment</span>
+              </div>
+            </div>
+
+            <h3 class="q-title" id="qTitleText" style="font-size: 1.16rem; color: var(--text-main); line-height: 1.55; margin-bottom: 22px; text-wrap: balance;">
+              Loading question text...
+            </h3>
+
+            <div class="options-list" id="optionsContainer" role="radiogroup" aria-labelledby="qTitleText" style="display: flex; flex-direction: column; gap: 10px;"></div>
+          </div>
+
+          <div class="quiz-nav-footer emp-surface-card" style="padding: 16px 22px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 0;">
+            <div style="font-size: 0.82rem; color: var(--text-muted);">
+              Forward progression active: select one option to advance
+            </div>
+
+            <button type="button" class="btn-primary" id="btnNextQ" onclick="handleNextQuestion()" disabled style="padding: 11px 24px; font-weight: 700; font-size: 0.94rem; white-space: nowrap;">
+              Next Question &raquo;
+            </button>
           </div>
         </div>
-      </div>
-
-            <!-- Question Palette Navigator (Feature 2) -->
-      <div class="question-palette-card" style="background: white; border-radius: 12px; border: 1px solid #E2E8F0; padding: 14px 18px; margin-bottom: 16px; box-shadow: var(--shadow-sm);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
-          <div style="font-size: 0.85rem; font-weight: 700; color: #0F172A;">Question Palette Navigator</div>
-          <div style="display: flex; gap: 10px; font-size: 0.75rem; font-weight: 600;">
-            <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #10B981; border-radius: 2px;"></span> Answered</span>
-            <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #CBD5E1; border-radius: 2px;"></span> Unvisited</span>
-            <span style="display: flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #005B9E; border-radius: 2px;"></span> Current</span>
-          </div>
-        </div>
-        <div class="palette-grid" id="questionPaletteGrid" style="display: flex; flex-wrap: wrap; gap: 6px;"></div>
-      </div>
-
-      <!-- Question Card -->
-      <div class="question-card" id="questionCard" style="background: white; border-radius: 14px; border: 1px solid #E2E8F0; padding: 28px; box-shadow: var(--shadow-sm); margin-bottom: 20px; user-select: none;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-          <div class="q-category-tag" id="qCategoryTag" style="display: inline-block; background: #EFF6FF; color: #1D4ED8; font-weight: 700; font-size: 0.78rem; padding: 4px 10px; border-radius: 6px; text-transform: uppercase;">
-            Safety
-          </div>
-          <div style="font-size: 0.8rem; color: #94A3B8;" id="qNumberBadge">Q1</div>
-        </div>
-
-        <h3 class="q-title" id="qTitleText" style="font-size: 1.15rem; color: #0F172A; line-height: 1.5; margin-bottom: 22px;">
-          Loading question text...
-        </h3>
-
-        <!-- MCQ Options List -->
-        <div class="options-list" id="optionsContainer" style="display: flex; flex-direction: column; gap: 12px;">
-          <!-- Rendered dynamically by employee.js -->
-        </div>
-      </div>
-
-      <!-- Navigation & Action Footer -->
-      <div class="quiz-nav-footer" style="background: white; border-radius: 12px; padding: 16px 20px; border: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-        <div style="font-size: 0.82rem; color: #64748B; display: flex; align-items: center; gap: 6px;">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 6px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Forward Progression: Once submitted, answers cannot be modified</span>
-        </div>
-
-        <button class="btn-primary" id="btnNextQ" onclick="handleNextQuestion()" disabled style="padding: 12px 24px; font-weight: 700; font-size: 0.95rem;">
-          Next Question &raquo;
-        </button>
       </div>
     </section>
 
     <!-- VIEW 4: Assessment Completed Screen -->
-    <section class="view-section" id="viewResult" style="display: none;">
-      <div style="max-width: 600px; margin: 40px auto 0; background: white; border-radius: 16px; border: 1px solid #E2E8F0; box-shadow: var(--shadow-md); padding: 32px 24px; text-align: center;">
-        <div style="width: 64px; height: 64px; border-radius: 50%; background: #DCFCE7; color: #15803D; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    <section class="view-section" id="viewResult" style="display: none;" aria-label="Assessment Result">
+      <div class="emp-surface-card" style="max-width: 620px; margin: 24px auto 0; padding: 30px 24px; text-align: center;">
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: #DCFCE7; color: #15803D; font-size: 2rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;" aria-hidden="true">
+          ✓
         </div>
 
-        <h2 style="font-size: 1.45rem; color: #0F172A; font-weight: 800; margin-bottom: 6px;">Assessment Submitted Successfully!</h2>
-        <p style="font-size: 0.88rem; color: #64748B; margin-bottom: 24px;">Your responses have been authoritatively evaluated and logged in the system.</p>
+        <h2 style="font-size: 1.45rem; color: var(--text-main); font-weight: 800; margin-bottom: 6px;">Assessment Submitted Successfully!</h2>
+        <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 20px;">Your responses have been evaluated and logged on the server.</p>
 
-        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-          <div style="font-size: 0.78rem; font-weight: 700; color: #64748B; text-transform: uppercase;">YOUR OVERALL SCORE</div>
-          <div id="resultScoreLarge" style="font-size: 2.4rem; font-weight: 800; color: #005B9E; margin: 6px 0;">0 / 30</div>
+        <div class="emp-subtle-box" style="padding: 20px; margin-bottom: 20px;">
+          <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">YOUR OVERALL SCORE</div>
+          <div id="resultScoreLarge" style="font-size: 2.3rem; font-weight: 800; color: var(--primary-color); margin: 6px 0;">0 / 30</div>
           <div id="resultPassBadge" style="display: inline-block; padding: 4px 14px; border-radius: 20px; font-weight: 700; font-size: 0.85rem; background: #DCFCE7; color: #166534;">
-            PASSED (Threshold: 50%)
+            PASSED
           </div>
           <div id="resultSwitchNotice" style="display: none; margin-top: 12px; background: #ECFDF5; border: 1.5px solid #10B981; color: #065F46; font-weight: 800; font-size: 0.9rem; padding: 10px 14px; border-radius: 8px;"></div>
 
-          <div class="category-breakdown-grid" style="margin-top: 20px; text-align: left;">
+          <div class="category-breakdown-grid" style="margin-top: 18px; text-align: left;">
             <div class="category-box safety">
               <div class="category-name">Safety Mark</div>
               <div class="category-score" id="resSafety">-</div>
@@ -425,77 +564,85 @@
           </div>
         </div>
 
-        <div id="resultSignatureBox" style="display: none; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 16px; margin-bottom: 24px; text-align: center;">
-          <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Candidate Verification &amp; Signature</div>
+        <div id="resultSignatureBox" class="emp-subtle-box" style="display: none; margin-bottom: 20px; text-align: center;">
+          <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Candidate Verification &amp; Signature</div>
           <div style="margin-top: 8px;">
             <img id="resultSignatureImg" src="" alt="Candidate Signature" style="max-height: 55px; max-width: 200px; object-fit: contain; border-bottom: 1px dashed #94A3B8; padding-bottom: 4px;">
           </div>
-          <div id="resultSignMeta" style="font-size: 0.76rem; color: #64748B; margin-top: 4px;">Digitally signed upon exam completion</div>
+          <div id="resultSignMeta" style="font-size: 0.76rem; color: var(--text-muted); margin-top: 4px;">Digitally signed upon exam completion</div>
         </div>
 
-        <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 14px; margin-bottom: 24px; text-align: left; font-size: 0.84rem; color: #1E40AF;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#003D6B" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 6px;"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg><strong>Next Step &bull; Skill Assessment:</strong><br>
-          Your theoretical MCQ score is submitted. Your practical Skill Assessment evaluation will be conducted and scored on the shop floor by your Section Supervisor.
+        <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 14px; margin-bottom: 20px; text-align: left; font-size: 0.84rem; color: #1E40AF;">
+          <strong>Next Step &bull; Practical OJT Evaluation:</strong><br>
+          Your theoretical MCQ score is recorded. Your practical Skill Assessment evaluation will be conducted on the shop floor by your Section Supervisor.
         </div>
 
-        <button class="btn-primary" style="padding: 12px 28px; font-weight: 700;" onclick="handleReturnToDashboard()">
-          Return to My Dashboard &rarr;
-        </button>
+        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+          <button type="button" id="btnResViewCertificate" class="btn-secondary" style="padding: 12px 20px; font-weight: 700;" onclick="openEmployeeCertificate()">
+            View QR Certificate
+          </button>
+          <button type="button" class="btn-primary" style="padding: 12px 24px; font-weight: 700;" onclick="handleReturnToDashboard()">
+            Return to My Dashboard &rarr;
+          </button>
+        </div>
       </div>
     </section>
 
-    <!-- Candidate Manual Signature Modal (Touch and Mouse Supported) -->
-    <div id="signatureModal" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.65); z-index: 2000; align-items: center; justify-content: center; padding: 16px; backdrop-filter: blur(3px);">
-      <div style="background: white; border-radius: 16px; max-width: 520px; width: 100%; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); border: 1px solid #E2E8F0; animation: fadeIn 0.2s ease;">
-        <div style="background: linear-gradient(135deg, #003D6B 0%, #005B9E 100%); color: white; padding: 20px 24px; text-align: left; display: flex; justify-content: space-between; align-items: center;">
+    <!-- Candidate Manual Signature Modal -->
+    <div id="signatureModal" class="inapp-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="signModalHeading" style="display: none;">
+      <div class="inapp-modal-card" style="padding: 0; overflow: hidden; max-width: 520px;">
+        <div style="background: linear-gradient(135deg, #003D6B 0%, #005B9E 100%); color: white; padding: 18px 22px; display: flex; justify-content: space-between; align-items: center;">
           <div>
-            <h3 style="margin: 0; font-size: 1.25rem; font-weight: 800; display: flex; align-items: center; gap: 8px;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 6px;"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>Candidate Signature
-            </h3>
-            <p style="margin: 4px 0 0; font-size: 0.82rem; opacity: 0.9;">Sign with touch or mouse to finish &amp; submit your assessment</p>
+            <h3 id="signModalHeading" style="margin: 0; font-size: 1.2rem; font-weight: 800;">Candidate Signature</h3>
+            <p style="margin: 4px 0 0; font-size: 0.82rem; opacity: 0.9;">Sign with touch or mouse to submit your assessment</p>
           </div>
-          <button type="button" onclick="closeSignatureModal()" aria-label="Close Signature Dialog" style="background: rgba(255,255,255,0.15); border: none; color: white; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; display: flex; align-items: center; justify-content: center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          <button type="button" onclick="closeSignatureModal()" aria-label="Close Signature Modal" style="background: rgba(255,255,255,0.18); border: none; color: white; border-radius: 50%; width: 32px; height: 32px; font-size: 1.05rem; cursor: pointer;">✕</button>
         </div>
 
-        <div style="padding: 20px 24px;">
-          <!-- Candidate & Exam Info Tag -->
-          <div style="display: flex; justify-content: space-between; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.82rem;">
-            <div>
-              <span style="color: #64748B;">Candidate:</span> <strong id="signModalEmpName" style="color: #0F172A;">-</strong> (<span id="signModalEmpNo" style="font-weight: 600;">-</span>)
-            </div>
-            <div>
-              <span style="color: #64748B;">Date:</span> <strong id="signModalDate" style="color: #0F172A;">-</strong>
-            </div>
+        <div style="padding: 20px 22px;">
+          <div class="emp-subtle-box" style="display: flex; justify-content: space-between; margin-bottom: 14px; font-size: 0.82rem; flex-wrap: wrap; gap: 8px;">
+            <div><span style="color: var(--text-muted);">Candidate:</span> <strong id="signModalEmpName">-</strong> (<span id="signModalEmpNo">-</span>)</div>
+            <div><span style="color: var(--text-muted);">Date:</span> <strong id="signModalDate">-</strong></div>
           </div>
 
-          <!-- Canvas drawing container -->
           <div style="position: relative; margin-bottom: 10px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-size: 0.82rem; font-weight: 700; color: #334155;">Digital Signature (Touch or Mouse)</span>
-              <button type="button" onclick="clearSignatureCanvas()" style="background: none; border: none; color: #DC2626; font-size: 0.78rem; font-weight: 700; cursor: pointer; padding: 2px 6px; display: flex; align-items: center; gap: 4px;">
-                <span>↺</span> Clear
-              </button>
+              <span style="font-size: 0.82rem; font-weight: 700;">Digital Signature (Touch or Mouse)</span>
+              <button type="button" onclick="clearSignatureCanvas()" style="background: none; border: none; color: #DC2626; font-size: 0.78rem; font-weight: 700; cursor: pointer;">Clear</button>
             </div>
             <div style="border: 2px dashed #005B9E; border-radius: 10px; background: #FFFFFF; overflow: hidden; position: relative;">
               <canvas id="signatureCanvas" width="470" height="180" style="display: block; width: 100%; height: 180px; background: #FFFFFF; cursor: crosshair; touch-action: none;"></canvas>
-              <div id="signatureGuideText" style="position: absolute; bottom: 8px; left: 14px; font-size: 0.74rem; color: #94A3B8; pointer-events: none; user-select: none;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="vertical-align: middle; margin-right: 4px;"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>Sign above using finger/touch or mouse
+              <div id="signatureGuideText" style="position: absolute; bottom: 8px; left: 14px; font-size: 0.74rem; color: #64748B; pointer-events: none; user-select: none;">
+                Sign above using finger/touch or mouse
               </div>
             </div>
           </div>
 
-          <div style="font-size: 0.76rem; color: #64748B; margin-bottom: 18px; line-height: 1.4;">
-            ℹ️ <em>By submitting, you certify that this assessment was completed solely by you in accordance with ATC Tires plant standards.</em>
+          <div style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 16px; line-height: 1.4;">
+            By submitting, you certify that this assessment was completed independently in accordance with plant standards.
           </div>
 
           <div style="display: flex; gap: 10px; justify-content: flex-end;">
-            <button type="button" onclick="closeSignatureModal()" class="btn-secondary" style="padding: 11px 18px; font-size: 0.88rem; font-weight: 600;">
-              Review Questions
-            </button>
-            <button type="button" id="btnConfirmSignatureSubmit" onclick="confirmSignatureAndSubmit()" class="btn-primary" style="padding: 11px 22px; font-size: 0.88rem; font-weight: 700; background: linear-gradient(135deg, #003D6B 0%, #005B9E 100%);">
-              Confirm &amp; Finish Exam <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-left: 4px;"><polyline points="20 6 9 17 4 12"/></svg>
-            </button>
+            <button type="button" onclick="closeSignatureModal()" class="btn-secondary" style="padding: 10px 16px; font-size: 0.88rem;">Review Questions</button>
+            <button type="button" id="btnConfirmSignatureSubmit" onclick="confirmSignatureAndSubmit()" class="btn-primary" style="padding: 10px 20px; font-size: 0.88rem; font-weight: 700;">Confirm &amp; Finish Exam</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Employee QR Certificate Modal -->
+    <div id="empCertificateModal" class="inapp-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="empCertHeading" style="display: none;">
+      <div class="inapp-modal-card" style="max-width: 580px;">
+        <div class="no-print" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <h3 id="empCertHeading" style="margin: 0; font-size: 1.12rem; font-weight: 800;">Official ILUO Skill Certificate</h3>
+          <button type="button" onclick="closeEmployeeCertificateModal()" aria-label="Close Certificate Modal" style="background: transparent; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-muted);">✕</button>
+        </div>
+        <div id="empCertContent">
+          <div style="text-align: center; padding: 24px; color: var(--text-muted);">Loading QR Certificate...</div>
+        </div>
+        <div class="no-print" style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px;">
+          <button type="button" class="btn-secondary" onclick="closeEmployeeCertificateModal()">Close</button>
+          <button type="button" id="btnPrintEmpCert" class="btn-primary" onclick="window.print()">Print / Save PDF</button>
         </div>
       </div>
     </div>
@@ -503,9 +650,10 @@
   </main>
 
   <!-- Global Toast Notification Container -->
-  <div id="empToastContainer" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none;"></div>
+  <div id="empToastContainer" aria-live="polite" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none;"></div>
 
-  <!-- Employee Portal Controller Script -->
-  <script src="employee.js"></script>
+  <!-- Shared Constants & Employee Portal Controller -->
+  <script src="shared_constants.js?v=60.0"></script>
+  <script src="employee.js?v=63.0"></script>
 </body>
 </html>

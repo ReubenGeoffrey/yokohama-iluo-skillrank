@@ -1,131 +1,3 @@
-// ---------------------------------------------------------------------
-// Strict Content Security Policy (CSP) Programmatic Event Delegator (Task 2.4)
-// Eliminates inline event handler execution without using unsafe-eval
-// ---------------------------------------------------------------------
-(function() {
-  if (typeof window === 'undefined') return;
-
-  // Domain router guard (moved from inline HTML for strict CSP)
-  try {
-    var host = (window.location.hostname || '').toLowerCase();
-    if (host.includes('employee') && !window.location.pathname.includes('employee.html')) {
-      window.location.replace('/employee.html' + window.location.search + window.location.hash);
-      return;
-    }
-  } catch (e) {}
-
-  function safeExecuteAction(expr, el, e) {
-    if (!expr || typeof expr !== 'string') return;
-    const match = expr.match(/^([a-zA-Z0-9_$.]+)(?:\((.*)\))?$/);
-    if (!match) return;
-    const fnPath = match[1];
-    const argsRaw = match[2];
-
-    const parts = fnPath.split('.');
-    let fn = window;
-    let parent = window;
-    for (const part of parts) {
-      if (!fn || part === '__proto__' || part === 'constructor' || part === 'prototype') return;
-      parent = fn;
-      if (Object.prototype.hasOwnProperty.call(parent, part) || part in parent) {
-        fn = parent[part];
-      } else {
-        return;
-      }
-    }
-
-    if (typeof fn !== 'function') return;
-
-    let args = [];
-    if (argsRaw && argsRaw.trim().length > 0) {
-      args = argsRaw.split(',').map(s => {
-        s = s.trim();
-        if (s === 'event' || s === 'e') return e;
-        if (s === 'this') return el;
-        if (s === 'true') return true;
-        if (s === 'false') return false;
-        if (s === 'null') return null;
-        if (!isNaN(s) && s !== '') return Number(s);
-        if ((s.startsWith("'") && s.endsWith("'")) || (s.startsWith('"') && s.endsWith('"'))) {
-          return s.slice(1, -1);
-        }
-        const foundEl = document.getElementById(s);
-        if (foundEl) return foundEl;
-        return s;
-      });
-    } else if (expr.includes('(event)')) {
-      args = [e];
-    }
-
-    try {
-      fn.apply(parent, args);
-    } catch (err) {
-      console.error('Error executing CSP action:', expr, err);
-    }
-  }
-
-  // Intercept click events across static and dynamic elements
-  document.addEventListener('click', function(e) {
-    const el = e.target.closest('[data-click], [onclick]');
-    if (!el) return;
-    const expr = el.getAttribute('data-click') || el.getAttribute('onclick');
-    if (expr) {
-      safeExecuteAction(expr, el, e);
-    }
-  }, false);
-
-  // Intercept change events
-  document.addEventListener('change', function(e) {
-    const el = e.target.closest('[data-change], [onchange]');
-    if (!el) return;
-    const expr = el.getAttribute('data-change') || el.getAttribute('onchange');
-    if (expr) {
-      safeExecuteAction(expr, el, e);
-    }
-  }, false);
-
-  // Intercept submit events
-  document.addEventListener('submit', function(e) {
-    const el = e.target.closest('[data-submit], [onsubmit]');
-    if (!el) return;
-    const expr = el.getAttribute('data-submit') || el.getAttribute('onsubmit');
-    if (expr) {
-      e.preventDefault();
-      safeExecuteAction(expr, el, e);
-    }
-  }, false);
-})();
-
-
-let appAutosaveTimer = null;
-function triggerExamAutosave() {
-  if (!activeExam || activeExam.isCompleted) return;
-  if (appAutosaveTimer) clearTimeout(appAutosaveTimer);
-  appAutosaveTimer = setTimeout(async () => {
-    try {
-      const res = await fetch('/api/exam/autosave', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          empNo: activeExam.empNo,
-          responses: activeExam.responses,
-          currentIndex: activeExam.currentIndex,
-          tabSwitchCount: activeExam.tabSwitchCount || 0
-        })
-      });
-      const data = await res.json();
-      if (data && data.autoSubmitted) {
-        if (timerInterval) clearInterval(timerInterval);
-        activeExam.isCompleted = true;
-        showToast('Assessment auto-terminated due to security policy violations.');
-        if (data.record) {
-          showResultView(data.record);
-        }
-      }
-    } catch (e) {}
-  }, 400);
-}
-
 
 let clientCsrfToken = '';
 
@@ -152,28 +24,11 @@ function getCsrfToken() {
 // Yokohama ILUO MCQ Assessment Application Logic & Router
 
 // LocalStorage Keys
-const STORAGE_KEY_RECORDS = 'iluo_assessment_records_v2';
+const STORAGE_KEY_RECORDS = 'iluo_assessment_records_v3';
 const STORAGE_KEY_SESSION = 'iluo_current_session_v1';
-const STORAGE_KEY_OJT = 'yokohama_ojt_evaluations_v1';
+const STORAGE_KEY_OJT = 'yokohama_ojt_evaluations_v2';
 const STORAGE_KEY_CUSTOM_EMPLOYEES = 'yokohama_custom_employees_v2';
 const STORAGE_KEY_CUSTOM_QUESTIONS = 'yokohama_custom_questions_v1';
-
-// Baseline Data State (Loaded dynamically from authenticated backend APIs)
-var EMPLOYEES = typeof EMPLOYEES !== 'undefined' ? EMPLOYEES : [];
-var QUESTION_BANK = typeof QUESTION_BANK !== 'undefined' ? QUESTION_BANK : { L: [], U: [], O: [] };
-var DEFAULT_QUESTION_BANK = typeof DEFAULT_QUESTION_BANK !== 'undefined' ? DEFAULT_QUESTION_BANK : { L: [], U: [], O: [] };
-var LEVEL_RULES = typeof LEVEL_RULES !== 'undefined' ? LEVEL_RULES : {
-  "I": { "nextLevel": "L", "numQuestions": 20, "passingPct": 50, "timeLimitMinutes": 45 },
-  "L": { "nextLevel": "U", "numQuestions": 20, "passingPct": 50, "timeLimitMinutes": 45 },
-  "U": { "nextLevel": "O", "numQuestions": 30, "passingPct": 50, "timeLimitMinutes": 45 },
-  "O": { "nextLevel": "O", "numQuestions": 40, "passingPct": 50, "timeLimitMinutes": 45 }
-};
-if (typeof window !== 'undefined') {
-  window.EMPLOYEES = EMPLOYEES;
-  window.QUESTION_BANK = QUESTION_BANK;
-  window.DEFAULT_QUESTION_BANK = DEFAULT_QUESTION_BANK;
-  window.LEVEL_RULES = LEVEL_RULES;
-}
 
 // Global App State
 let currentUser = null; // { empNo, name, dept, section, doj, currentLevel, targetLevel }
@@ -182,75 +37,68 @@ let timerInterval = null;
 let pieChartInstance = null;
 let barChartInstance = null;
 let sectionPieChartInstance = null;
-let categoryBarChartInstance = null;
-let currentCategoryBarMode = 'top-overall';
 let lastTabSwitchTime = 0; // Debounce duplicate events
-let currentActiveSection = 'Tire Building QA';
+let currentActiveSection = 'Tire building QA';
 let currentActiveSectionKey = 'warehouse';
 let currentActiveSectionTab = 'employees';
 
-const QA_SECTIONS_LIST = [
-  { id: 'warehouse', name: 'Warehouse QA', normName: 'warehouse qa', code: 'WH', title: 'Warehouse QA', dept: 'QUALITY CONTROL' },
-  { id: 'final_finish', name: 'Final Finish QA', normName: 'final finish qa', code: 'FF', title: 'Final Finish QA', dept: 'QUALITY CONTROL' },
-  { id: 'tire_building', name: 'Tire Building QA', normName: 'tire building qa', code: 'TB', title: 'Tire Building QA', dept: 'QUALITY CONTROL' },
-  { id: 'tire_curing', name: 'Tire Curing QA', normName: 'tire curing qa', code: 'TC', title: 'Tire Curing QA', dept: 'QUALITY CONTROL' },
-  { id: 'solid_tire', name: 'Solid Tire QA', normName: 'solid tire qa', code: 'ST', title: 'Solid Tire QA', dept: 'QUALITY CONTROL' },
-  { id: 'rro_alt', name: 'Final Finish RRO & ALT QA', normName: 'final finish rro & alt qa', code: 'RA', title: 'Final Finish RRO & ALT QA', dept: 'QUALITY CONTROL' },
-  { id: 'preparatory', name: 'Preparatory QA', normName: 'preparatory qa', code: 'PR', title: 'Preparatory QA', dept: 'QUALITY CONTROL' },
-  { id: 'fid_inspector', name: 'FID Inspector QA', normName: 'fid inspector qa', code: 'FD', title: 'FID Inspector QA', dept: 'QUALITY CONTROL' }
-];
+// Dynamic Global Settings (hydrated from /api/public-settings)
+window.PORTAL_SETTINGS = Object.assign(
+  {
+    examPassingPct: 50,
+    ojtPassingPct: 70,
+    examDurationMinutes: 45,
+    maxTabSwitches: 3,
+    tabSwitchAction: 'terminate',
+    adminEmail: ''
+  },
+  (typeof ILUO_CONSTANTS !== 'undefined' && ILUO_CONSTANTS.DEFAULT_SETTINGS) ? ILUO_CONSTANTS.DEFAULT_SETTINGS : {}
+);
 
-const PROD_SECTIONS_LIST = [
-  { id: 'prod_mixing', name: 'MIXING', normName: 'mixing', code: 'PR-MIX', title: 'Mixing', dept: 'PRODUCTION' },
-  { id: 'prod_4roll', name: '4 ROLL', normName: '4 roll', code: 'PR-4ROLL', title: '4 Roll Calender', dept: 'PRODUCTION' },
-  { id: 'prod_3roll_p2', name: '3 ROLL-P2', normName: '3 roll-p2', code: 'PR-3ROLL', title: '3 Roll Calender P2', dept: 'PRODUCTION' },
-  { id: 'prod_extruder', name: 'EXTRUDER', normName: 'extruder', code: 'PR-EXT', title: 'Extruder', dept: 'PRODUCTION' },
-  { id: 'prod_bead_winding', name: 'BEAD WINDING', normName: 'bead winding', code: 'PR-BEAD', title: 'Bead Winding', dept: 'PRODUCTION' },
-  { id: 'prod_steelastic', name: 'STEELASTIC', normName: 'steelastic', code: 'PR-STEL', title: 'Steelastic', dept: 'PRODUCTION' },
-  { id: 'prod_tyre_building_p1', name: 'TYRE BUILDING-P1', normName: 'tyre building-p1', code: 'PR-TB1', title: 'Tyre Building P1', dept: 'PRODUCTION' },
-  { id: 'prod_tyre_building_p2', name: 'TYRE BUILDING-P2', normName: 'tyre building-p2', code: 'PR-TB2', title: 'Tyre Building P2', dept: 'PRODUCTION' },
-  { id: 'prod_tyre_building_p3', name: 'TYRE BUILDING-P3', normName: 'tyre building-p3', code: 'PR-TB3', title: 'Tyre Building P3', dept: 'PRODUCTION' },
-  { id: 'prod_band_building_p1', name: 'BAND BUILDING-P1', normName: 'band building-p1', code: 'PR-BB1', title: 'Band Building P1', dept: 'PRODUCTION' },
-  { id: 'prod_band_building_p2', name: 'BAND BUILDING-P2', normName: 'band building-p2', code: 'PR-BB2', title: 'Band Building P2', dept: 'PRODUCTION' },
-  { id: 'prod_band_building_p3', name: 'BAND BUILDING-P3', normName: 'band building-p3', code: 'PR-BB3', title: 'Band Building P3', dept: 'PRODUCTION' },
-  { id: 'prod_bias_cutting_1', name: 'BIAS CUTTING-1', normName: 'bias cutting-1', code: 'PR-BIAS1', title: 'Bias Cutting 1', dept: 'PRODUCTION' },
-  { id: 'prod_bias_cutting_2', name: 'BIAS CUTTING-2', normName: 'bias cutting-2', code: 'PR-BIAS2', title: 'Bias Cutting 2', dept: 'PRODUCTION' },
-  { id: 'prod_bias_cutting_4', name: 'BIAS CUTTING-4', normName: 'bias cutting-4', code: 'PR-BIAS4', title: 'Bias Cutting 4', dept: 'PRODUCTION' },
-  { id: 'prod_bias_cutting_5', name: 'BIAS CUTTING-5', normName: 'bias cutting-5', code: 'PR-BIAS5', title: 'Bias Cutting 5', dept: 'PRODUCTION' },
-  { id: 'prod_auto_biascutter', name: 'AUTO BIASCUTTER', normName: 'auto biascutter', code: 'PR-AUTOB', title: 'Auto Bias Cutter', dept: 'PRODUCTION' },
-  { id: 'prod_slitting', name: 'SLITTING', normName: 'slitting', code: 'PR-SLIT', title: 'Slitting', dept: 'PRODUCTION' },
-  { id: 'prod_liner_dressing', name: 'LINER DRESSING', normName: 'liner dressing', code: 'PR-LINE', title: 'Liner Dressing', dept: 'PRODUCTION' },
-  { id: 'prod_salvage', name: 'SALVAGE', normName: 'salvage', code: 'PR-SALV', title: 'Salvage', dept: 'PRODUCTION' },
-  { id: 'prod_radial_marangoni', name: 'RADIAL MARANGONI', normName: 'radial marangoni', code: 'PR-RADM', title: 'Radial Marangoni', dept: 'PRODUCTION' },
-  { id: 'prod_bias_marangoni', name: 'BIAS MARANGONI&BESTRY', normName: 'bias marangoni&bestry', code: 'PR-BIASM', title: 'Bias Marangoni & Bestry', dept: 'PRODUCTION' },
-  { id: 'prod_yanthai', name: 'YANTHAI', normName: 'yanthai', code: 'PR-YAN', title: 'Yanthai', dept: 'PRODUCTION' },
-  { id: 'prod_solid_tyre', name: 'SOLID TYRE', normName: 'solid tyre', code: 'PR-ST', title: 'Solid Tyre Production', dept: 'PRODUCTION' },
-  { id: 'prod_tyre_curing', name: 'TYRE CURING', normName: 'tyre curing', code: 'PR-TC', title: 'Tyre Curing Production', dept: 'PRODUCTION' }
-];
-
-const ALL_PLANT_SECTIONS_LIST = [
-  ...QA_SECTIONS_LIST,
-  ...PROD_SECTIONS_LIST
-];
-
-function getSectionObj(secIdOrName) {
-  if (!secIdOrName) return PROD_SECTIONS_LIST[0];
-  const q = String(secIdOrName).toLowerCase().trim();
-  const direct = ALL_PLANT_SECTIONS_LIST.find(s => s.id === secIdOrName || s.normName === q || s.name.toLowerCase() === q || s.title.toLowerCase() === q);
-  if (direct) return direct;
-  const norm = typeof normalizeSectionName === 'function' ? normalizeSectionName(secIdOrName) : q;
-  const match = ALL_PLANT_SECTIONS_LIST.find(s => s.normName === norm);
-  if (match) return match;
-  return { id: secIdOrName, name: secIdOrName, normName: norm, code: 'SEC', title: secIdOrName, dept: 'PRODUCTION' };
+function getExamPassThreshold() {
+  const v = Number(window.PORTAL_SETTINGS && window.PORTAL_SETTINGS.examPassingPct);
+  return Number.isFinite(v) && v > 0 ? v : 50;
 }
+
+function getOjtPassThreshold() {
+  const v = Number(window.PORTAL_SETTINGS && window.PORTAL_SETTINGS.ojtPassingPct);
+  return Number.isFinite(v) && v > 0 ? v : 70;
+}
+
+async function loadPublicSettings() {
+  try {
+    const res = await fetch('/api/public-settings', { credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.settings) {
+        window.PORTAL_SETTINGS = { ...window.PORTAL_SETTINGS, ...data.settings };
+      }
+    }
+  } catch (e) {}
+}
+
+const QA_SECTIONS_LIST = [
+  { id: 'warehouse', name: 'Warehouse QA', normName: 'warehouse qa', code: 'WH', title: 'Warehouse QA' },
+  { id: 'final_finish', name: 'Final Finish QA', normName: 'final finish qa', code: 'FF', title: 'Final Finish QA' },
+  { id: 'tire_building', name: 'Tire Building QA', normName: 'tire building qa', code: 'TB', title: 'Tire Building QA' },
+  { id: 'tire_curing', name: 'Tire Curing QA', normName: 'tire curing qa', code: 'TC', title: 'Tire Curing QA' },
+  { id: 'solid_tire', name: 'Solid Tire QA', normName: 'solid tire qa', code: 'ST', title: 'Solid Tire QA' },
+  { id: 'rro_alt', name: 'Final Finish RRO & ALT QA', normName: 'final finish rro & alt qa', code: 'RA', title: 'Final Finish RRO & ALT QA' },
+  { id: 'preparatory', name: 'Preparatory QA', normName: 'preparatory qa', code: 'PR', title: 'Preparatory QA' },
+  { id: 'fid_inspector', name: 'FID Inspector QA', normName: 'fid inspector qa', code: 'FD', title: 'FID Inspector QA' }
+];
 
 // Initialize App & Router
 document.addEventListener('DOMContentLoaded', () => {
+  if (typeof applySavedThemePreference === 'function') applySavedThemePreference();
+  if (typeof applySavedLanguagePreference === 'function') applySavedLanguagePreference();
+  loadPublicSettings();
   initStorage();
   initSecurityMonitors();
   initCapacitorMobileCapabilities();
   window.addEventListener('hashchange', handleRoute);
   checkExistingSession();
+  if (typeof refreshAdminDbHealthBadge === 'function') refreshAdminDbHealthBadge();
   setTimeout(() => {
     if (typeof initExamSchedulingCenter === 'function') initExamSchedulingCenter();
   }, 500);
@@ -365,6 +213,8 @@ function initStorage() {
   // Purge legacy pre-populated records from previous versions to guarantee clean 0 finished exams
   try {
     localStorage.removeItem('iluo_assessment_records_v1');
+    localStorage.removeItem('iluo_assessment_records_v2');
+    localStorage.removeItem('yokohama_ojt_evaluations_v1');
   } catch (e) {}
 
   if (!localStorage.getItem(STORAGE_KEY_RECORDS)) {
@@ -401,16 +251,29 @@ function initStorage() {
     }
   } catch (e) {}
 
-  // Stagger cloud syncs non-blockingly so initial render and tab spinner clear in 0ms
+  // Stagger cloud syncs non-blockingly so initial render and tab spinner clear in 0ms.
+  // Only query protected APIs when an authenticated staff/admin session is active.
+  const hasAuthSession = () => Boolean(
+    localStorage.getItem(STORAGE_KEY_SESSION) ||
+    localStorage.getItem('yokohama_admin_token') ||
+    sessionStorage.getItem('iluo_section_session') ||
+    sessionStorage.getItem('iluo_dept_session') ||
+    sessionStorage.getItem('iluo_evaluator_session')
+  );
+
   setTimeout(() => {
-    syncCloudRecords();
-    syncCloudOjtEvaluations();
+    if (hasAuthSession()) {
+      syncCloudRecords();
+      syncCloudOjtEvaluations();
+    }
   }, 1200);
 
   setTimeout(() => {
-    syncCloudQuestions();
-    syncCloudEmployees();
-    syncCloudSettings();
+    if (hasAuthSession()) {
+      syncCloudQuestions();
+      syncCloudEmployees();
+      syncCloudSettings();
+    }
   }, 3000);
 }
 
@@ -431,6 +294,10 @@ function getAuthHeaders(extraHeaders = {}) {
     if (empTok) headers['x-emp-token'] = empTok;
     const adminTok = localStorage.getItem('yokohama_admin_token');
     if (adminTok) headers['x-admin-token'] = adminTok;
+    const deptTok = sessionStorage.getItem('iluo_dept_token');
+    if (deptTok) headers['x-dept-token'] = deptTok;
+    const secTok = sessionStorage.getItem('iluo_section_token');
+    if (secTok) headers['x-section-token'] = secTok;
   } catch (e) {}
   return headers;
 }
@@ -438,11 +305,9 @@ function getAuthHeaders(extraHeaders = {}) {
 function getStoredRecords() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_RECORDS);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify({}));
-      return {};
-    }
-    return JSON.parse(raw) || {};
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return (parsed && typeof parsed === 'object') ? parsed : {};
   } catch (e) {
     return {};
   }
@@ -465,24 +330,12 @@ function saveRecord(empNo, recordData) {
 
 async function syncCloudRecords() {
   try {
-    const res = await fetchWithTimeout('/api/records', { headers: getAuthHeaders() }, 3500);
+    const res = await fetchWithTimeout('/api/records', { headers: getAuthHeaders(), credentials: 'include' }, 8000);
     const data = await res.json();
     if (data.success && data.records !== undefined) {
       const serverRecords = data.records || {};
-      const serverCount = Object.keys(serverRecords).length;
-      const local = getStoredRecords();
-      const localCount = Object.keys(local).length;
-
-      let merged;
-      // If server explicitly holds 0 finished exams and local wasn't explicitly flagged to preserve
-      if (serverCount === 0 && localCount > 0 && !localStorage.getItem('iluo_preserve_local')) {
-        merged = {};
-      } else {
-        // Authoritative server records overwrite local stale records
-        merged = { ...local, ...serverRecords };
-      }
-      localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(merged));
-      // Re-render admin table and dashboard if active
+      localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(serverRecords));
+      // Re-render active views
       if (document.getElementById('adminTableBody')) {
         const searchInput = document.getElementById('adminSearchInput');
         renderAdminTable(searchInput ? searchInput.value : '');
@@ -490,22 +343,34 @@ async function syncCloudRecords() {
       if (typeof renderAdminDashboard === 'function') {
         renderAdminDashboard();
       }
+      if (typeof filterSectionTable === 'function' && document.getElementById('secEmpTableBody')) {
+        filterSectionTable();
+      }
+      const dw = document.getElementById('deptDashboardWrapper');
+      if (dw && dw.style.display !== 'none' && typeof renderDepartmentDashboard === 'function') {
+        renderDepartmentDashboard(typeof activeDepartment !== 'undefined' && activeDepartment ? activeDepartment : undefined);
+      }
     }
   } catch (e) {}
 }
 
 async function syncCloudOjtEvaluations() {
   try {
-    const res = await fetchWithTimeout('/api/ojt-evaluations', {}, 3500);
+    const res = await fetchWithTimeout('/api/ojt-evaluations', { headers: getAuthHeaders(), credentials: 'include' }, 8000);
     const data = await res.json();
-    if (data.success && data.evaluations) {
-      const local = getStoredOjtRecords();
-      const merged = { ...local, ...data.evaluations };
-      localStorage.setItem(STORAGE_KEY_OJT, JSON.stringify(merged));
-      // Re-render admin table if visible
+    if (data.success && data.evaluations !== undefined) {
+      localStorage.setItem(STORAGE_KEY_OJT, JSON.stringify(data.evaluations || {}));
+      // Re-render active views
       if (document.getElementById('adminTableBody')) {
         const searchInput = document.getElementById('adminSearchInput');
         renderAdminTable(searchInput ? searchInput.value : '');
+      }
+      if (typeof renderAdminDashboard === 'function') {
+        renderAdminDashboard();
+      }
+      const ow = document.getElementById('ojtDashboardWrapper');
+      if (ow && ow.style.display !== 'none' && typeof renderOjtDashboard === 'function') {
+        renderOjtDashboard();
       }
     }
   } catch (e) {}
@@ -513,7 +378,10 @@ async function syncCloudOjtEvaluations() {
 
 async function syncCloudQuestions() {
   try {
-    const res = await fetchWithTimeout('/api/questions', { headers: getAuthHeaders(), credentials: 'include' }, 4000);
+    const res = await fetchWithTimeout('/api/questions', {
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    }, 4000);
     const data = await res.json();
     if (data.success && data.questionBank) {
       ['L', 'U', 'O'].forEach(lvl => {
@@ -525,7 +393,7 @@ async function syncCloudQuestions() {
         localStorage.setItem(STORAGE_KEY_CUSTOM_QUESTIONS, JSON.stringify(QUESTION_BANK));
       } catch (e) {}
       if (document.getElementById('questionsListContainer')) {
-        renderQuestionsManager();
+        renderQuestionsManager(true);
       }
     }
   } catch (e) {}
@@ -588,28 +456,23 @@ function handleRoute() {
   const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
   const session = sessionStr ? JSON.parse(sessionStr) : null;
 
-  if (typeof updateHeaderBreadcrumbsAndRole === 'function') {
-    updateHeaderBreadcrumbsAndRole(hash, session);
-  }
-  if (typeof updatePlantShiftAndSyncInfo === 'function') {
-    updatePlantShiftAndSyncInfo();
-  }
-
   // Root Public Hub Landing Page (/)
   if (hash === '/' || hash === '' || hash === '/public') {
     showView('viewPublicLanding');
     updateRoleNavHighlight('home');
-    updateUserBadge(session && session.name ? session.name : (session && session.role === 'admin' ? 'Administrator' : null));
+    const isAdminSess = session && (session.role === 'admin' || session.role === 'SUPERADMIN');
+    updateUserBadge(isAdminSess ? (session.name || 'Administrator') : (session && session.empNo && session.token ? (session.name || null) : null));
     return;
   }
 
-  // Dedicated OJT / Practical Assessment Portal Route (/ojt, /ojt-login, /assessment)
-  if (hash === '/ojt' || hash === '/ojt-login' || hash.startsWith('/ojt/') || hash === '/assessment' || hash.startsWith('/assessment/')) {
+  // Dedicated OJT Portal Route (/ojt, /ojt-login)
+  if (hash === '/ojt' || hash === '/ojt-login' || hash.startsWith('/ojt/')) {
     updateRoleNavHighlight('ojt');
     showView('viewOjtPortal');
     const ojtSession = sessionStorage.getItem('iluo_ojt_session');
     const loginWrapper = document.getElementById('ojtLoginWrapper');
     const dashWrapper = document.getElementById('ojtDashboardWrapper');
+    // If arriving at /ojt-login or no active session, always require actual password login
     if (hash === '/ojt-login' || !ojtSession) {
       if (loginWrapper) loginWrapper.style.display = 'flex';
       if (dashWrapper) dashWrapper.style.display = 'none';
@@ -624,8 +487,13 @@ function handleRoute() {
     return;
   }
 
-  // Quick Direct OJT Modal Route
+  // Quick Direct OJT Modal Route (/ojt-modal, /ojt-evaluation, /ojt-form)
   if (hash === '/ojt-modal' || hash === '/ojt-evaluation' || hash === '/ojt-form') {
+    if (typeof hasOjtEvaluationAccess === 'function' && !hasOjtEvaluationAccess()) {
+      showToast('Access Restricted: Skill assessment practical evaluations are only accessible to Section Supervisors and Admins.');
+      navigateTo('/section');
+      return;
+    }
     showView('viewPublicLanding');
     openOjtModalQuick();
     return;
@@ -638,16 +506,11 @@ function handleRoute() {
     return;
   }
 
-  // Section Portal (/section, /section/:sectionId)
+  // Section Portal (/section)
   if (hash === '/section' || hash.startsWith('/section/')) {
     updateRoleNavHighlight('section');
     showView('viewSectionPortal');
-    let targetSec = currentActiveSection;
-    if (hash.startsWith('/section/')) {
-      const paramSec = decodeURIComponent(hash.replace('/section/', '').trim());
-      if (paramSec) targetSec = paramSec;
-    }
-    const secSession = sessionStorage.getItem('iluo_section_session') || targetSec;
+    const secSession = sessionStorage.getItem('iluo_section_session') || currentActiveSection;
     const loginWrapper = document.getElementById('sectionLoginWrapper');
     const dashWrapper = document.getElementById('sectionDashboardWrapper');
     if (sessionStorage.getItem('iluo_section_session')) {
@@ -661,7 +524,7 @@ function handleRoute() {
     return;
   }
 
-  // Department / HOD Portal (/department, /hod)
+  // Department / HOD Portal (/department or /hod)
   if (hash === '/department' || hash === '/hod' || hash.startsWith('/department/')) {
     updateRoleNavHighlight('department');
     showView('viewDepartmentPortal');
@@ -678,82 +541,33 @@ function handleRoute() {
     return;
   }
 
-  // Dedicated Employee Portal in-app views
-  if (hash === '/employee' || hash === '/employee-portal' || hash === '/employee/login') {
-    updateRoleNavHighlight('employee');
-    const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
-    let session = null;
-    try { session = sessionStr ? JSON.parse(sessionStr) : null; } catch(e) {}
-    if (session && (session.role === 'emp' || session.roleClaim === 'employee') && session.empNo) {
-      currentUser = session;
-      navigateTo('/employee/dashboard');
-    } else {
-      showView('viewEmpLogin');
-    }
+  // Dedicated Employee Portal Redirect
+  if (hash === '/employee' || hash === '/employee-portal' || hash === '/employee/login' || hash.startsWith('/employee/')) {
+    window.location.href = '/employee';
     return;
   }
 
-  if (hash === '/employee/dashboard') {
-    updateRoleNavHighlight('employee');
-    const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
-    let session = null;
-    try { session = sessionStr ? JSON.parse(sessionStr) : null; } catch(e) {}
-    if (!currentUser && session && (session.role === 'emp' || session.roleClaim === 'employee')) {
-      currentUser = session;
-    }
-    if (!currentUser) {
-      navigateTo('/employee');
-      return;
-    }
-    showEmpDashboard();
-    return;
-  }
-
-  if (hash === '/employee/exams') {
-    updateRoleNavHighlight('employee');
-    showEmpExamsView();
-    return;
-  }
-
-  if (hash.startsWith('/employee/exam/') || hash === '/exam') {
-    showView('viewQuiz');
-    return;
-  }
-
-  if (hash === '/employee/results') {
-    updateRoleNavHighlight('employee');
-    showEmpResultsView();
-    return;
-  }
-
-  if (hash === '/employee/profile') {
-    updateRoleNavHighlight('employee');
-    showEmpProfileView();
-    return;
-  }
-
-  // Explicit Admin Login Page (/secure-control, /admin, /hr/login)
-  if (hash === '/secure-control' || hash === '/admin-login' || hash === '/admin' || hash === '/hr/login') {
+  // Explicit Admin Login Page (/secure-control)
+  if (hash === '/secure-control' || hash === '/admin-login' || hash === '/admin') {
     updateRoleNavHighlight('admin');
-    if (session && (session.role === 'admin' || session.roleClaim === 'hr_admin')) {
-      navigateTo('/control-center/dashboard');
+    if (session && session.role === 'admin') {
+      navigateTo('/secure-control/dashboard');
       return;
     }
     showView('viewAdminLogin');
     return;
   }
 
-  // Protect Admin / HR routes (/control-center/*, /secure-control/*, /hr/*)
-  if (hash.startsWith('/control-center') || hash.startsWith('/secure-control/') || hash === '/hr' || hash.startsWith('/hr/')) {
+  // Protect Admin routes (/control-center/* and /secure-control/* subviews)
+  if (hash.startsWith('/control-center') || hash.startsWith('/secure-control/')) {
     updateRoleNavHighlight('admin');
-    if (!session || (session.role !== 'admin' && session.roleClaim !== 'hr_admin')) {
-      showToast('Authentication required to access HR Control Center.');
+    if (!session || session.role !== 'admin') {
       navigateTo('/secure-control');
       return;
     }
-    updateUserBadge(session.name || 'Administrator', session.roleClaim || 'hr_admin');
+    updateUserBadge(session.name || 'Administrator');
     
-    let sub = hash.replace(/^\/(control-center|secure-control|hr)\/?/, '').trim();
+    let sub = hash.replace(/^\/(control-center|secure-control)\/?/, '').trim();
     if (!sub) sub = 'dashboard';
     showControlCenterSubView(sub);
     return;
@@ -808,7 +622,6 @@ function initSecurityMonitors() {
 
     updateTabWarningBadge();
     showToast(`Notice: Assessment window lost focus (${activeExam.tabSwitchCount})`);
-    triggerExamAutosave();
   };
 
   document.addEventListener('visibilitychange', () => {
@@ -993,13 +806,15 @@ function updateUserBadge(name) {
   const logoutBtn = document.getElementById('btnLogout');
 
   if (name) {
-    badge.style.display = 'flex';
-    logoutBtn.style.display = 'block';
- avatar.innerText = name.charAt(0).toUpperCase();
- nameSpan.innerText = name;
+    if (badge) badge.style.display = 'flex';
+    if (logoutBtn) logoutBtn.style.display = 'block';
+    if (avatar) avatar.innerText = name.charAt(0).toUpperCase();
+    if (nameSpan) nameSpan.innerText = name;
   } else {
-    badge.style.display = 'none';
-    logoutBtn.style.display = 'none';
+    if (badge) badge.style.display = 'none';
+    if (logoutBtn) logoutBtn.style.display = 'none';
+    if (avatar) avatar.innerText = '';
+    if (nameSpan) nameSpan.innerText = '';
   }
 }
 
@@ -1058,15 +873,7 @@ async function handleEmpLogin(e) {
       return;
     }
   } catch (err) {
-    const emp = (typeof EMPLOYEES !== 'undefined' ? EMPLOYEES : []).find(e => e.empNo === empIdVal || e.empNo === '0' + empIdVal);
-    if (emp) {
-      currentUser = emp;
-      localStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify({ role: 'emp', empNo: emp.empNo }));
-      updateUserBadge(emp.name);
-      navigateTo('/employee/dashboard');
-      return;
-    }
-    showToast('Employee ID not found or server offline!');
+    showToast('Unable to reach authentication server. Please check network connection.');
   }
 }
 
@@ -1175,6 +982,10 @@ async function handleAdminLogin(e) {
         token: data.token || ''
       }));
       updateUserBadge(adminName);
+      syncCloudQuestions();
+      syncCloudEmployees();
+      syncCloudRecords();
+      syncCloudOjtEvaluations();
       showToast(`Authenticated successfully as ${adminName}`);
       navigateTo('/secure-control/dashboard');
     } else {
@@ -1265,6 +1076,10 @@ async function handleVerifyAdminOTP(e) {
         token: data.token || ''
       }));
       updateUserBadge(adminName);
+      syncCloudQuestions();
+      syncCloudEmployees();
+      syncCloudRecords();
+      syncCloudOjtEvaluations();
  showToast(`Authenticated successfully as ${adminName}`);
       navigateTo('/secure-control/dashboard');
     } else {
@@ -1289,16 +1104,24 @@ async function logout() {
   try {
     const headers = getAuthHeaders();
     await Promise.allSettled([
-      fetch('/api/auth/admin/logout', { method: 'POST', headers }),
-      fetch('/api/auth/employee/logout', { method: 'POST', headers })
+      fetch('/api/auth/logout', { method: 'POST', headers, credentials: 'include' }),
+      fetch('/api/auth/admin/logout', { method: 'POST', headers, credentials: 'include' }),
+      fetch('/api/auth/employee/logout', { method: 'POST', headers, credentials: 'include' })
     ]);
   } catch (e) {
     console.error(e);
   }
   localStorage.removeItem(STORAGE_KEY_SESSION);
   localStorage.removeItem('yokohama_emp_token');
+  localStorage.removeItem('yokohama_admin_token');
+  sessionStorage.removeItem('iluo_section_session');
+  sessionStorage.removeItem('iluo_section_token');
+  sessionStorage.removeItem('iluo_dept_session');
+  sessionStorage.removeItem('iluo_dept_token');
+  sessionStorage.removeItem('iluo_ojt_session');
   currentUser = null;
   activeExam = null;
+  updateUserBadge(null);
   navigateTo('/');
 }
 
@@ -1576,10 +1399,15 @@ const PROD_SECTION_NAMES = [
 ];
 
 function normalizeSectionName(sec) {
+  if (typeof ILUO_CONSTANTS !== 'undefined' && ILUO_CONSTANTS.normalizeQaSectionKey) {
+    const s = String(sec || '').toLowerCase().trim().replace(/\s+/g, ' ');
+    if (PROD_SECTION_NAMES.includes(s)) return s;
+    return ILUO_CONSTANTS.normalizeQaSectionKey(sec);
+  }
   let s = (sec || '').toLowerCase().trim();
   s = s.replace(/\s+/g, ' ');
   if (PROD_SECTION_NAMES.includes(s)) return s;
-  s = s.replace('ware house', 'warehouse');
+  s = s.replace('ware house', 'warehouse').replace('tyre', 'tire');
   if (s.includes('rro') || s.includes('alt')) return 'final finish rro & alt qa';
   if (s.includes('building') || s.includes('tbm')) return 'tire building qa';
   if (s.includes('curing')) return 'tire curing qa';
@@ -1833,7 +1661,6 @@ function renderCurrentQuestion() {
 
   const totalQs = activeExam.questions.length;
   const qIndex = activeExam.currentIndex;
-  if (typeof renderInAppQuestionPalette === 'function') renderInAppQuestionPalette();
 
   if (qIndex >= totalQs) {
     submitAssessment();
@@ -1879,7 +1706,6 @@ function selectOption(key) {
   if (!activeExam) return;
   const q = activeExam.questions[activeExam.currentIndex];
   activeExam.responses[q.id] = key;
-  triggerExamAutosave();
 
   renderCurrentQuestion();
 
@@ -2043,38 +1869,47 @@ function showResultView(record, isImmediateCompletion = false) {
 function showControlCenterSubView(subName) {
   showView('viewControlCenterWrapper');
 
-  // Update mobile drawer active label and auto-close sidebar on mobile
-  const mobileLabel = document.getElementById('adminMobileActiveLabel');
-  if (mobileLabel) mobileLabel.textContent = capitalize(subName);
-  if (typeof closeAdminSidebar === 'function') closeAdminSidebar();
-
   // Normalize alias
   if (subName === 'export') subName = 'reports';
   if (subName === 'training-requirements' || subName === 'training-requirement') subName = 'training';
+  if (subName === 'exam-reset' || subName === 'examreset') subName = 'reset';
+  if (subName === 'db') subName = 'database';
 
   // Highlight active sidebar link
-  document.querySelectorAll('.sidebar-link').forEach(link => { link.classList.remove('active'); link.removeAttribute('aria-current'); });
+  document.querySelectorAll('.sidebar-link').forEach(link => link.classList.remove('active'));
   document.querySelectorAll('.control-subview').forEach(sub => sub.style.display = 'none');
 
   const targetSidebarLink = document.getElementById(`navCtrl${capitalize(subName)}`);
-  if (targetSidebarLink) { targetSidebarLink.classList.add('active'); targetSidebarLink.setAttribute('aria-current', 'page'); }
+  if (targetSidebarLink) targetSidebarLink.classList.add('active');
 
   const targetSubView = document.getElementById(`ctrlSub${capitalize(subName)}`);
   if (targetSubView) targetSubView.style.display = 'block';
+
+  // Refresh soft-delete undo banner whenever Control Center renders
+  if (typeof refreshUndoBanner === 'function') refreshUndoBanner();
 
   // Render sub-view data
   if (subName === 'dashboard') renderAdminDashboard();
   else if (subName === 'questions') renderQuestionsManager();
   else if (subName === 'sections') renderSectionsExplorer();
   else if (subName === 'exams') {
-    if (typeof updateAdminResetSecInfo === 'function') updateAdminResetSecInfo();
-    if (typeof updateAdminResetDeptInfo === 'function') updateAdminResetDeptInfo();
     if (typeof initExamSchedulingCenter === 'function') initExamSchedulingCenter();
+  }
+  else if (subName === 'reset') {
+    if (typeof onResetCascadeDeptChange === 'function') onResetCascadeDeptChange();
+    if (typeof renderResetIndividualTable === 'function') renderResetIndividualTable();
+  }
+  else if (subName === 'database') {
+    if (typeof renderDatabaseConsole === 'function') renderDatabaseConsole();
   }
   else if (subName === 'employees') renderEmployeeDirectory();
   else if (subName === 'results') renderAdminTable('');
   else if (subName === 'reports') renderReportsCenter();
   else if (subName === 'training') renderTrainingRequirements();
+  else if (subName === 'reminders' && typeof loadRemindersView === 'function') loadRemindersView();
+  else if (subName === 'audit' && typeof loadAuditLogsView === 'function') loadAuditLogsView();
+  else if (subName === 'users' && typeof loadStaffUsersView === 'function') loadStaffUsersView();
+  else if (subName === 'settings') syncCloudSettings();
 }
 
 function capitalize(str) {
@@ -2082,11 +1917,120 @@ function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+let adminDbHealthPollTimer = null;
+let adminDbHealthInFlight = null;
+let adminDbHealthQuickRetryTimer = null;
+let adminDbVisibilityBound = false;
+
+function applyAdminDbBadgeState(state, tooltip) {
+  const badges = document.querySelectorAll('[data-db-badge="true"]');
+  if (!badges || badges.length === 0) return;
+  const isConnected = state === 'connected';
+  badges.forEach((el) => {
+    el.classList.remove('is-checking', 'is-connected', 'is-ephemeral');
+    el.classList.add(isConnected ? 'is-connected' : 'is-ephemeral');
+    const textEl = el.querySelector('.admin-db-text');
+    if (textEl) {
+      textEl.textContent = isConnected
+        ? 'Cloud DB Connected (Upstash Redis)'
+        : 'Ephemeral Local Mode (Not Persisted)';
+    }
+    if (tooltip) {
+      el.title = tooltip;
+    }
+  });
+}
+
+function scheduleQuickAdminDbRecheck(delayMs = 3000) {
+  if (adminDbHealthQuickRetryTimer) return;
+  adminDbHealthQuickRetryTimer = setTimeout(() => {
+    adminDbHealthQuickRetryTimer = null;
+    refreshAdminDbHealthBadge();
+  }, delayMs);
+}
+
+async function refreshAdminDbHealthBadge() {
+  const badges = document.querySelectorAll('[data-db-badge="true"]');
+  if (!badges || badges.length === 0) return;
+  if (adminDbHealthInFlight) return adminDbHealthInFlight;
+
+  adminDbHealthInFlight = (async () => {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 8000) : null;
+    try {
+      const res = await fetch('/api/health', {
+        cache: 'no-store',
+        credentials: 'include',
+        ...(controller ? { signal: controller.signal } : {})
+      });
+      if (!res.ok) {
+        throw new Error(`Health endpoint returned HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const db = data && data.database ? data.database : {};
+      const isReadOnlyToken = db.provider === 'upstash-redis' && db.connected === true && db.writable === false;
+      const isConnected = db.provider === 'upstash-redis' && db.connected === true && !isReadOnlyToken;
+
+      const tooltip = isConnected
+        ? `Upstash Redis connected (${typeof db.latencyMs === 'number' ? db.latencyMs + 'ms' : 'live'}${db.seeded ? ', synced' : db.seedRetrying ? ', migrating...' : ''}) — All changes persist across restarts.`
+        : isReadOnlyToken
+          ? 'Upstash Redis token is read-only (NOPERM) — Replace UPSTASH_REDIS_REST_TOKEN with the primary Read-Write token so changes persist.'
+          : 'Upstash Redis is not configured or unreachable — Changes are stored in ephemeral container memory/local disk only.';
+
+      applyAdminDbBadgeState(isConnected ? 'connected' : 'ephemeral', tooltip);
+
+      if (isConnected && db.seeded === false && db.seedRetrying === true) {
+        scheduleQuickAdminDbRecheck(3000);
+      }
+    } catch (e) {
+      applyAdminDbBadgeState(
+        'ephemeral',
+        'Unable to reach /api/health — Running in Ephemeral Local Mode (retrying automatically).'
+      );
+      scheduleQuickAdminDbRecheck(4000);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      adminDbHealthInFlight = null;
+    }
+  })();
+
+  return adminDbHealthInFlight;
+}
+
+function isAdminControlCenterVisible() {
+  const wrapper = document.getElementById('viewControlCenterWrapper');
+  if (!wrapper) return true;
+  if (wrapper.classList.contains('active')) return true;
+  const computed = window.getComputedStyle ? window.getComputedStyle(wrapper) : null;
+  return computed ? computed.display !== 'none' : wrapper.style.display !== 'none';
+}
+
+function startAdminDbHealthPolling() {
+  refreshAdminDbHealthBadge();
+  if (!adminDbVisibilityBound) {
+    adminDbVisibilityBound = true;
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && isAdminControlCenterVisible()) {
+        refreshAdminDbHealthBadge();
+      }
+    });
+  }
+  if (adminDbHealthPollTimer) return;
+  adminDbHealthPollTimer = setInterval(() => {
+    if (document.hidden) return;
+    if (!isAdminControlCenterVisible()) return;
+    refreshAdminDbHealthBadge();
+  }, 30000);
+}
+
+window.refreshAdminDbHealthBadge = refreshAdminDbHealthBadge;
+window.startAdminDbHealthPolling = startAdminDbHealthPolling;
+
 // Admin Dashboard Analytics
 function renderAdminDashboard() {
   const records = getStoredRecords();
   const allOjt = getStoredOjtRecords();
-  const allEmps = EMPLOYEES;
+  const allEmps = (EMPLOYEES || []).filter(e => !e.isLeft && e.status !== 'LEFT');
 
   let completedCount = 0;
   let inProgressCount = 0;
@@ -2103,7 +2047,7 @@ function renderAdminDashboard() {
     }
   });
 
-  const notStartedCount = allEmps.length - completedCount - inProgressCount;
+  const notStartedCount = Math.max(0, allEmps.length - completedCount - inProgressCount);
 
   if (document.getElementById('statTotalEmp')) document.getElementById('statTotalEmp').innerText = allEmps.length;
   if (document.getElementById('statCompleted')) document.getElementById('statCompleted').innerText = completedCount;
@@ -2113,219 +2057,400 @@ function renderAdminDashboard() {
 
   renderPieChart(completedCount, inProgressCount, notStartedCount);
   renderBarChart(records);
-  renderDashboardDeptRollup(records, allOjt);
   renderDashboardSectionMatrix(records, allOjt);
+  renderDashboardProdSectionMatrix(records, allOjt);
   renderSectionPieChart();
-  renderCategoryPerformanceBarChart();
+  if (typeof renderAdminExecAnalytics === 'function') renderAdminExecAnalytics();
 }
 
-let currentDashboardDeptTracker = 'PRODUCTION'; // 'PRODUCTION' | 'QUALITY CONTROL' | 'ALL'
-let currentDashboardSecSearchQuery = '';
-
-function setDashboardDeptTracker(dept) {
-  currentDashboardDeptTracker = dept || 'PRODUCTION';
-  
-  // Update toggle buttons
-  const btnProd = document.getElementById('btnDeptTrackerProd');
-  const btnQa = document.getElementById('btnDeptTrackerQa');
-  const btnAll = document.getElementById('btnDeptTrackerAll');
-  
-  if (btnProd) {
-    btnProd.classList.toggle('active', currentDashboardDeptTracker === 'PRODUCTION');
-    btnProd.setAttribute('aria-pressed', currentDashboardDeptTracker === 'PRODUCTION');
-  }
-  if (btnQa) {
-    btnQa.classList.toggle('active', currentDashboardDeptTracker === 'QUALITY CONTROL');
-    btnQa.setAttribute('aria-pressed', currentDashboardDeptTracker === 'QUALITY CONTROL');
-  }
-  if (btnAll) {
-    btnAll.classList.toggle('active', currentDashboardDeptTracker === 'ALL');
-    btnAll.setAttribute('aria-pressed', currentDashboardDeptTracker === 'ALL');
-  }
-
-  const records = (typeof getStoredRecords === 'function') ? getStoredRecords() : {};
-  const allOjt = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
-
-  renderDashboardDeptRollup(records, allOjt);
-  renderDashboardSectionMatrix(records, allOjt, currentDashboardSecSearchQuery);
+function isProductionDeptClient(dept) {
+  const d = String(dept || '').trim().toUpperCase();
+  return d === 'PRODUCTION' || d.includes('PROD');
 }
-window.setDashboardDeptTracker = setDashboardDeptTracker;
 
-function handleDashboardSecSearch(query) {
-  currentDashboardSecSearchQuery = (query || '').toLowerCase().trim();
-  const records = (typeof getStoredRecords === 'function') ? getStoredRecords() : {};
-  const allOjt = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
-  renderDashboardSectionMatrix(records, allOjt, currentDashboardSecSearchQuery);
+function resolveSectionDefinitionClient(secIdOrName) {
+  const raw = String(secIdOrName || '').trim();
+  const qaMatch = QA_SECTIONS_LIST.find(s => s.id === raw || s.normName === raw.toLowerCase() || s.title.toLowerCase() === raw.toLowerCase());
+  if (qaMatch) return { type: 'QA', key: qaMatch.id, title: qaMatch.title, normName: qaMatch.normName };
+  return {
+    type: 'PRODUCTION',
+    key: raw,
+    title: raw,
+    normName: raw.toLowerCase().replace(/\s+/g, ' ')
+  };
 }
-window.handleDashboardSecSearch = handleDashboardSecSearch;
 
-function renderDashboardDeptRollup(records, allOjt) {
-  const container = document.getElementById('deptTrackerRollupCard');
-  if (!container) return;
-
-  const allEmployees = (typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES)) ? EMPLOYEES : [];
-  records = records || ((typeof getStoredRecords === 'function') ? getStoredRecords() : {});
-  allOjt = allOjt || ((typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {});
-
-  let deptEmps = [];
-  let deptTitle = 'Production Department';
-  let deptBadge = '25 Sections &bull; 1,179 Associates';
-  let deptColor = '#6D28D9';
-
-  if (currentDashboardDeptTracker === 'PRODUCTION') {
-    deptEmps = allEmployees.filter(e => (e.dept || '').toUpperCase().includes('PROD'));
-    deptTitle = 'Production Department';
-    deptBadge = '25 Manufacturing Sections &bull; 1,179 Associates';
-    deptColor = '#6D28D9';
-  } else if (currentDashboardDeptTracker === 'QUALITY CONTROL') {
-    deptEmps = allEmployees.filter(e => (e.dept || '').toUpperCase().includes('QUAL'));
-    deptTitle = 'Quality Control Department';
-    deptBadge = '8 QA Sections &bull; 283 Associates';
-    deptColor = '#005B9E';
-  } else {
-    deptEmps = allEmployees;
-    deptTitle = 'All Plant Departments';
-    deptBadge = '33 Total Plant Sections &bull; 1,462 Associates';
-    deptColor = '#0F172A';
-  }
-
-  const total = deptEmps.length;
-  let examDone = 0;
-  let ojtDone = 0;
-  let bothDone = 0;
-  let countI = 0, countL = 0, countU = 0, countO = 0;
-
-  deptEmps.forEach(e => {
-    const rec = records[e.empNo];
-    const ojt = allOjt[e.empNo];
-    const hasExam = rec && rec.isCompleted;
-    const hasOjt = ojt && (ojt.totalScore !== undefined || ojt.scorePct !== undefined);
-
-    if (hasExam) examDone++;
-    if (hasOjt) ojtDone++;
-    if (hasExam && hasOjt) bothDone++;
-
-    const lvl = (e.currentLevel || 'I').toUpperCase();
-    if (lvl === 'I') countI++;
-    else if (lvl === 'L') countL++;
-    else if (lvl === 'U') countU++;
-    else if (lvl === 'O') countO++;
+function getActiveProductionSectionRows(records, allOjt, filterQuery = '') {
+  const prodEmps = (EMPLOYEES || []).filter(e => !e.isLeft && e.status !== 'LEFT' && isProductionDeptClient(e.dept));
+  const bySection = new Map();
+  prodEmps.forEach(emp => {
+    const rawSec = String(emp.section || 'UNASSIGNED').trim().replace(/\s+/g, ' ').toUpperCase();
+    if (!bySection.has(rawSec)) bySection.set(rawSec, []);
+    bySection.get(rawSec).push(emp);
   });
 
-  const examPct = total > 0 ? Math.round((examDone / total) * 100) : 0;
-  const ojtPct = total > 0 ? Math.round((ojtDone / total) * 100) : 0;
-  const bothPct = total > 0 ? Math.round((bothDone / total) * 100) : 0;
+  const baseOrder = (typeof ILUO_CONSTANTS !== 'undefined' && Array.isArray(ILUO_CONSTANTS.PRODUCTION_SECTIONS))
+    ? ILUO_CONSTANTS.PRODUCTION_SECTIONS.map(s => String(s).trim().toUpperCase())
+    : PROD_SECTION_NAMES.map(s => s.toUpperCase());
 
-  container.innerHTML = `
-    <div style="border-right: 1px solid #E2E8F0; padding-right: 16px;">
-      <div style="font-size: 0.72rem; font-weight: 800; color: ${deptColor}; text-transform: uppercase; letter-spacing: 0.5px;">Active Executive Scope</div>
-      <div style="font-size: 1.15rem; font-weight: 800; color: #0F172A; margin: 2px 0;">${deptTitle}</div>
-      <div style="font-size: 0.78rem; color: #64748B;">${deptBadge}</div>
-    </div>
+  const orderedNames = [];
+  const seen = new Set();
+  baseOrder.forEach(sName => {
+    if (!seen.has(sName)) {
+      orderedNames.push(sName);
+      seen.add(sName);
+    }
+  });
+  Array.from(bySection.keys()).sort().forEach(sName => {
+    if (!seen.has(sName)) {
+      orderedNames.push(sName);
+      seen.add(sName);
+    }
+  });
 
-    <div>
-      <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Total Associates</div>
-      <div style="font-size: 1.35rem; font-weight: 800; color: #0F172A; font-variant-numeric: tabular-nums;">${total.toLocaleString()}</div>
-      <div style="font-size: 0.75rem; color: #059669; font-weight: 600;">100% Plant Rostered</div>
-    </div>
+  const q = String(filterQuery || '').trim().toUpperCase();
+  const rows = [];
+  orderedNames.forEach(secName => {
+    const emps = bySection.get(secName) || [];
+    if (emps.length === 0 && !baseOrder.includes(secName)) return;
+    if (q && !secName.includes(q)) return;
 
-    <div>
-      <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Exam Certified</div>
-      <div style="font-size: 1.35rem; font-weight: 800; color: #0284C7; font-variant-numeric: tabular-nums;">${examDone} <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">(${examPct}%)</span></div>
-      <div style="font-size: 0.75rem; color: #64748B;">MCQ Knowledge Tests</div>
-    </div>
+    const total = emps.length;
+    let examDone = 0;
+    let examPassed = 0;
+    let ojtDone = 0;
+    let ojtPassed = 0;
+    let bothDone = 0;
+    let bothPassed = 0;
 
-    <div>
-      <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Skill Assessment (OJT)</div>
-      <div style="font-size: 1.35rem; font-weight: 800; color: #059669; font-variant-numeric: tabular-nums;">${ojtDone} <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">(${ojtPct}%)</span></div>
-      <div style="font-size: 0.75rem; color: #64748B;">Practical Shop-Floor Rubric</div>
-    </div>
+    emps.forEach(e => {
+      const rec = records[e.empNo];
+      const ojt = allOjt[e.empNo];
+      const hasExam = Boolean(rec && rec.isCompleted);
+      const isExamPass = hasExam && (rec.status === 'Passed' || rec.questStatus === 'Pass' || (rec.markPct !== undefined && Number(rec.markPct) >= 50));
+      const hasOjt = Boolean(ojt && (ojt.totalScore !== undefined || ojt.scorePct !== undefined));
+      const isOjtPass = hasOjt && (ojt.qualificationStatus === 'Qualified' || ojt.result === 'Pass' || ojt.status === 'Pass' || (ojt.scorePct !== undefined && Number(ojt.scorePct) >= 70));
 
-    <div>
-      <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Both Qualified</div>
-      <div style="font-size: 1.35rem; font-weight: 800; color: #7C3AED; font-variant-numeric: tabular-nums;">${bothDone} <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">(${bothPct}%)</span></div>
-      <div style="font-size: 0.75rem; color: #64748B;">Fully Certified ILUO</div>
-    </div>
+      if (hasExam) {
+        examDone++;
+        if (isExamPass) examPassed++;
+      }
+      if (hasOjt) {
+        ojtDone++;
+        if (isOjtPass) ojtPassed++;
+      }
+      if (hasExam && hasOjt) {
+        bothDone++;
+        if (isExamPass && isOjtPass) bothPassed++;
+      }
+    });
 
-    <div style="border-left: 1px solid #E2E8F0; padding-left: 16px;">
-      <div style="font-size: 0.72rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 6px;">Competency Mix</div>
-      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-        <span class="iluo-badge iluo-badge-i" style="font-size: 0.75rem; padding: 2px 7px;" title="Level I (Beginner/Induction)">I: ${countI}</span>
-        <span class="iluo-badge iluo-badge-l" style="font-size: 0.75rem; padding: 2px 7px;" title="Level L (Learner)">L: ${countL}</span>
-        <span class="iluo-badge iluo-badge-u" style="font-size: 0.75rem; padding: 2px 7px;" title="Level U (Executor)">U: ${countU}</span>
-        <span class="iluo-badge iluo-badge-o" style="font-size: 0.75rem; padding: 2px 7px;" title="Level O (Expert)">O: ${countO}</span>
-      </div>
-    </div>
-  `;
+    rows.push({
+      name: secName,
+      deptGroup: 'PRODUCTION',
+      total,
+      examDone,
+      examPassed,
+      ojtDone,
+      ojtPassed,
+      bothDone,
+      bothPassed,
+      pending: Math.max(0, total - bothDone),
+      completionPct: total > 0 ? Math.round((bothDone / total) * 100) : 0
+    });
+  });
+
+  return rows;
 }
-window.renderDashboardDeptRollup = renderDashboardDeptRollup;
 
-function renderDashboardSectionMatrix(records, allOjt, filterText = '') {
+function renderDashboardProdSectionMatrix(recordsArg, allOjtArg) {
+  const tbody = document.getElementById('dashboardProdSectionTableBody');
+  const tfoot = document.getElementById('dashboardProdSectionTableFoot');
+  if (!tbody) return;
+
+  const records = recordsArg || getStoredRecords();
+  const allOjt = allOjtArg || getStoredOjtRecords();
+  const searchEl = document.getElementById('prodSectionSearchInput');
+  const filterQuery = searchEl ? searchEl.value : '';
+  const rows = getActiveProductionSectionRows(records, allOjt, filterQuery);
+
+  tbody.innerHTML = '';
+  if (rows.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" style="text-align: center; padding: 24px; color: var(--text-muted);">
+          No matching Production sections found.
+        </td>
+      </tr>
+    `;
+    if (tfoot) tfoot.innerHTML = '';
+    return;
+  }
+
+  let totalEmpsSum = 0;
+  let examDoneSum = 0;
+  let ojtDoneSum = 0;
+  let bothDoneSum = 0;
+
+  rows.forEach((row, idx) => {
+    totalEmpsSum += row.total;
+    examDoneSum += row.examDone;
+    ojtDoneSum += row.ojtDone;
+    bothDoneSum += row.bothDone;
+
+    const escapedName = row.name.replace(/'/g, "\\'");
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="font-weight: 700; color: var(--text-muted);">${idx + 1}</td>
+      <td>
+        <div style="font-weight: 700; color: var(--text-main); font-size: 0.92rem;">${escapeHtml(row.name)}</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted);">Production Section &bull; ${row.examPassed} Passed Exam</div>
+      </td>
+      <td style="text-align: center; font-weight: 700;">${row.total}</td>
+      <td style="text-align: center;">
+        <span class="${row.examDone > 0 ? 'badge-pass' : ''}" style="display: inline-block; padding: 3px 8px; font-weight: 700; font-size: 0.8rem;">
+          ${row.examDone} / ${row.total}
+        </span>
+      </td>
+      <td style="text-align: center;">
+        <span class="${row.ojtDone > 0 ? 'badge-pass' : ''}" style="display: inline-block; padding: 3px 8px; font-weight: 700; font-size: 0.8rem; background: ${row.ojtDone > 0 ? '#DCFCE7' : '#F1F5F9'}; color: ${row.ojtDone > 0 ? '#166534' : '#64748B'};">
+          ${row.ojtDone} / ${row.total}
+        </span>
+      </td>
+      <td style="text-align: center;">
+        <span style="display: inline-block; padding: 3px 8px; font-weight: 800; font-size: 0.82rem; background: ${row.bothDone > 0 ? '#DBEAFE' : '#F8FAFC'}; color: ${row.bothDone > 0 ? '#1E40AF' : '#94A3B8'}; border-radius: 6px;">
+          ${row.bothDone} / ${row.total}
+        </span>
+      </td>
+      <td>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="flex: 1; background: #E2E8F0; height: 8px; border-radius: 4px; overflow: hidden;">
+            <div style="width: ${row.completionPct}%; background: ${row.completionPct >= 90 ? '#059669' : '#0284C7'}; height: 100%; border-radius: 4px; transition: width 0.3s ease;"></div>
+          </div>
+          <span style="font-size: 0.76rem; font-weight: 700; color: #0F172A; min-width: 44px; text-align: right;">${row.completionPct}%</span>
+        </div>
+      </td>
+      <td style="text-align: center;">
+        <div style="display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;">
+          <button type="button" class="btn-primary" style="padding: 4px 10px; font-size: 0.76rem; background: #005B9E; border-color: #005B9E;" onclick="showSectionCompletedModal('${escapedName}', 'ALL')">
+            View List
+          </button>
+          <button type="button" class="btn-reset" style="padding: 4px 8px; font-size: 0.74rem;" onclick="resetSectionExams('${escapedName}', '${escapedName}')" title="Reset all candidate exams for ${escapeHtml(row.name)}">
+            Reset
+          </button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const overallPct = totalEmpsSum > 0 ? Math.round((bothDoneSum / totalEmpsSum) * 100) : 0;
+  const countLabelEl = document.getElementById('prodSectionCountLabel');
+  if (countLabelEl) {
+    countLabelEl.textContent = `${rows.length} Production Sections · ${totalEmpsSum.toLocaleString()} Active`;
+  }
+
+  if (tfoot) {
+    tfoot.innerHTML = `
+      <tr style="background: #EFF6FF; font-weight: 800; border-top: 2px solid #005B9E;">
+        <td colspan="2" style="text-align: right; color: #0F172A; padding: 10px 12px;">
+          TOTAL PRODUCTION (${rows.length} Sections)
+        </td>
+        <td style="text-align: center; color: #0F172A;">${totalEmpsSum}</td>
+        <td style="text-align: center; color: #166534;">${examDoneSum} / ${totalEmpsSum}</td>
+        <td style="text-align: center; color: #166534;">${ojtDoneSum} / ${totalEmpsSum}</td>
+        <td style="text-align: center; color: #1E40AF;">${bothDoneSum} / ${totalEmpsSum}</td>
+        <td>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="flex: 1; background: #CBD5E1; height: 8px; border-radius: 4px; overflow: hidden;">
+              <div style="width: ${overallPct}%; background: #005B9E; height: 100%; border-radius: 4px;"></div>
+            </div>
+            <span style="font-size: 0.78rem; font-weight: 800; color: #0F172A; min-width: 44px; text-align: right;">${overallPct}%</span>
+          </div>
+        </td>
+        <td style="text-align: center; font-size: 0.76rem; color: #005B9E;">${bothDoneSum} Completed</td>
+      </tr>
+    `;
+  }
+}
+
+function filterProdSectionTracker() {
+  renderDashboardProdSectionMatrix(getStoredRecords(), getStoredOjtRecords());
+}
+
+async function downloadSectionSummaryPdf(scope = 'PRODUCTION') {
+  const scopeNorm = String(scope || 'PRODUCTION').toUpperCase();
+  const label = scopeNorm === 'QA' ? 'QA Section Summary' : scopeNorm === 'ALL' ? 'Plant-Wide Summary' : 'Production Section Summary';
+  showToast(`Generating ${label} PDF report...`);
+  if (typeof logExportAudit === 'function') {
+    logExportAudit('SECTION_SUMMARY_PDF', scopeNorm, `Downloaded ${label} PDF`);
+  }
+
+  const dateStamp = new Date().toISOString().slice(0, 10);
+  const slug = scopeNorm === 'QA' ? 'QA' : scopeNorm === 'ALL' ? 'Plant_Wide' : 'Production';
+  const fallbackName = `Yokohama_${slug}_Section_Summary_${dateStamp}.pdf`;
+
+  try {
+    const res = await fetch(`/api/export/section-summary-pdf?scope=${encodeURIComponent(scopeNorm)}`, {
+      method: 'GET',
+      headers: (typeof getAuthHeaders === 'function' ? getAuthHeaders() : {}),
+      credentials: 'include'
+    });
+    const contentType = res.headers.get('Content-Type') || '';
+    if (res.ok && contentType.includes('application/pdf')) {
+      const blob = await res.blob();
+      const cd = res.headers.get('Content-Disposition') || '';
+      const match = cd.match(/filename="?([^"]+)"?/);
+      const filename = (match && match[1]) ? match[1] : fallbackName;
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      showToast(`${label} PDF downloaded successfully!`);
+      return;
+    }
+  } catch (err) {
+    console.warn('Server summary PDF endpoint fallback to client generator:', err && err.message);
+  }
+
+  // Client-side html2pdf fallback
+  try {
+    if (typeof window.html2pdf === 'undefined') {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'html2pdf.bundle.min.js';
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('Failed to load html2pdf library'));
+        document.head.appendChild(s);
+      });
+    }
+    if (typeof window.generateSectionSummaryReportHtml !== 'function') {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'report_html_generator.js?v=66.0';
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('Failed to load summary report template'));
+        document.head.appendChild(s);
+      });
+    }
+
+    const records = getStoredRecords();
+    const allOjt = getStoredOjtRecords();
+    const sections = [];
+
+    if (scopeNorm === 'PRODUCTION' || scopeNorm === 'ALL') {
+      sections.push(...getActiveProductionSectionRows(records, allOjt, ''));
+    }
+    if (scopeNorm === 'QA' || scopeNorm === 'ALL') {
+      const qaActiveEmps = (EMPLOYEES || []).filter(e => !e.isLeft && e.status !== 'LEFT' && !isProductionDeptClient(e.dept));
+      QA_SECTIONS_LIST.forEach(sec => {
+        const list = qaActiveEmps.filter(e => normalizeSectionName(e.section) === sec.normName);
+        let examDone = 0, examPassed = 0, ojtDone = 0, ojtPassed = 0, bothDone = 0, bothPassed = 0;
+        list.forEach(e => {
+          const rec = records[e.empNo];
+          const ojt = allOjt[e.empNo];
+          const hasExam = Boolean(rec && rec.isCompleted);
+          const isExamPass = hasExam && (rec.status === 'Passed' || (rec.markPct !== undefined && Number(rec.markPct) >= 50));
+          const hasOjt = Boolean(ojt && (ojt.totalScore !== undefined || ojt.scorePct !== undefined));
+          const isOjtPass = hasOjt && (ojt.qualificationStatus === 'Qualified' || (ojt.scorePct !== undefined && Number(ojt.scorePct) >= 70));
+          if (hasExam) { examDone++; if (isExamPass) examPassed++; }
+          if (hasOjt) { ojtDone++; if (isOjtPass) ojtPassed++; }
+          if (hasExam && hasOjt) { bothDone++; if (isExamPass && isOjtPass) bothPassed++; }
+        });
+        const total = list.length;
+        sections.push({
+          name: sec.title,
+          deptGroup: 'QUALITY CONTROL',
+          total,
+          examDone,
+          examPassed,
+          ojtDone,
+          ojtPassed,
+          bothDone,
+          bothPassed,
+          pending: Math.max(0, total - bothDone),
+          completionPct: total > 0 ? Math.round((bothDone / total) * 100) : 0
+        });
+      });
+    }
+
+    const activePool = (EMPLOYEES || []).filter(e => {
+      if (e.isLeft || e.status === 'LEFT') return false;
+      if (scopeNorm === 'PRODUCTION') return isProductionDeptClient(e.dept);
+      if (scopeNorm === 'QA') return !isProductionDeptClient(e.dept);
+      return true;
+    });
+    const levelBreakdown = { I: 0, L: 0, U: 0, O: 0 };
+    activePool.forEach(e => {
+      const lvl = String(e.currentLevel || 'I').trim().toUpperCase();
+      levelBreakdown[Object.prototype.hasOwnProperty.call(levelBreakdown, lvl) ? lvl : 'I']++;
+    });
+
+    const totals = sections.reduce((acc, s) => {
+      acc.total += s.total;
+      acc.examDone += s.examDone;
+      acc.examPassed += s.examPassed;
+      acc.ojtDone += s.ojtDone;
+      acc.ojtPassed += s.ojtPassed;
+      acc.bothDone += s.bothDone;
+      acc.bothPassed += s.bothPassed;
+      acc.pending += s.pending;
+      return acc;
+    }, { total: 0, examDone: 0, examPassed: 0, ojtDone: 0, ojtPassed: 0, bothDone: 0, bothPassed: 0, pending: 0, completionPct: 0 });
+    totals.completionPct = totals.total > 0 ? Math.round((totals.bothDone / totals.total) * 100) : 0;
+
+    const logoBase64 = typeof getBrowserLogoBase64 === 'function' ? await getBrowserLogoBase64() : '';
+    const html = window.generateSectionSummaryReportHtml({
+      scope: scopeNorm,
+      sections,
+      totals,
+      levelBreakdown,
+      leftCount: (typeof window._lastLeftEmployeesCount === 'number' ? window._lastLeftEmployeesCount : 0),
+      logoBase64
+    });
+
+    // Build self-contained fragment string and force scrollX/scrollY = 0 so scrolled dashboards never capture blank white pages
+    const styleMatch = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    const fragHtml = `${styleMatch ? `<style>${styleMatch[1]}</style>` : ''}<div style="width: 730px; max-width: 100%; background: #FFFFFF; color: #0F172A; font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0;">${bodyMatch ? bodyMatch[1] : html}</div>`;
+
+    await window.html2pdf().set({
+      margin: [6, 6, 6, 6],
+      filename: fallbackName,
+      image: { type: 'jpeg', quality: 0.96 },
+      html2canvas: {
+        scale: 1.5,
+        useCORS: true,
+        logging: false,
+        scrollX: 0,
+        scrollY: 0,
+        backgroundColor: '#FFFFFF'
+      },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'] }
+    }).from(fragHtml).save();
+
+    showToast(`${label} PDF downloaded successfully!`);
+  } catch (clientErr) {
+    console.error('Summary PDF export failed:', clientErr);
+    showToast(`Failed to generate ${label} PDF. Please try again.`);
+  }
+}
+window.filterProdSectionTracker = filterProdSectionTracker;
+window.downloadSectionSummaryPdf = downloadSectionSummaryPdf;
+window.renderDashboardProdSectionMatrix = renderDashboardProdSectionMatrix;
+
+function renderDashboardSectionMatrix(records, allOjt) {
   const tbody = document.getElementById('dashboardSectionTableBody');
   if (!tbody) return;
   tbody.innerHTML = '';
 
-  records = records || ((typeof getStoredRecords === 'function') ? getStoredRecords() : {});
-  allOjt = allOjt || ((typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {});
-
-  // Determine sections based on active department tracker
-  let targetSections = [];
-  let headerTitle = 'Production Section-Wise Completion Tracker';
-  let headerSub = 'Real-time associate breakdown of MCQ Assessment and Skill Assessment completion across all 25 Production sections';
-  let badgeText = '25 Production Sections';
-
-  if (currentDashboardDeptTracker === 'PRODUCTION') {
-    targetSections = PROD_SECTIONS_LIST;
-    headerTitle = 'Production Section-Wise Completion Tracker';
-    headerSub = 'Real-time associate breakdown of MCQ Assessment and Skill Assessment completion across all 25 Production sections (1,179 Associates)';
-    badgeText = '25 Production Sections';
-  } else if (currentDashboardDeptTracker === 'QUALITY CONTROL') {
-    targetSections = QA_SECTIONS_LIST;
-    headerTitle = 'QA Section-Wise Completion Tracker';
-    headerSub = 'Real-time employee breakdown of MCQ Assessment and Skill Assessment completion across all 8 QA sections (283 Associates)';
-    badgeText = '8 QA Sections';
-  } else {
-    targetSections = ALL_PLANT_SECTIONS_LIST;
-    headerTitle = 'Plant-Wide Section Completion Tracker';
-    headerSub = 'Comprehensive completion breakdown across all 33 manufacturing & QA sections (1,462 Associates)';
-    badgeText = '33 Total Sections';
-  }
-
-  // Update header text in DOM
-  const titleEl = document.getElementById('dashboardSectionTrackerTitle');
-  if (titleEl) titleEl.innerText = headerTitle;
-  const subEl = document.getElementById('dashboardSectionTrackerSubtitle');
-  if (subEl) subEl.innerText = headerSub;
-  const badgeEl = document.getElementById('dashboardSectionTrackerBadge');
-  if (badgeEl) badgeEl.innerText = badgeText;
-
-  // Filter sections by search text if provided
-  const query = (filterText || currentDashboardSecSearchQuery || '').toLowerCase().trim();
-  const visibleSections = query
-    ? targetSections.filter(s => s.name.toLowerCase().includes(query) || s.title.toLowerCase().includes(query) || s.code.toLowerCase().includes(query))
-    : targetSections;
-
-  const showingEl = document.getElementById('dashboardSecShowingText');
-  if (showingEl) {
-    showingEl.innerText = `Showing ${visibleSections.length} of ${targetSections.length} sections`;
-  }
-
-  if (visibleSections.length === 0) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="8" style="text-align: center; padding: 32px; color: var(--text-muted);">
-          No sections match "${query}". <button type="button" class="btn-secondary" style="margin-left: 8px; padding: 4px 10px; font-size: 0.78rem;" onclick="document.getElementById('dashboardSecSearch').value=''; handleDashboardSecSearch('');">Clear Search</button>
-        </td>
-      </tr>
-    `;
-    return;
-  }
-
-  visibleSections.forEach((sec, idx) => {
-    const emps = EMPLOYEES.filter(e => {
-      const s = typeof normalizeSectionName === 'function' ? normalizeSectionName(e.section) : (e.section || '').toLowerCase().trim();
-      return s === sec.normName;
-    });
+  QA_SECTIONS_LIST.forEach((sec, idx) => {
+    const emps = EMPLOYEES.filter(e => !isProductionDeptClient(e.dept) && normalizeSectionName(e.section) === sec.normName);
     const total = emps.length;
 
     let examDone = 0;
@@ -2344,31 +2469,27 @@ function renderDashboardSectionMatrix(records, allOjt, filterText = '') {
     });
 
     const completionPct = total > 0 ? Math.round((bothDone / total) * 100) : 0;
-    const isProd = (sec.dept === 'PRODUCTION') || (!sec.name.toLowerCase().includes('qa'));
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td style="font-weight: 700; color: var(--text-muted); font-variant-numeric: tabular-nums;">${idx + 1}</td>
+      <td style="font-weight: 700; color: var(--text-muted);">${idx + 1}</td>
       <td>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 0.72rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: ${isProd ? '#EDE9FE' : '#EFF6FF'}; color: ${isProd ? '#6D28D9' : '#0284C7'}; border: 1px solid ${isProd ? '#DDD6FE' : '#BFDBFE'};">${sec.code}</span>
-          <div style="font-weight: 700; color: var(--text-main); font-size: 0.92rem;">${sec.title}</div>
-        </div>
-        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">${isProd ? 'Production Department' : 'Quality Control Department'} &bull; ${sec.name}</div>
+        <div style="font-weight: 700; color: var(--text-main); font-size: 0.92rem;">${sec.title}</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted);">${sec.code} Section &bull; ${sec.name}</div>
       </td>
-      <td style="text-align: center; font-weight: 700; font-variant-numeric: tabular-nums;">${total}</td>
+      <td style="text-align: center; font-weight: 700;">${total}</td>
       <td style="text-align: center;">
-        <span class="${examDone > 0 ? 'badge-pass' : ''}" style="display: inline-block; padding: 3px 8px; font-weight: 700; font-size: 0.8rem; font-variant-numeric: tabular-nums;">
+        <span class="${examDone > 0 ? 'badge-pass' : ''}" style="display: inline-block; padding: 3px 8px; font-weight: 700; font-size: 0.8rem;">
           ${examDone} / ${total}
         </span>
       </td>
       <td style="text-align: center;">
-        <span class="${ojtDone > 0 ? 'badge-pass' : ''}" style="display: inline-block; padding: 3px 8px; font-weight: 700; font-size: 0.8rem; background: ${ojtDone > 0 ? '#DCFCE7' : '#F1F5F9'}; color: ${ojtDone > 0 ? '#166534' : '#64748B'}; font-variant-numeric: tabular-nums;">
+        <span class="${ojtDone > 0 ? 'badge-pass' : ''}" style="display: inline-block; padding: 3px 8px; font-weight: 700; font-size: 0.8rem; background: ${ojtDone > 0 ? '#DCFCE7' : '#F1F5F9'}; color: ${ojtDone > 0 ? '#166534' : '#64748B'};">
           ${ojtDone} / ${total}
         </span>
       </td>
       <td style="text-align: center;">
-        <span style="display: inline-block; padding: 3px 8px; font-weight: 800; font-size: 0.82rem; background: ${bothDone > 0 ? '#DBEAFE' : '#F8FAFC'}; color: ${bothDone > 0 ? '#1E40AF' : '#94A3B8'}; border-radius: 6px; font-variant-numeric: tabular-nums;">
+        <span style="display: inline-block; padding: 3px 8px; font-weight: 800; font-size: 0.82rem; background: ${bothDone > 0 ? '#DBEAFE' : '#F8FAFC'}; color: ${bothDone > 0 ? '#1E40AF' : '#94A3B8'}; border-radius: 6px;">
           ${bothDone} / ${total}
         </span>
       </td>
@@ -2377,7 +2498,7 @@ function renderDashboardSectionMatrix(records, allOjt, filterText = '') {
           <div style="flex: 1; background: #E2E8F0; height: 8px; border-radius: 4px; overflow: hidden;">
             <div style="width: ${completionPct}%; background: #059669; height: 100%; border-radius: 4px; transition: width 0.3s ease;"></div>
           </div>
-          <span style="font-size: 0.76rem; font-weight: 700; color: #0F172A; min-width: 50px; text-align: right; font-variant-numeric: tabular-nums;">${bothDone} Done</span>
+          <span style="font-size: 0.76rem; font-weight: 700; color: #0F172A; min-width: 50px; text-align: right;">${bothDone} Done</span>
         </div>
       </td>
       <td style="text-align: center;">
@@ -2385,11 +2506,9 @@ function renderDashboardSectionMatrix(records, allOjt, filterText = '') {
           <button type="button" class="btn-primary" style="padding: 4px 10px; font-size: 0.76rem; background: #005B9E; border-color: #005B9E;" onclick="showSectionCompletedModal('${sec.id}')">
             View List
           </button>
-          ${!isProd ? `
-            <button type="button" class="btn-secondary" style="padding: 4px 8px; font-size: 0.76rem;" onclick="navigateTo('/control-center/sections'); renderSectionsExplorer('${sec.id}');">
-              Explorer
-            </button>
-          ` : ''}
+          <button type="button" class="btn-secondary" style="padding: 4px 8px; font-size: 0.76rem;" onclick="navigateTo('/control-center/sections'); renderSectionsExplorer('${sec.id}');">
+            Explorer
+          </button>
           <button type="button" class="btn-reset" style="padding: 4px 8px; font-size: 0.74rem;" onclick="resetSectionExams('${sec.id}', '${sec.title.replace(/'/g, "\\'")}')" title="Reset all candidate exams for ${sec.title}">
             Reset
           </button>
@@ -2399,6 +2518,7 @@ function renderDashboardSectionMatrix(records, allOjt, filterText = '') {
     tbody.appendChild(tr);
   });
 }
+
 let currentModalSectionId = null;
 let currentModalFilterType = 'ALL';
 
@@ -2406,7 +2526,7 @@ function showSectionCompletedModal(secId, filterType = 'ALL') {
   currentModalSectionId = secId;
   currentModalFilterType = filterType;
 
-  const sec = (typeof getSectionObj === 'function') ? getSectionObj(secId) : (QA_SECTIONS_LIST.find(s => s.id === secId) || QA_SECTIONS_LIST[0]);
+  const sec = resolveSectionDefinitionClient(secId);
   const modal = document.getElementById('modalSectionCompleted');
   if (!modal) return;
 
@@ -2445,8 +2565,13 @@ function filterModalEmployees(type) {
     }
   });
 
-  const sec = (typeof getSectionObj === 'function') ? getSectionObj(currentModalSectionId) : (QA_SECTIONS_LIST.find(s => s.id === currentModalSectionId) || QA_SECTIONS_LIST[0]);
-  const sectionEmps = EMPLOYEES.filter(e => normalizeSectionName(e.section) === sec.normName);
+  const sec = resolveSectionDefinitionClient(currentModalSectionId);
+  const sectionEmps = EMPLOYEES.filter(e => {
+    if (sec.type === 'QA') {
+      return !isProductionDeptClient(e.dept) && normalizeSectionName(e.section) === sec.normName;
+    }
+    return isProductionDeptClient(e.dept) && String(e.section || '').trim().toLowerCase().replace(/\s+/g, ' ') === sec.normName;
+  });
   const records = getStoredRecords();
   const allOjt = getStoredOjtRecords();
 
@@ -2538,21 +2663,6 @@ function filterModalEmployees(type) {
   });
 }
 
-// Canonical ILUO Level & Status Color Systems (Matching CSS Variables)
-const ILUO_LEVEL_COLORS = {
-  I: { text: '#334155', bg: '#F1F5F9', border: '#94A3B8', chart: '#64748B' },
-  L: { text: '#92400E', bg: '#FEF3C7', border: '#F59E0B', chart: '#D97706' },
-  U: { text: '#1E40AF', bg: '#DBEAFE', border: '#3B82F6', chart: '#2563EB' },
-  O: { text: '#14532D', bg: '#DCFCE7', border: '#10B981', chart: '#059669' }
-};
-
-const SYSTEM_STATUS_COLORS = {
-  passed: { text: '#166534', bg: '#DCFCE7', border: '#86EFAC', chart: '#059669' },
-  pending: { text: '#92400E', bg: '#FEF3C7', border: '#FCD34D', chart: '#D97706' },
-  failed: { text: '#991B1B', bg: '#FEE2E2', border: '#FCA5A5', chart: '#DC2626' },
-  inProgress: { text: '#1E40AF', bg: '#DBEAFE', border: '#93C5FD', chart: '#2563EB' }
-};
-
 function renderPieChart(completed, inProgress, notStarted) {
   const canvas = document.getElementById('completionPieChart');
   if (!canvas || typeof Chart === 'undefined') return;
@@ -2569,11 +2679,7 @@ function renderPieChart(completed, inProgress, notStarted) {
         labels: ['Completed', 'In Progress', 'Not Attempted'],
         datasets: [{
           data: [completed, inProgress, notStarted],
-          backgroundColor: [
-            SYSTEM_STATUS_COLORS.passed.chart,
-            SYSTEM_STATUS_COLORS.inProgress.chart,
-            SYSTEM_STATUS_COLORS.pending.chart
-          ]
+          backgroundColor: ['#10B981', '#F59E0B', '#94A3B8']
         }]
       },
       options: {
@@ -2616,12 +2722,7 @@ function renderBarChart(records) {
         datasets: [{
           label: 'Employee Count',
           data: [iCount, lCount, uCount, oCount],
-          backgroundColor: [
-            ILUO_LEVEL_COLORS.I.chart,
-            ILUO_LEVEL_COLORS.L.chart,
-            ILUO_LEVEL_COLORS.U.chart,
-            ILUO_LEVEL_COLORS.O.chart
-          ]
+          backgroundColor: ['#3B82F6', '#F59E0B', '#10B981', '#E31B23']
         }]
       },
       options: {
@@ -2769,422 +2870,932 @@ function renderSectionPieChart() {
   }
 }
 
-function setCategoryBarMode(mode) {
-  currentCategoryBarMode = mode;
-  document.querySelectorAll('.chart-btn-pill').forEach(btn => {
-    btn.classList.remove('active');
-  });
-  const mapBtn = {
-    'top-overall': 'btnPillTopOverall',
-    'top-safety': 'btnPillSafety',
-    'top-process': 'btnPillProcess',
-    'top-quality': 'btnPillQuality',
-    'top-citpm': 'btnPillCiTpm',
-    'section-avg': 'btnPillSecAvg'
-  };
-  const targetId = mapBtn[mode];
-  if (targetId && document.getElementById(targetId)) {
-    document.getElementById(targetId).classList.add('active');
+// =========================================================================
+// EXECUTIVE ANALYTICS ENGINE (Admin, Department HOD, and Section Supervisor)
+// Combines Completion Status (Stacked Bar) + Average Score & Pass Rate (Lines)
+// + Interactive "Who Completed vs Not Finished" Drill-down Roster
+// =========================================================================
+const execAnalyticsState = {
+  admin: {
+    groupBy: 'section', // 'section' | 'department'
+    unit: 'count',      // 'count' | 'percent'
+    rosterFilter: 'ALL',
+    clickedGroup: null,
+    chartInstance: null,
+    lastEmps: []
+  },
+  dept: {
+    unit: 'count',
+    rosterFilter: 'ALL',
+    clickedGroup: null,
+    chartInstance: null,
+    lastDept: '',
+    lastEmps: [],
+    lastSections: []
+  },
+  section: {
+    unit: 'count',
+    chartInstance: null,
+    lastSecName: '',
+    lastEmps: []
   }
-  renderCategoryPerformanceBarChart();
-}
+};
 
-function getRecordCategoryMarks(rec) {
-  if (!rec) return { safetyMark: 0, safetyTotal: 0, processMark: 0, processTotal: 0, qualityMark: 0, qualityTotal: 0, ciTpmMark: 0, ciTpmTotal: 0, totalMark: 0, percentage: 0 };
-  let sMark = rec.safetyMark, sTot = rec.safetyTotal;
-  let pMark = rec.processMark, pTot = rec.processTotal;
-  let qMark = rec.qualityMark, qTot = rec.qualityTotal;
-  let ciMark = rec.ciTpmMark, ciTot = rec.ciTpmTotal;
-
-  if (sMark === undefined && rec.submittedQuestions && rec.submittedQuestions.length > 0) {
-    sMark = 0; sTot = 0; pMark = 0; pTot = 0; qMark = 0; qTot = 0; ciMark = 0; ciTot = 0;
-    rec.submittedQuestions.forEach(q => {
-      const cat = (q.category || '').toLowerCase();
-      const qText = (q.question || '').toLowerCase();
-      if (cat.includes('safety')) {
-        sTot++;
-        if (q.isCorrect) sMark++;
-      } else if (cat.includes('ci') || cat.includes('tpm')) {
-        ciTot++;
-        if (q.isCorrect) ciMark++;
-      } else if (cat.includes('quality') || qText.includes('quality') || qText.includes('defect') || qText.includes('inspect') || qText.includes('standard') || qText.includes('spec') || qText.includes('tolerance') || qText.includes('scrap') || qText.includes('check') || qText.includes('sample') || qText.includes('audit')) {
-        qTot++;
-        if (q.isCorrect) qMark++;
-      } else {
-        pTot++;
-        if (q.isCorrect) pMark++;
-      }
-    });
-  } else if (qMark === undefined && pMark !== undefined) {
-    const half = Math.floor(pMark / 2);
-    qMark = pMark - half;
-    pMark = half;
-    if (pTot) {
-      const halfTot = Math.floor(pTot / 2);
-      qTot = pTot - halfTot;
-      pTot = halfTot;
-    }
-  } else if (sMark === undefined && rec.totalMark > 0) {
-    sMark = Math.min(10, Math.floor(rec.totalMark * 0.25));
-    pMark = Math.min(10, Math.floor(rec.totalMark * 0.25));
-    qMark = Math.min(10, Math.floor(rec.totalMark * 0.25));
-    ciMark = Math.max(0, rec.totalMark - sMark - pMark - qMark);
-    sTot = 10; pTot = 10; qTot = 10; ciTot = 10;
-  }
-
+function getExecPalette() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   return {
-    safetyMark: sMark !== undefined ? Number(sMark) : 0,
-    safetyTotal: sTot !== undefined ? Number(sTot) : 0,
-    processMark: pMark !== undefined ? Number(pMark) : 0,
-    processTotal: pTot !== undefined ? Number(pTot) : 0,
-    qualityMark: qMark !== undefined ? Number(qMark) : 0,
-    qualityTotal: qTot !== undefined ? Number(qTot) : 0,
-    ciTpmMark: ciMark !== undefined ? Number(ciMark) : 0,
-    ciTpmTotal: ciTot !== undefined ? Number(ciTot) : 0,
-    totalMark: Number(rec.totalMark || rec.score || 0),
-    percentage: Number(rec.percentage || 0)
+    isDark,
+    text: isDark ? '#CBD5E1' : '#334155',
+    muted: isDark ? '#94A3B8' : '#64748B',
+    grid: isDark ? 'rgba(148, 163, 184, 0.14)' : 'rgba(15, 23, 42, 0.08)',
+    completed: '#059669',
+    inProgress: '#D97706',
+    notAttempted: isDark ? '#475569' : '#CBD5E1',
+    avgLine: isDark ? '#38BDF8' : '#003D6B',
+    passLine: isDark ? '#A78BFA' : '#7C3AED'
   };
 }
 
-function renderCategoryPerformanceBarChart() {
-  const canvas = document.getElementById('categoryPerformanceBarChart');
+function getExamTotalQuestionsClient(rec, emp) {
+  if (rec && Array.isArray(rec.submittedQuestions) && rec.submittedQuestions.length > 0) {
+    return rec.submittedQuestions.length;
+  }
+  if (rec && rec.totalQuestions > 0) return Number(rec.totalQuestions);
+  const lvl = String((rec && rec.targetLevel) || (emp && emp.targetLevel) || (emp && emp.currentLevel) || 'L').toUpperCase();
+  if (lvl === 'O') return 40;
+  if (lvl === 'U') return 30;
+  return 20;
+}
+
+function getExamMarksAndPctClient(rec, emp) {
+  if (!rec || !rec.isCompleted) {
+    return { completed: false, marks: 0, totalQ: getExamTotalQuestionsClient(rec, emp), pct: null, passed: false };
+  }
+  const totalQ = getExamTotalQuestionsClient(rec, emp);
+  const marks = rec.totalMark !== undefined
+    ? Number(rec.totalMark)
+    : (rec.score !== undefined ? Number(rec.score) : (Array.isArray(rec.submittedQuestions) ? rec.submittedQuestions.filter(q => q.isCorrect).length : 0));
+  let pct = rec.markPct !== undefined ? Number(rec.markPct) : (rec.percentage !== undefined ? Number(rec.percentage) : null);
+  if (pct === null || isNaN(pct)) {
+    pct = totalQ > 0 ? Math.round((marks / totalQ) * 100) : 0;
+  }
+  pct = Math.max(0, Math.min(100, Number(pct.toFixed(1))));
+  const passThreshold = typeof getExamPassThreshold === 'function' ? getExamPassThreshold() : 50;
+  const passed = rec.status === 'Passed' || (rec.status !== 'Failed' && !String(rec.status || '').includes('Terminated') && pct >= passThreshold);
+  return { completed: true, marks, totalQ, pct, passed };
+}
+
+function buildExecBuckets(emps, records, groupMode, sortMode) {
+  const map = new Map();
+  const LEVEL_ORDER = { L: 'Level L (I → L)', U: 'Level U (L → U)', O: 'Level O (U → O)', I: 'Level I (Induction)' };
+  const targetMap = { I: 'L', L: 'U', U: 'O', O: 'O' };
+
+  if (groupMode === 'level') {
+    ['L', 'U', 'O', 'I'].forEach(k => {
+      map.set(k, {
+        key: k,
+        label: LEVEL_ORDER[k],
+        total: 0,
+        completed: 0,
+        inProgress: 0,
+        notAttempted: 0,
+        notFinished: 0,
+        passed: 0,
+        pctSum: 0
+      });
+    });
+  }
+
+  (emps || []).forEach(emp => {
+    let key = 'General';
+    if (groupMode === 'department') {
+      key = String(emp.dept || 'UNASSIGNED').trim().toUpperCase();
+    } else if (groupMode === 'section') {
+      key = String(emp.section || 'UNASSIGNED').trim();
+    } else if (groupMode === 'level') {
+      const cur = String(emp.currentLevel || 'I').trim().toUpperCase();
+      key = cur === 'I' ? 'I' : (targetMap[cur] || 'L');
+    }
+
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        label: key,
+        total: 0,
+        completed: 0,
+        inProgress: 0,
+        notAttempted: 0,
+        notFinished: 0,
+        passed: 0,
+        pctSum: 0
+      });
+    }
+    const bucket = map.get(key);
+    bucket.total++;
+
+    const rec = records ? records[emp.empNo] : null;
+    if (rec && rec.isCompleted) {
+      bucket.completed++;
+      const m = getExamMarksAndPctClient(rec, emp);
+      bucket.pctSum += (m.pct || 0);
+      if (m.passed) bucket.passed++;
+    } else if (rec && rec.inProgress) {
+      bucket.inProgress++;
+      bucket.notFinished++;
+    } else {
+      bucket.notAttempted++;
+      bucket.notFinished++;
+    }
+  });
+
+  const rows = Array.from(map.values())
+    .filter(b => b.total > 0)
+    .map(b => {
+      const completionPct = b.total > 0 ? Number(((b.completed / b.total) * 100).toFixed(1)) : 0;
+      const inProgressPct = b.total > 0 ? Number(((b.inProgress / b.total) * 100).toFixed(1)) : 0;
+      const notAttemptedPct = b.total > 0 ? Number(Math.max(0, 100 - completionPct - inProgressPct).toFixed(1)) : 0;
+      const avgScorePct = b.completed > 0 ? Number((b.pctSum / b.completed).toFixed(1)) : 0;
+      const passRatePct = b.completed > 0 ? Number(((b.passed / b.completed) * 100).toFixed(1)) : 0;
+      return {
+        ...b,
+        completionPct,
+        inProgressPct,
+        notAttemptedPct,
+        avgScorePct,
+        passRatePct
+      };
+    });
+
+  if (groupMode !== 'level') {
+    if (sortMode === 'completion-asc') {
+      rows.sort((a, b) => a.completionPct - b.completionPct || b.notFinished - a.notFinished);
+    } else if (sortMode === 'avg-desc') {
+      rows.sort((a, b) => b.avgScorePct - a.avgScorePct || b.completionPct - a.completionPct);
+    } else if (sortMode === 'avg-asc') {
+      rows.sort((a, b) => a.avgScorePct - b.avgScorePct || b.notFinished - a.notFinished);
+    } else if (sortMode === 'alpha') {
+      rows.sort((a, b) => a.label.localeCompare(b.label));
+    } else {
+      rows.sort((a, b) => b.notFinished - a.notFinished || a.completionPct - b.completionPct);
+    }
+  }
+
+  return rows;
+}
+
+function summarizeExecPool(emps, records) {
+  let total = 0, completed = 0, inProgress = 0, notAttempted = 0, passed = 0, pctSum = 0;
+  (emps || []).forEach(emp => {
+    total++;
+    const rec = records ? records[emp.empNo] : null;
+    if (rec && rec.isCompleted) {
+      completed++;
+      const m = getExamMarksAndPctClient(rec, emp);
+      pctSum += (m.pct || 0);
+      if (m.passed) passed++;
+    } else if (rec && rec.inProgress) {
+      inProgress++;
+    } else {
+      notAttempted++;
+    }
+  });
+  const notFinished = inProgress + notAttempted;
+  return {
+    total,
+    completed,
+    inProgress,
+    notAttempted,
+    notFinished,
+    completionPct: total > 0 ? Number(((completed / total) * 100).toFixed(1)) : 0,
+    notFinishedPct: total > 0 ? Number(((notFinished / total) * 100).toFixed(1)) : 0,
+    avgScorePct: completed > 0 ? Number((pctSum / completed).toFixed(1)) : 0,
+    passRatePct: completed > 0 ? Number(((passed / completed) * 100).toFixed(1)) : 0,
+    passed
+  };
+}
+
+function renderExecKpiStripHtml(sum) {
+  return `
+    <div class="exec-kpi-cell">
+      <div class="exec-kpi-label"><span class="exec-kpi-dot" style="background:#059669;"></span>Completed</div>
+      <div class="exec-kpi-val">${sum.completed.toLocaleString()}</div>
+      <div class="exec-kpi-sub">${sum.completionPct}% of ${sum.total.toLocaleString()} active</div>
+    </div>
+    <div class="exec-kpi-cell">
+      <div class="exec-kpi-label"><span class="exec-kpi-dot" style="background:#D97706;"></span>Not Finished</div>
+      <div class="exec-kpi-val">${sum.notFinished.toLocaleString()}</div>
+      <div class="exec-kpi-sub">${sum.inProgress} in progress · ${sum.notAttempted} pending</div>
+    </div>
+    <div class="exec-kpi-cell">
+      <div class="exec-kpi-label"><span class="exec-kpi-dot" style="background:#005B9E;"></span>Average Score</div>
+      <div class="exec-kpi-val">${sum.completed > 0 ? `${sum.avgScorePct}%` : '—'}</div>
+      <div class="exec-kpi-sub">${sum.completed > 0 ? `Across ${sum.completed} completed` : 'No completed attempts yet'}</div>
+    </div>
+    <div class="exec-kpi-cell">
+      <div class="exec-kpi-label"><span class="exec-kpi-dot" style="background:#7C3AED;"></span>Pass Rate</div>
+      <div class="exec-kpi-val">${sum.completed > 0 ? `${sum.passRatePct}%` : '—'}</div>
+      <div class="exec-kpi-sub">${sum.passed} passed / ${Math.max(0, sum.completed - sum.passed)} retest</div>
+    </div>
+  `;
+}
+
+function renderExecComboChart(canvasId, scopeKey, buckets, unitMode, onBarClick) {
+  const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   if (typeof Chart === 'undefined') {
-    setTimeout(renderCategoryPerformanceBarChart, 300);
+    setTimeout(() => renderExecComboChart(canvasId, scopeKey, buckets, unitMode, onBarClick), 250);
     return;
   }
+  const state = execAnalyticsState[scopeKey];
+  if (state && state.chartInstance) {
+    try { state.chartInstance.destroy(); } catch (e) {}
+    state.chartInstance = null;
+  }
+
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
-  if (categoryBarChartInstance) {
-    try { categoryBarChartInstance.destroy(); } catch (e) {}
-  }
+  const displayBuckets = buckets.slice(0, 18);
+  const pal = getExecPalette();
+  const isPct = unitMode === 'percent';
 
-  const deptEl = document.getElementById('categoryBarDeptFilter');
-  const deptFilter = deptEl ? deptEl.value : 'ALL';
-
-  const records = getStoredRecords();
-  const empMap = {};
-  EMPLOYEES.forEach(e => { empMap[e.empNo] = e; });
-
-  const candidates = [];
-  Object.values(records).forEach(rec => {
-    if (!rec || !rec.isCompleted) return;
-    const emp = empMap[rec.empNo] || {};
-    const empDept = emp.dept || rec.dept || '';
-    if (deptFilter !== 'ALL' && empDept !== deptFilter) return;
-
-    const catMarks = getRecordCategoryMarks(rec);
-    candidates.push({
-      empNo: rec.empNo,
-      name: emp.name || rec.empName || rec.empNo,
-      dept: empDept,
-      section: emp.section || rec.section || 'General',
-      level: emp.currentLevel || rec.skillLevel || 'I',
-      safetyMark: catMarks.safetyMark,
-      safetyTotal: catMarks.safetyTotal,
-      processMark: catMarks.processMark,
-      processTotal: catMarks.processTotal,
-      qualityMark: catMarks.qualityMark,
-      qualityTotal: catMarks.qualityTotal,
-      ciTpmMark: catMarks.ciTpmMark,
-      ciTpmTotal: catMarks.ciTpmTotal,
-      totalMark: catMarks.totalMark,
-      percentage: catMarks.percentage
-    });
-  });
-
-  renderCategoryChampions(candidates);
-
-  let labels = [];
-  let safetyData = [];
-  let processData = [];
-  let qualityData = [];
-  let ciTpmData = [];
-  let extraMeta = [];
-
-  if (currentCategoryBarMode === 'section-avg') {
-    const sectionGroups = {};
-    candidates.forEach(c => {
-      const s = c.section;
-      if (!sectionGroups[s]) {
-        sectionGroups[s] = { count: 0, sSum: 0, pSum: 0, qSum: 0, ciSum: 0 };
-      }
-      sectionGroups[s].count++;
-      sectionGroups[s].sSum += c.safetyMark;
-      sectionGroups[s].pSum += c.processMark;
-      sectionGroups[s].qSum += c.qualityMark;
-      sectionGroups[s].ciSum += c.ciTpmMark;
-    });
-
-    const secList = Object.entries(sectionGroups)
-      .map(([sec, g]) => ({
-        sec,
-        count: g.count,
-        avgS: +(g.sSum / g.count).toFixed(1),
-        avgP: +(g.pSum / g.count).toFixed(1),
-        avgQ: +(g.qSum / g.count).toFixed(1),
-        avgCi: +(g.ciSum / g.count).toFixed(1)
-      }))
-      .sort((a, b) => (b.avgS + b.avgP + b.avgQ + b.avgCi) - (a.avgS + a.avgP + a.avgQ + a.avgCi));
-
-    const topSecs = secList.slice(0, 10);
-    labels = topSecs.map(s => s.sec);
-    safetyData = topSecs.map(s => s.avgS);
-    processData = topSecs.map(s => s.avgP);
-    qualityData = topSecs.map(s => s.avgQ);
-    ciTpmData = topSecs.map(s => s.avgCi);
-    extraMeta = topSecs.map(s => ({ subtitle: `${s.count} Candidates Assessed` }));
-
-  } else {
-    if (currentCategoryBarMode === 'top-safety') {
-      candidates.sort((a, b) => b.safetyMark - a.safetyMark || b.totalMark - a.totalMark);
-    } else if (currentCategoryBarMode === 'top-process') {
-      candidates.sort((a, b) => b.processMark - a.processMark || b.totalMark - a.totalMark);
-    } else if (currentCategoryBarMode === 'top-quality') {
-      candidates.sort((a, b) => b.qualityMark - a.qualityMark || b.totalMark - a.totalMark);
-    } else if (currentCategoryBarMode === 'top-citpm') {
-      candidates.sort((a, b) => b.ciTpmMark - a.ciTpmMark || b.totalMark - a.totalMark);
-    } else {
-      candidates.sort((a, b) => b.totalMark - a.totalMark || (b.safetyMark + b.processMark + b.qualityMark + b.ciTpmMark) - (a.safetyMark + a.processMark + a.qualityMark + a.ciTpmMark));
-    }
-
-    const topPerformers = candidates.slice(0, 10);
-    labels = topPerformers.map(c => {
-      const shortName = c.name.length > 15 ? c.name.slice(0, 14) + '…' : c.name;
-      const secCode = (c.section || '').slice(0, 10);
-      return `${shortName} [${secCode}]`;
-    });
-    safetyData = topPerformers.map(c => c.safetyMark);
-    processData = topPerformers.map(c => c.processMark);
-    qualityData = topPerformers.map(c => c.qualityMark);
-    ciTpmData = topPerformers.map(c => c.ciTpmMark);
-    extraMeta = topPerformers.map(c => ({
-      fullName: c.name,
-      empNo: c.empNo,
-      section: c.section,
-      totalMark: c.totalMark,
-      percentage: c.percentage
-    }));
-  }
+  const labels = displayBuckets.map(b => b.label.length > 18 ? b.label.slice(0, 17) + '…' : b.label);
+  const completedSeries = displayBuckets.map(b => isPct ? b.completionPct : b.completed);
+  const inProgressSeries = displayBuckets.map(b => isPct ? b.inProgressPct : b.inProgress);
+  const notAttemptedSeries = displayBuckets.map(b => isPct ? b.notAttemptedPct : b.notAttempted);
+  const avgScoreSeries = displayBuckets.map(b => b.completed > 0 ? b.avgScorePct : null);
+  const passRateSeries = displayBuckets.map(b => b.completed > 0 ? b.passRatePct : null);
 
   try {
-    categoryBarChartInstance = new Chart(ctx, {
-      type: 'bar',
+    state.chartInstance = new Chart(ctx, {
       data: {
-        labels: labels,
+        labels,
         datasets: [
           {
-            label: '🦺 Safety',
-            data: safetyData,
-            backgroundColor: '#EF4444',
-            borderRadius: 4,
-            borderSkipped: false
+            type: 'line',
+            label: 'Avg Score %',
+            data: avgScoreSeries,
+            yAxisID: 'yPct',
+            borderColor: pal.avgLine,
+            backgroundColor: pal.avgLine,
+            borderWidth: 2.5,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBorderWidth: 2,
+            pointBackgroundColor: '#FFFFFF',
+            tension: 0.28,
+            spanGaps: true,
+            order: 0
           },
           {
-            label: '🔄 Process',
-            data: processData,
-            backgroundColor: '#059669',
-            borderRadius: 4,
-            borderSkipped: false
+            type: 'line',
+            label: 'Pass Rate %',
+            data: passRateSeries,
+            yAxisID: 'yPct',
+            borderColor: pal.passLine,
+            backgroundColor: pal.passLine,
+            borderWidth: 2,
+            borderDash: [5, 4],
+            pointRadius: 3.5,
+            pointHoverRadius: 5,
+            tension: 0.25,
+            spanGaps: true,
+            order: 1
           },
           {
-            label: '⚙️ Quality',
-            data: qualityData,
-            backgroundColor: '#2563EB',
-            borderRadius: 4,
-            borderSkipped: false
+            type: 'bar',
+            label: 'Completed',
+            data: completedSeries,
+            yAxisID: 'yCount',
+            backgroundColor: pal.completed,
+            stack: 'completion',
+            borderRadius: 3,
+            maxBarThickness: 34,
+            order: 2
           },
           {
-            label: '💡 CI & TPM',
-            data: ciTpmData,
-            backgroundColor: '#F59E0B',
-            borderRadius: 4,
-            borderSkipped: false
+            type: 'bar',
+            label: 'In Progress',
+            data: inProgressSeries,
+            yAxisID: 'yCount',
+            backgroundColor: pal.inProgress,
+            stack: 'completion',
+            borderRadius: 3,
+            maxBarThickness: 34,
+            order: 3
+          },
+          {
+            type: 'bar',
+            label: 'Not Attempted',
+            data: notAttemptedSeries,
+            yAxisID: 'yCount',
+            backgroundColor: pal.notAttempted,
+            stack: 'completion',
+            borderRadius: { topLeft: 4, topRight: 4 },
+            maxBarThickness: 34,
+            order: 4
           }
         ]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        onClick: (_, elements) => {
+          if (!onBarClick || !elements || elements.length === 0) return;
+          const idx = elements[0].index;
+          const b = displayBuckets[idx];
+          if (b) onBarClick(b.key);
+        },
         plugins: {
           legend: {
             position: 'top',
             labels: {
-              boxWidth: 14,
-              font: { weight: 'bold', size: 12 },
-              padding: 14
+              color: pal.text,
+              usePointStyle: true,
+              boxWidth: 10,
+              padding: 14,
+              font: { size: 11, weight: '600' }
             }
           },
           tooltip: {
             callbacks: {
-              afterTitle: function(context) {
-                const idx = context[0].dataIndex;
-                const m = extraMeta[idx];
-                if (!m) return '';
-                if (m.subtitle) return m.subtitle;
-                return `ID: ${m.empNo} | Section: ${m.section}`;
+              title: (items) => {
+                const idx = items && items[0] ? items[0].dataIndex : -1;
+                return idx >= 0 && displayBuckets[idx] ? displayBuckets[idx].label : '';
               },
-              afterBody: function(context) {
-                const idx = context[0].dataIndex;
-                const m = extraMeta[idx];
-                if (!m || m.totalMark === undefined) return '';
-                const pct = m.percentage || Math.round((m.totalMark / 40) * 100);
-                return `Total Exam Score: ${m.totalMark} Marks (${pct}%)`;
+              afterBody: (items) => {
+                const idx = items && items[0] ? items[0].dataIndex : -1;
+                const b = idx >= 0 ? displayBuckets[idx] : null;
+                if (!b) return [];
+                return [
+                  `────────────────────`,
+                  `Total Active: ${b.total}`,
+                  `Completed: ${b.completed} (${b.completionPct}%)`,
+                  `Not Finished: ${b.notFinished} (${b.inProgress} in progress, ${b.notAttempted} pending)`,
+                  `Avg Score: ${b.completed > 0 ? `${b.avgScorePct}%` : 'No attempts'}`,
+                  `Pass Rate: ${b.completed > 0 ? `${b.passRatePct}%` : '—'}`
+                ];
               }
             }
           }
         },
         scales: {
           x: {
+            stacked: true,
             grid: { display: false },
             ticks: {
-              font: { weight: '600', size: 11 },
+              color: pal.muted,
+              font: { size: 11, weight: '600' },
               maxRotation: 35,
               minRotation: 0
             }
           },
-          y: {
+          yCount: {
+            type: 'linear',
+            position: 'left',
+            stacked: true,
             beginAtZero: true,
-            ticks: { stepSize: 2 },
+            max: isPct ? 100 : undefined,
+            grid: { color: pal.grid },
+            ticks: {
+              color: pal.muted,
+              font: { size: 11 },
+              callback: (v) => isPct ? `${v}%` : v
+            },
             title: {
               display: true,
-              text: currentCategoryBarMode === 'section-avg' ? 'Average Marks Scored' : 'Marks Scored in Category',
-              font: { weight: '700' }
+              text: isPct ? 'Workforce Share (%)' : 'Associates (Headcount)',
+              color: pal.text,
+              font: { size: 11, weight: '700' }
+            }
+          },
+          yPct: {
+            type: 'linear',
+            position: 'right',
+            beginAtZero: true,
+            min: 0,
+            max: 100,
+            grid: { drawOnChartArea: false },
+            ticks: {
+              color: pal.avgLine,
+              font: { size: 11, weight: '600' },
+              callback: (v) => `${v}%`
+            },
+            title: {
+              display: true,
+              text: 'Avg Score & Pass Rate (%)',
+              color: pal.avgLine,
+              font: { size: 11, weight: '700' }
             }
           }
         }
       }
     });
   } catch (err) {
-    console.warn('Category bar chart render notice:', err.message);
+    console.warn('Exec combo chart render notice:', err && err.message);
   }
 }
 
-function renderCategoryChampions(candidates) {
-  const container = document.getElementById('categoryChampionsRow');
-  if (!container) return;
+function setExecChartUnit(scope, unit) {
+  const st = execAnalyticsState[scope];
+  if (!st) return;
+  st.unit = unit === 'percent' ? 'percent' : 'count';
+  if (scope === 'admin') {
+    document.getElementById('btnAdminExecCount')?.classList.toggle('active', st.unit === 'count');
+    document.getElementById('btnAdminExecPct')?.classList.toggle('active', st.unit === 'percent');
+    renderAdminExecAnalytics();
+  } else if (scope === 'dept') {
+    document.getElementById('btnDeptExecCount')?.classList.toggle('active', st.unit === 'count');
+    document.getElementById('btnDeptExecPct')?.classList.toggle('active', st.unit === 'percent');
+    renderDeptExecAnalytics(st.lastEmps, st.lastDept, st.lastSections);
+  } else if (scope === 'section') {
+    document.getElementById('btnSecExecCount')?.classList.toggle('active', st.unit === 'count');
+    document.getElementById('btnSecExecPct')?.classList.toggle('active', st.unit === 'percent');
+    renderSectionExecAnalytics(st.lastEmps, st.lastSecName);
+  }
+}
 
-  if (!candidates || candidates.length === 0) {
-    container.innerHTML = `
-      <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 12px; font-size: 0.85rem;">
-        No completed assessment records found for selected filter.
-      </div>
-    `;
+function setExecRosterFilter(scope, filter) {
+  const st = execAnalyticsState[scope];
+  if (!st) return;
+  st.rosterFilter = filter;
+  if (scope === 'admin') {
+    document.getElementById('adminExecTabAll')?.classList.toggle('active', filter === 'ALL');
+    document.getElementById('adminExecTabDone')?.classList.toggle('active', filter === 'COMPLETED');
+    document.getElementById('adminExecTabNotDone')?.classList.toggle('active', filter === 'NOT_FINISHED');
+    document.getElementById('adminExecTabInProg')?.classList.toggle('active', filter === 'IN_PROGRESS');
+  } else if (scope === 'dept') {
+    document.getElementById('deptExecTabAll')?.classList.toggle('active', filter === 'ALL');
+    document.getElementById('deptExecTabDone')?.classList.toggle('active', filter === 'COMPLETED');
+    document.getElementById('deptExecTabNotDone')?.classList.toggle('active', filter === 'NOT_FINISHED');
+    document.getElementById('deptExecTabInProg')?.classList.toggle('active', filter === 'IN_PROGRESS');
+  }
+  renderExecRoster(scope);
+}
+
+function clearExecGroupFilter(scope) {
+  const st = execAnalyticsState[scope];
+  if (!st) return;
+  st.clickedGroup = null;
+  renderExecRoster(scope);
+}
+
+function renderExecRoster(scope) {
+  const st = execAnalyticsState[scope];
+  if (!st || (scope !== 'admin' && scope !== 'dept')) return;
+
+  const isAdmin = scope === 'admin';
+  const tbody = document.getElementById(isAdmin ? 'adminExecRosterBody' : 'deptExecRosterBody');
+  const footer = document.getElementById(isAdmin ? 'adminExecRosterFooter' : 'deptExecRosterFooter');
+  const chip = document.getElementById(isAdmin ? 'adminExecGroupChip' : 'deptExecSectionChip');
+  const searchEl = document.getElementById(isAdmin ? 'adminExecSearchInput' : 'deptExecSearchInput');
+  if (!tbody) return;
+
+  const records = getStoredRecords();
+  const query = (searchEl ? searchEl.value : '').toLowerCase().trim();
+  const statusFilter = st.rosterFilter || 'ALL';
+  const groupFilter = st.clickedGroup;
+
+  if (chip) {
+    if (groupFilter) {
+      chip.style.display = 'inline-flex';
+      chip.innerHTML = `Filtered: ${escapeHtml(groupFilter)} <button type="button" onclick="clearExecGroupFilter('${scope}')" aria-label="Clear filter">&times;</button>`;
+    } else {
+      chip.style.display = 'none';
+      chip.innerHTML = '';
+    }
+  }
+
+  const matched = [];
+  (st.lastEmps || []).forEach(emp => {
+    if (groupFilter) {
+      const empKey = (scope === 'admin' && st.groupBy === 'department')
+        ? String(emp.dept || '').trim().toUpperCase()
+        : String(emp.section || '').trim();
+      if (empKey !== groupFilter) return;
+    }
+
+    const rec = records[emp.empNo];
+    const isCompleted = Boolean(rec && rec.isCompleted);
+    const isInProgress = Boolean(!isCompleted && rec && rec.inProgress);
+    const isNotFinished = !isCompleted;
+
+    if (statusFilter === 'COMPLETED' && !isCompleted) return;
+    if (statusFilter === 'NOT_FINISHED' && !isNotFinished) return;
+    if (statusFilter === 'IN_PROGRESS' && !isInProgress) return;
+
+    if (query) {
+      const hay = `${emp.empNo || ''} ${emp.name || ''} ${emp.section || ''} ${emp.dept || ''}`.toLowerCase();
+      if (!hay.includes(query)) return;
+    }
+
+    matched.push({ emp, rec, isCompleted, isInProgress });
+  });
+
+  matched.sort((a, b) => {
+    if (a.isCompleted !== b.isCompleted) return a.isCompleted ? -1 : 1;
+    return String(a.emp.empNo).localeCompare(String(b.emp.empNo));
+  });
+
+  const colSpan = isAdmin ? 8 : 7;
+  if (matched.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align:center;padding:24px;color:var(--text-muted);">No associates match the selected completion filter.</td></tr>`;
+    if (footer) footer.textContent = '0 matching associates';
     return;
   }
 
-  const topOverall = [...candidates].sort((a, b) => b.totalMark - a.totalMark)[0];
-  const topSafety = [...candidates].sort((a, b) => b.safetyMark - a.safetyMark || b.totalMark - a.totalMark)[0];
-  const topProcess = [...candidates].sort((a, b) => b.processMark - a.processMark || b.totalMark - a.totalMark)[0];
-  const topQuality = [...candidates].sort((a, b) => b.qualityMark - a.qualityMark || b.totalMark - a.totalMark)[0];
-  const topCiTpm = [...candidates].sort((a, b) => b.ciTpmMark - a.ciTpmMark || b.totalMark - a.totalMark)[0];
+  const cap = 100;
+  const rows = matched.slice(0, cap).map(({ emp, rec, isCompleted, isInProgress }) => {
+    const m = getExamMarksAndPctClient(rec, emp);
+    const lvl = String(emp.currentLevel || 'I').toUpperCase();
+    const statusBadge = isCompleted
+      ? `<span class="${m.passed ? 'badge-pass' : 'badge-fail'}">${m.passed ? 'Completed · Pass' : 'Completed · Retest'}</span>`
+      : isInProgress
+        ? `<span class="badge-pending">In Progress</span>`
+        : `<span style="color:var(--text-light);font-weight:600;font-size:0.8rem;">Not Attempted</span>`;
+    const scoreText = isCompleted
+      ? `<strong>${m.marks}/${m.totalQ}</strong> <span style="color:var(--text-muted);font-size:0.78rem;">(${m.pct}%)</span>`
+      : `<span style="color:var(--text-light);">—</span>`;
+    const dateText = (rec && (rec.attemptDate || rec.submittedAt))
+      ? escapeHtml(String(rec.attemptDate || rec.submittedAt).slice(0, 10))
+      : '—';
 
-  container.innerHTML = `
-    <!-- Card 1: Safety Champion -->
-    <div class="champion-card" style="border-left: 4px solid #EF4444;">
-      <div class="champion-icon-wrap" style="background: #FEE2E2; color: #DC2626;">
-        🦺
-      </div>
-      <div style="flex: 1; min-width: 0;">
-        <div style="font-size: 0.72rem; font-weight: 700; color: #DC2626; text-transform: uppercase; letter-spacing: 0.5px;">Safety Top Performer</div>
-        <div style="font-weight: 800; font-size: 0.95rem; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-          ${escapeHtml(topSafety.name)}
-        </div>
-        <div style="font-size: 0.76rem; color: #64748B;">
-          ${escapeHtml(topSafety.section)} &bull; ${escapeHtml(topSafety.empNo)}
-        </div>
-        <div style="font-size: 0.82rem; font-weight: 800; color: #DC2626; margin-top: 3px;">
-          ${topSafety.safetyMark} Marks in Safety
-        </div>
-      </div>
-    </div>
+    return `
+      <tr>
+        <td data-label="Emp No"><strong>${escapeHtml(emp.empNo)}</strong></td>
+        <td data-label="Name">${escapeHtml(emp.name)}</td>
+        ${isAdmin ? `<td data-label="Dept">${escapeHtml(emp.dept || '-')}</td>` : ''}
+        <td data-label="Section">${escapeHtml(emp.section || '-')}</td>
+        <td data-label="Level"><span class="iluo-badge iluo-badge-${lvl.toLowerCase()}" style="width:24px;height:24px;font-size:0.75rem;">${escapeHtml(lvl)}</span></td>
+        <td data-label="Status">${statusBadge}</td>
+        <td data-label="Score">${scoreText}</td>
+        <td data-label="Date">${dateText}</td>
+      </tr>
+    `;
+  }).join('');
 
-    <!-- Card 2: Process Champion -->
-    <div class="champion-card" style="border-left: 4px solid #059669;">
-      <div class="champion-icon-wrap" style="background: #D1FAE5; color: #059669;">
-        🔄
-      </div>
-      <div style="flex: 1; min-width: 0;">
-        <div style="font-size: 0.72rem; font-weight: 700; color: #059669; text-transform: uppercase; letter-spacing: 0.5px;">Process Top Performer</div>
-        <div style="font-weight: 800; font-size: 0.95rem; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-          ${escapeHtml(topProcess.name)}
-        </div>
-        <div style="font-size: 0.76rem; color: #64748B;">
-          ${escapeHtml(topProcess.section)} &bull; ${escapeHtml(topProcess.empNo)}
-        </div>
-        <div style="font-size: 0.82rem; font-weight: 800; color: #059669; margin-top: 3px;">
-          ${topProcess.processMark} Marks in Process
-        </div>
-      </div>
-    </div>
-
-    <!-- Card 3: Quality Champion -->
-    <div class="champion-card" style="border-left: 4px solid #2563EB;">
-      <div class="champion-icon-wrap" style="background: #DBEAFE; color: #1D4ED8;">
-        ⚙️
-      </div>
-      <div style="flex: 1; min-width: 0;">
-        <div style="font-size: 0.72rem; font-weight: 700; color: #1D4ED8; text-transform: uppercase; letter-spacing: 0.5px;">Quality Top Performer</div>
-        <div style="font-weight: 800; font-size: 0.95rem; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-          ${escapeHtml(topQuality.name)}
-        </div>
-        <div style="font-size: 0.76rem; color: #64748B;">
-          ${escapeHtml(topQuality.section)} &bull; ${escapeHtml(topQuality.empNo)}
-        </div>
-        <div style="font-size: 0.82rem; font-weight: 800; color: #1D4ED8; margin-top: 3px;">
-          ${topQuality.qualityMark} Marks in Quality
-        </div>
-      </div>
-    </div>
-
-    <!-- Card 4: CI & TPM Champion -->
-    <div class="champion-card" style="border-left: 4px solid #F59E0B;">
-      <div class="champion-icon-wrap" style="background: #FEF3C7; color: #D97706;">
-        💡
-      </div>
-      <div style="flex: 1; min-width: 0;">
-        <div style="font-size: 0.72rem; font-weight: 700; color: #D97706; text-transform: uppercase; letter-spacing: 0.5px;">CI &amp; TPM Top Performer</div>
-        <div style="font-weight: 800; font-size: 0.95rem; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-          ${escapeHtml(topCiTpm.name)}
-        </div>
-        <div style="font-size: 0.76rem; color: #64748B;">
-          ${escapeHtml(topCiTpm.section)} &bull; ${escapeHtml(topCiTpm.empNo)}
-        </div>
-        <div style="font-size: 0.82rem; font-weight: 800; color: #D97706; margin-top: 3px;">
-          ${topCiTpm.ciTpmMark} Marks in CI &amp; TPM
-        </div>
-      </div>
-    </div>
-
-    <!-- Card 5: Overall Assessment Top Scorer -->
-    <div class="champion-card" style="border-left: 4px solid #4F46E5;">
-      <div class="champion-icon-wrap" style="background: #EEF2FF; color: #4338CA;">
-        🏆
-      </div>
-      <div style="flex: 1; min-width: 0;">
-        <div style="font-size: 0.72rem; font-weight: 700; color: #4338CA; text-transform: uppercase; letter-spacing: 0.5px;">Overall Plant Rank 1</div>
-        <div style="font-weight: 800; font-size: 0.95rem; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-          ${escapeHtml(topOverall.name)}
-        </div>
-        <div style="font-size: 0.76rem; color: #64748B;">
-          ${escapeHtml(topOverall.section)} &bull; ${escapeHtml(topOverall.empNo)}
-        </div>
-        <div style="font-size: 0.82rem; font-weight: 800; color: #4338CA; margin-top: 3px;">
-          ${topOverall.totalMark} Total Marks (${topOverall.percentage || Math.round((topOverall.totalMark / 40) * 100)}%)
-        </div>
-      </div>
-    </div>
-  `;
+  tbody.innerHTML = rows;
+  if (footer) {
+    footer.textContent = matched.length > cap
+      ? `Showing ${cap} of ${matched.length.toLocaleString()} matching associates (narrow by search or click a chart bar to focus)`
+      : `Showing ${matched.length.toLocaleString()} matching associate${matched.length === 1 ? '' : 's'}`;
+  }
 }
 
-// Question Bank Manager View & Manual Mapping Engine
-function renderQuestionsManager() {
-  const levelFilter = document.getElementById('qLevelFilter').value;
-  const sectionFilter = document.getElementById('qSectionFilter') ? document.getElementById('qSectionFilter').value : 'ALL';
-  const searchVal = document.getElementById('qSearchInput').value.toLowerCase().trim();
-  const container = document.getElementById('questionsListContainer');
-  container.innerHTML = '';
+function setAdminExecGroupBy(mode) {
+  execAnalyticsState.admin.groupBy = mode === 'department' ? 'department' : 'section';
+  execAnalyticsState.admin.clickedGroup = null;
+  document.getElementById('btnAdminExecBySection')?.classList.toggle('active', execAnalyticsState.admin.groupBy === 'section');
+  document.getElementById('btnAdminExecByDept')?.classList.toggle('active', execAnalyticsState.admin.groupBy === 'department');
+  renderAdminExecAnalytics();
+}
+
+function onAdminExecFilterChange() {
+  execAnalyticsState.admin.clickedGroup = null;
+  renderAdminExecAnalytics();
+}
+
+function renderAdminExecAnalytics() {
+  const deptSel = document.getElementById('adminExecDeptFilter');
+  const sortSel = document.getElementById('adminExecSortSelect');
+  const deptFilter = deptSel ? deptSel.value : 'ALL';
+  const sortMode = sortSel ? sortSel.value : 'pending-desc';
+  const records = getStoredRecords();
+
+  const activeEmps = (EMPLOYEES || []).filter(e => {
+    if (e.isLeft || e.status === 'LEFT') return false;
+    if (deptFilter !== 'ALL') {
+      const d = String(e.dept || '').toUpperCase().trim();
+      if (d !== deptFilter && !d.includes(deptFilter)) return false;
+    }
+    return true;
+  });
+
+  execAnalyticsState.admin.lastEmps = activeEmps;
+  const st = execAnalyticsState.admin;
+  const buckets = buildExecBuckets(activeEmps, records, st.groupBy, sortMode);
+  const sum = summarizeExecPool(activeEmps, records);
+
+  const metaEl = document.getElementById('adminExecMeta');
+  if (metaEl) {
+    const scopeName = deptFilter === 'ALL' ? 'All Plant Departments' : deptFilter;
+    const unitWord = st.groupBy === 'department' ? 'departments' : 'sections';
+    const shownCount = Math.min(buckets.length, 18);
+    metaEl.textContent = `${scopeName} · ${buckets.length} ${unitWord}${buckets.length > 18 ? ` (top ${shownCount} shown)` : ''} · Click any bar to filter roster below`;
+  }
+
+  const stripEl = document.getElementById('adminExecKpiStrip');
+  if (stripEl) stripEl.innerHTML = renderExecKpiStripHtml(sum);
+
+  renderExecComboChart('adminExecComboChart', 'admin', buckets, st.unit, (clickedKey) => {
+    st.clickedGroup = st.clickedGroup === clickedKey ? null : clickedKey;
+    renderExecRoster('admin');
+  });
+  renderExecRoster('admin');
+}
+
+function renderDeptExecAnalytics(deptEmps, activeDept, sectionsList) {
+  const safeEmps = Array.isArray(deptEmps) ? deptEmps : [];
+  const st = execAnalyticsState.dept;
+  if (st.lastDept !== activeDept) {
+    st.clickedGroup = null;
+  }
+  st.lastDept = activeDept;
+  st.lastEmps = safeEmps;
+  st.lastSections = Array.isArray(sectionsList) ? sectionsList : [];
+
+  const records = getStoredRecords();
+  const sortSel = document.getElementById('deptExecSortSelect');
+  const sortMode = sortSel ? sortSel.value : 'pending-desc';
+  const buckets = buildExecBuckets(safeEmps, records, 'section', sortMode);
+  const sum = summarizeExecPool(safeEmps, records);
+
+  const metaEl = document.getElementById('deptExecMeta');
+  if (metaEl) {
+    metaEl.textContent = `${activeDept || 'Department'} · ${buckets.length} sections · ${sum.completed} completed / ${sum.notFinished} not finished · Click any bar to filter roster`;
+  }
+
+  const stripEl = document.getElementById('deptExecKpiStrip');
+  if (stripEl) stripEl.innerHTML = renderExecKpiStripHtml(sum);
+
+  renderExecComboChart('deptExecComboChart', 'dept', buckets, st.unit, (clickedKey) => {
+    st.clickedGroup = st.clickedGroup === clickedKey ? null : clickedKey;
+    renderExecRoster('dept');
+  });
+  renderExecRoster('dept');
+}
+
+function renderSectionExecAnalytics(emps, secName) {
+  const safeEmps = Array.isArray(emps) ? emps : [];
+  const st = execAnalyticsState.section;
+  st.lastSecName = secName || currentActiveSection || 'Section';
+  st.lastEmps = safeEmps;
+
+  const records = getStoredRecords();
+  const buckets = buildExecBuckets(safeEmps, records, 'level', 'alpha');
+  const sum = summarizeExecPool(safeEmps, records);
+
+  const metaEl = document.getElementById('secExecMeta');
+  if (metaEl) {
+    metaEl.textContent = `${st.lastSecName} · ${sum.total} associates · ${sum.completed} completed (${sum.completionPct}%) · ${sum.notFinished} not finished`;
+  }
+
+  const stripEl = document.getElementById('secExecKpiStrip');
+  if (stripEl) stripEl.innerHTML = renderExecKpiStripHtml(sum);
+
+  renderExecComboChart('secExecComboChart', 'section', buckets, st.unit, null);
+}
+
+// =========================================================================
+// DATABASE & CLOUD PERSISTENCE CONSOLE (/control-center/database)
+// =========================================================================
+async function runDatabaseHealthProbe() {
+  const titleEl = document.getElementById('dbEngineTitle');
+  const subEl = document.getElementById('dbEngineSubtitle');
+  const iconWrap = document.getElementById('dbEngineIconWrap');
+  const pEl = document.getElementById('dbStatProvider');
+  const wEl = document.getElementById('dbStatWritable');
+  const lEl = document.getElementById('dbStatLatency');
+  const sEl = document.getElementById('dbStatSeeded');
+
+  if (titleEl) titleEl.textContent = 'Probing Persistence Layer...';
+  try {
+    const res = await fetch('/api/health', { cache: 'no-store', credentials: 'include' });
+    const data = await res.json();
+    const db = (data && data.database) || {};
+    const isUpstash = db.provider === 'upstash-redis';
+    const isWritable = db.connected === true && db.writable !== false;
+
+    if (pEl) pEl.textContent = isUpstash ? 'Upstash Redis Cloud' : 'Local File / Memory';
+    if (wEl) {
+      wEl.textContent = !isUpstash
+        ? 'Local Disk / Memory'
+        : (db.writable === false ? 'Read-Only (NOPERM)' : (db.connected ? 'Read-Write Enabled' : 'Disconnected'));
+      wEl.style.color = isWritable ? '#059669' : '#DC2626';
+    }
+    if (lEl) lEl.textContent = typeof db.latencyMs === 'number' ? `${db.latencyMs} ms` : 'N/A';
+    if (sEl) sEl.textContent = db.seeded ? 'Migrated & Synced' : (db.warning ? 'Action Required' : 'Active');
+
+    if (titleEl) {
+      titleEl.textContent = isWritable
+        ? 'Cloud Persistence Healthy (Read-Write)'
+        : (db.writable === false ? 'Upstash Read-Only Token Detected' : 'Local Ephemeral Storage Mode');
+    }
+    if (subEl) {
+      subEl.textContent = db.warning || db.error || (isWritable
+        ? 'All exam attempts, OJT scores, employees, and audit records persist durably across serverless instances.'
+        : 'Running on local filesystem / container memory.');
+    }
+    if (iconWrap) {
+      iconWrap.style.background = isWritable ? 'rgba(5, 150, 105, 0.14)' : 'rgba(217, 119, 6, 0.15)';
+      iconWrap.style.color = isWritable ? '#059669' : '#D97706';
+    }
+  } catch (err) {
+    if (titleEl) titleEl.textContent = 'Health Probe Failed';
+    if (subEl) subEl.textContent = err && err.message ? err.message : 'Unable to reach /api/health';
+  }
+}
+
+function renderDatabaseInventoryCards() {
+  const grid = document.getElementById('dbKeystoreInventoryGrid');
+  if (!grid) return;
+  const allEmps = Array.isArray(EMPLOYEES) ? EMPLOYEES : [];
+  const activeEmps = allEmps.filter(e => !e.isLeft && e.status !== 'LEFT');
+  const records = getStoredRecords();
+  const ojt = getStoredOjtRecords();
+  const completedCount = Object.values(records).filter(r => r && r.isCompleted).length;
+  const inProgCount = Object.values(records).filter(r => r && !r.isCompleted && r.inProgress).length;
+  const ojtCount = Object.values(ojt).filter(o => o && (o.totalScore !== undefined || o.scorePct !== undefined)).length;
+
+  let qCount = 0;
+  if (typeof QUESTION_BANK === 'object' && QUESTION_BANK) {
+    Object.values(QUESTION_BANK).forEach(arr => { if (Array.isArray(arr)) qCount += arr.length; });
+  }
+  const settings = window.PORTAL_SETTINGS || {};
+  const cards = [
+    { key: 'yokohama_employees', count: activeEmps.length.toLocaleString(), meta: `${allEmps.length - activeEmps.length} Left · ${new Set(activeEmps.map(e => e.section).filter(Boolean)).size} Sections` },
+    { key: 'yokohama_records', count: completedCount.toLocaleString(), meta: `${inProgCount} In Progress · ${Math.max(0, activeEmps.length - completedCount - inProgCount)} Pending` },
+    { key: 'yokohama_ojt', count: ojtCount.toLocaleString(), meta: 'Practical OJT Evaluations Recorded' },
+    { key: 'yokohama_questions', count: qCount.toLocaleString(), meta: 'Verified Questions (Levels L / U / O)' },
+    { key: 'yokohama_settings', count: `${settings.examPassingPct || 50}% / ${settings.ojtPassingPct || 70}%`, meta: `Pass Rules · ${settings.examDurationMinutes || 45}m · ${settings.maxTabSwitches || 3} Tab Limit` }
+  ];
+
+  grid.innerHTML = cards.map(c => `
+    <div class="db-key-card">
+      <div class="db-key-name">${escapeHtml(c.key)}</div>
+      <div class="db-key-count">${escapeHtml(c.count)}</div>
+      <div class="db-key-meta">${escapeHtml(c.meta)}</div>
+    </div>
+  `).join('');
+}
+
+async function renderDatabaseConsole() {
+  renderDatabaseInventoryCards();
+  if (typeof refreshUndoBanner === 'function') refreshUndoBanner();
+  await runDatabaseHealthProbe();
+}
+
+async function syncAllFromCloudConsole() {
+  const btn = document.getElementById('btnDbSyncCloud');
+  if (btn) btn.disabled = true;
+  showToast('Synchronizing datasets from cloud datastore...');
+  try {
+    await Promise.allSettled([
+      typeof syncCloudEmployees === 'function' ? syncCloudEmployees() : Promise.resolve(),
+      typeof syncCloudRecords === 'function' ? syncCloudRecords() : Promise.resolve(),
+      typeof syncCloudOjtRecords === 'function' ? syncCloudOjtRecords() : Promise.resolve(),
+      typeof syncCloudQuestions === 'function' ? syncCloudQuestions() : Promise.resolve(),
+      typeof syncCloudSettings === 'function' ? syncCloudSettings() : Promise.resolve()
+    ]);
+    renderDatabaseInventoryCards();
+    await runDatabaseHealthProbe();
+    if (typeof refreshUndoBanner === 'function') refreshUndoBanner();
+    showToast('Cloud synchronization complete.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function exportDatabaseDiagnosticsJson() {
+  const allEmps = Array.isArray(EMPLOYEES) ? EMPLOYEES : [];
+  const activeEmps = allEmps.filter(e => !e.isLeft && e.status !== 'LEFT');
+  const records = getStoredRecords();
+  const ojt = getStoredOjtRecords();
+  const sum = summarizeExecPool(activeEmps, records);
+  const payload = {
+    generatedAt: new Date().toISOString(),
+    portal: 'Yokohama ILUO Control Center',
+    workforce: { totalLoaded: allEmps.length, active: activeEmps.length, left: allEmps.length - activeEmps.length },
+    assessments: sum,
+    ojtRecorded: Object.values(ojt).filter(o => o && (o.totalScore !== undefined || o.scorePct !== undefined)).length,
+    settings: window.PORTAL_SETTINGS || {}
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `yokohama_iluo_inventory_${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  showToast('Database inventory JSON exported.');
+}
+
+window.setAdminExecGroupBy = setAdminExecGroupBy;
+window.onAdminExecFilterChange = onAdminExecFilterChange;
+window.renderAdminExecAnalytics = renderAdminExecAnalytics;
+window.renderDeptExecAnalytics = renderDeptExecAnalytics;
+window.renderSectionExecAnalytics = renderSectionExecAnalytics;
+window.setExecChartUnit = setExecChartUnit;
+window.setExecRosterFilter = setExecRosterFilter;
+window.clearExecGroupFilter = clearExecGroupFilter;
+window.renderExecRoster = renderExecRoster;
+window.runDatabaseHealthProbe = runDatabaseHealthProbe;
+window.syncAllFromCloudConsole = syncAllFromCloudConsole;
+window.exportDatabaseDiagnosticsJson = exportDatabaseDiagnosticsJson;
+window.renderDatabaseConsole = renderDatabaseConsole;
+
+// Question Bank Manager — Split-View Panel & Persistent Progress Sidebar
+const STORAGE_KEY_QB_REVIEW = 'yokohama_qb_review_status_v1';
+
+const qbSplitState = {
+  selectedId: null,
+  statusFilter: 'all', // 'all' | 'pending' | 'verified' | 'flagged'
+  previewMode: 'answer-key', // 'answer-key' | 'try-mcq'
+  previewChoice: null,
+  reviewMap: null
+};
+
+function getQbReviewMap() {
+  if (qbSplitState.reviewMap) return qbSplitState.reviewMap;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_QB_REVIEW);
+    const parsed = raw ? JSON.parse(raw) : {};
+    qbSplitState.reviewMap = (parsed && typeof parsed === 'object') ? parsed : {};
+  } catch (e) {
+    qbSplitState.reviewMap = {};
+  }
+  return qbSplitState.reviewMap;
+}
+
+function saveQbReviewMap(map) {
+  qbSplitState.reviewMap = map;
+  try {
+    localStorage.setItem(STORAGE_KEY_QB_REVIEW, JSON.stringify(map));
+  } catch (e) {}
+}
+
+function getQuestionAuditStatus(q) {
+  const opts = Array.isArray(q.options) ? q.options : [];
+  const validKeys = opts.map(o => o && o.key).filter(Boolean);
+  const isStructurallyValid = Boolean(
+    q.question &&
+    opts.length === 4 &&
+    opts.every(o => o && o.text && String(o.text).trim().length > 0) &&
+    validKeys.includes(q.correctAnswer)
+  );
+  if (!isStructurallyValid) return 'needs-fix';
+  const reviewMap = getQbReviewMap();
+  const saved = reviewMap[String(q.id)];
+  if (saved === 'verified' || saved === 'flagged') return saved;
+  return 'pending';
+}
+
+function formatQbStatusMeta(status) {
+  if (status === 'verified') {
+    return {
+      cls: 'qb-status-verified',
+      label: 'Verified',
+      icon: '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    };
+  }
+  if (status === 'flagged') {
+    return {
+      cls: 'qb-status-flagged',
+      label: 'Flagged',
+      icon: '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3.5 2.5V13.5M3.5 3.5H12L10.2 6.5L12 9.5H3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    };
+  }
+  if (status === 'needs-fix') {
+    return {
+      cls: 'qb-status-error',
+      label: 'Fix',
+      icon: '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M8 5V8.5M8 11H8.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'
+    };
+  }
+  return {
+    cls: 'qb-status-pending',
+    label: 'Pending',
+    icon: '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.5"/></svg>'
+  };
+}
+
+function splitBilingualStem(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return { primary: '', secondary: '' };
+  const slashIdx = raw.indexOf(' / ');
+  if (slashIdx > 10 && slashIdx < raw.length - 6) {
+    return { primary: raw.slice(0, slashIdx).trim(), secondary: raw.slice(slashIdx + 3).trim() };
+  }
+  const tamilMatch = raw.match(/[\u0B80-\u0BFF]/);
+  if (tamilMatch && tamilMatch.index > 10) {
+    const splitAt = raw.lastIndexOf(' ', tamilMatch.index);
+    if (splitAt > 10) {
+      return { primary: raw.slice(0, splitAt).trim(), secondary: raw.slice(splitAt).trim() };
+    }
+  }
+  return { primary: raw, secondary: '' };
+}
+
+function getBaseFilteredQuestions() {
+  const levelFilterEl = document.getElementById('qLevelFilter');
+  const sectionFilterEl = document.getElementById('qSectionFilter');
+  const searchInputEl = document.getElementById('qSearchInput');
+  const levelFilter = levelFilterEl ? levelFilterEl.value : 'ALL';
+  const sectionFilter = sectionFilterEl ? sectionFilterEl.value : 'ALL';
+  const searchVal = searchInputEl ? searchInputEl.value.toLowerCase().trim() : '';
 
   let allQs = [];
   if (levelFilter === 'ALL') {
@@ -3201,15 +3812,112 @@ function renderQuestionsManager() {
 
     let matchSearch = true;
     if (searchVal) {
-      matchSearch = q.question.toLowerCase().includes(searchVal) || 
+      matchSearch = (q.question && q.question.toLowerCase().includes(searchVal)) ||
                     (q.category && q.category.toLowerCase().includes(searchVal)) ||
-                    (q.section && q.section.toLowerCase().includes(searchVal));
+                    (q.section && q.section.toLowerCase().includes(searchVal)) ||
+                    (q.id && String(q.id).toLowerCase().includes(searchVal));
     }
 
     return matchSec && matchSearch;
   });
 
-  document.getElementById('qCountText').innerText = filtered.length;
+  return { filtered, levelFilter, sectionFilter, searchVal };
+}
+
+function selectQbQuestion(qId) {
+  qbSplitState.selectedId = String(qId);
+  qbSplitState.previewChoice = null;
+  renderQuestionsManager(true);
+}
+
+function setQbStatusFilter(status) {
+  qbSplitState.statusFilter = status;
+  qbSplitState.previewChoice = null;
+  renderQuestionsManager(false);
+}
+
+function setQbPreviewMode(mode) {
+  qbSplitState.previewMode = mode === 'try-mcq' ? 'try-mcq' : 'answer-key';
+  qbSplitState.previewChoice = null;
+  renderQuestionsManager(true);
+}
+
+function selectQbPreviewOption(optKey) {
+  if (qbSplitState.previewMode !== 'try-mcq') return;
+  qbSplitState.previewChoice = optKey;
+  renderQuestionsManager(true);
+}
+
+function setQbReviewStatus(qId, nextStatus, advanceNext) {
+  const map = { ...getQbReviewMap() };
+  if (nextStatus === 'pending') {
+    delete map[String(qId)];
+  } else {
+    map[String(qId)] = nextStatus;
+  }
+  saveQbReviewMap(map);
+
+  if (advanceNext) {
+    const { filtered } = getBaseFilteredQuestions();
+    const visible = qbSplitState.statusFilter === 'all'
+      ? filtered
+      : filtered.filter(q => getQuestionAuditStatus(q) === qbSplitState.statusFilter);
+    const curIdx = visible.findIndex(q => String(q.id) === String(qId));
+    if (curIdx >= 0 && curIdx < visible.length - 1) {
+      qbSplitState.selectedId = String(visible[curIdx + 1].id);
+      qbSplitState.previewChoice = null;
+    }
+  }
+  renderQuestionsManager(true);
+}
+
+function stepQbQuestion(delta) {
+  const { filtered } = getBaseFilteredQuestions();
+  const visible = qbSplitState.statusFilter === 'all'
+    ? filtered
+    : filtered.filter(q => getQuestionAuditStatus(q) === qbSplitState.statusFilter);
+  if (visible.length === 0) return;
+  const curIdx = Math.max(0, visible.findIndex(q => String(q.id) === String(qbSplitState.selectedId)));
+  const nextIdx = Math.max(0, Math.min(visible.length - 1, curIdx + delta));
+  qbSplitState.selectedId = String(visible[nextIdx].id);
+  qbSplitState.previewChoice = null;
+  renderQuestionsManager(true);
+
+  const activeRow = document.querySelector('#qbSidebarList .qb-list-row.active');
+  if (activeRow) activeRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+if (!window.__qbKeyNavAttached) {
+  window.__qbKeyNavAttached = true;
+  document.addEventListener('keydown', (evt) => {
+    const sub = document.getElementById('ctrlSubQuestions');
+    if (!sub || sub.style.display === 'none') return;
+    const tag = (evt.target && evt.target.tagName) ? evt.target.tagName.toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    const modal = document.getElementById('modalAddEditQuestion');
+    if (modal && modal.classList.contains('active')) return;
+
+    if (evt.key === 'ArrowRight' || evt.key === 'ArrowDown') {
+      evt.preventDefault();
+      stepQbQuestion(1);
+    } else if (evt.key === 'ArrowLeft' || evt.key === 'ArrowUp') {
+      evt.preventDefault();
+      stepQbQuestion(-1);
+    }
+  });
+}
+
+function renderQuestionsManager(preserveScroll = false) {
+  const container = document.getElementById('questionsListContainer');
+  if (!container) return;
+
+  const prevListEl = document.getElementById('qbSidebarList');
+  const prevScrollTop = (preserveScroll && prevListEl) ? prevListEl.scrollTop : 0;
+
+  const { filtered, levelFilter, sectionFilter, searchVal } = getBaseFilteredQuestions();
+
+  const countEl = document.getElementById('qCountText');
+  if (countEl) countEl.innerText = filtered.length;
 
   const btnClearFiltered = document.getElementById('btnClearFilteredQs');
   const spanFilteredCount = document.getElementById('btnFilteredCount');
@@ -3225,43 +3933,234 @@ function renderQuestionsManager() {
 
   if (filtered.length === 0) {
     container.innerHTML = `
-      <div style="text-align: center; padding: 40px; color: var(--text-muted);">
-        <p style="font-size: 1.1rem; margin-bottom: 8px;">No questions found matching your filter.</p>
-        <button class="btn-primary" style="max-width: 200px; margin: 0 auto;" onclick="openAddQuestionModal()">➕ Add Question Manually</button>
+      <div style="text-align: center; padding: 48px 24px; color: var(--text-muted); border: 1px solid var(--border-color); border-radius: 12px; background: var(--surface-subtle);">
+        <p style="font-size: 1rem; font-weight: 600; color: var(--text-main); margin-bottom: 6px;">No questions match the current filter</p>
+        <p style="font-size: 0.85rem; margin-bottom: 16px;">Try clearing the level, section, or search filter, or add a new question directly.</p>
+        <button type="button" class="btn-primary" style="max-width: 220px; margin: 0 auto;" onclick="openAddQuestionModal()">Add Question Manually</button>
       </div>
     `;
     return;
   }
 
-  filtered.forEach((q, idx) => {
-    const card = document.createElement('div');
-    card.className = 'info-item';
-    card.style.borderLeft = q.category === 'Safety' ? '4px solid #E31B23' : (q.category === 'CI & TPM' ? '4px solid #F59E0B' : '4px solid #005B9E');
-    card.innerHTML = `
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
-        <div>
-          <span class="q-category-tag" style="margin: 0; background: var(--bg-surface); color: var(--text-dark); border: 1px solid var(--border-color);">Level ${q.level}</span>
-          <span class="q-category-tag" style="margin: 0 4px;">${q.section || 'General QA'}</span>
-          <span class="q-category-tag" style="margin: 0;">${q.category || 'QA & Process'}</span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 0.78rem; color: var(--text-muted);">ID: ${q.id}</span>
-          <button class="btn-secondary" style="padding: 4px 10px; font-size: 0.75rem;" onclick="openEditQuestionModal('${q.id}')">✏️ Edit</button>
-          <button class="btn-secondary" style="padding: 4px 10px; font-size: 0.75rem; color: var(--accent-red); border-color: #FECDD3;" onclick="deleteQuestion('${q.id}')">🗑️ Delete</button>
-        </div>
-      </div>
-      <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 10px; line-height: 1.5;">${idx + 1}. ${q.question}</div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
-        ${q.options.map(opt => `
-          <div style="background: ${opt.key === q.correctAnswer ? '#DCFCE7' : '#F8FAFC'}; border: 1px solid ${opt.key === q.correctAnswer ? '#86EFAC' : '#E2E8F0'}; padding: 6px 12px; border-radius: 6px; font-size: 0.82rem;">
-            <strong>${opt.key}:</strong> ${opt.text} ${opt.key === q.correctAnswer ? '✔ (Correct)' : ''}
-          </div>
-        `).join('')}
-      </div>
-    `;
-    container.appendChild(card);
+  // Compute progress counts across current base filter
+  let verifiedCount = 0;
+  let flaggedCount = 0;
+  let pendingCount = 0;
+  filtered.forEach(q => {
+    const st = getQuestionAuditStatus(q);
+    if (st === 'verified') verifiedCount++;
+    else if (st === 'flagged') flaggedCount++;
+    else pendingCount++;
   });
+  const reviewPct = filtered.length > 0 ? Math.round((verifiedCount / filtered.length) * 100) : 0;
+
+  const visibleList = qbSplitState.statusFilter === 'all'
+    ? filtered
+    : filtered.filter(q => {
+        const st = getQuestionAuditStatus(q);
+        if (qbSplitState.statusFilter === 'pending') return st === 'pending' || st === 'needs-fix';
+        return st === qbSplitState.statusFilter;
+      });
+
+  // Resolve active selected question
+  let activeIndex = visibleList.findIndex(q => String(q.id) === String(qbSplitState.selectedId));
+  if (activeIndex === -1 && visibleList.length > 0) {
+    activeIndex = 0;
+    qbSplitState.selectedId = String(visibleList[0].id);
+    qbSplitState.previewChoice = null;
+  }
+  const activeQ = visibleList[activeIndex] || null;
+
+  const sidebarRowsHtml = visibleList.length === 0
+    ? `<div style="padding: 28px 14px; text-align: center; font-size: 0.82rem; color: var(--text-muted);">No questions with status "${escapeHtml(qbSplitState.statusFilter)}".</div>`
+    : visibleList.map((q, idx) => {
+        const status = getQuestionAuditStatus(q);
+        const stMeta = formatQbStatusMeta(status);
+        const isActive = activeQ && String(q.id) === String(activeQ.id);
+        const safeId = escapeHtml(q.id);
+        const numStr = String(idx + 1).padStart(2, '0');
+        const stemTitle = splitBilingualStem(q.question).primary || q.question;
+        return `
+          <button type="button" class="qb-list-row ${isActive ? 'active' : ''}" data-qid="${safeId}" onclick="selectQbQuestion('${safeId}')" aria-current="${isActive ? 'true' : 'false'}">
+            <span class="qb-row-index">${numStr}</span>
+            <span class="qb-row-body">
+              <span class="qb-row-title">${escapeHtml(stemTitle)}</span>
+              <span class="qb-row-meta">Level ${escapeHtml(q.level)} · ${escapeHtml(q.category || 'QA & Process')} · Key ${escapeHtml(q.correctAnswer || '-')}</span>
+            </span>
+            <span class="qb-row-status ${stMeta.cls}" title="${stMeta.label}">${stMeta.icon}<span>${stMeta.label}</span></span>
+          </button>
+        `;
+      }).join('');
+
+  let inspectorHtml = '';
+  if (!activeQ) {
+    inspectorHtml = `
+      <section class="qb-inspector" aria-label="Question Inspector">
+        <div class="qb-inspector-body" style="justify-content: center; align-items: center; text-align: center; color: var(--text-muted);">
+          <p style="font-size: 0.95rem; font-weight: 600; color: var(--text-main);">No questions in this status tab</p>
+          <button type="button" class="qb-btn" onclick="setQbStatusFilter('all')">Show All Questions (${filtered.length})</button>
+        </div>
+      </section>
+    `;
+  } else {
+    const activeStatus = getQuestionAuditStatus(activeQ);
+    const activeStMeta = formatQbStatusMeta(activeStatus);
+    const safeActiveId = escapeHtml(activeQ.id);
+    const stemParts = splitBilingualStem(activeQ.question);
+    const isTryMode = qbSplitState.previewMode === 'try-mcq';
+    const pickedKey = qbSplitState.previewChoice;
+
+    const optionsHtml = (activeQ.options || []).map(opt => {
+      const isCorrect = opt.key === activeQ.correctAnswer;
+      const isPicked = pickedKey === opt.key;
+      let cardClass = 'qb-option-card';
+      let verdictHtml = '';
+
+      if (!isTryMode) {
+        if (isCorrect) {
+          cardClass += ' is-correct';
+          verdictHtml = '<span class="qb-option-verdict">Verified Correct Answer</span>';
+        }
+      } else {
+        cardClass += ' is-interactive';
+        if (pickedKey) {
+          if (isCorrect) {
+            cardClass += ' is-correct';
+            verdictHtml = isPicked
+              ? '<span class="qb-option-verdict">Correct Selection</span>'
+              : '<span class="qb-option-verdict">Correct Answer</span>';
+          } else if (isPicked) {
+            cardClass += ' is-wrong';
+            verdictHtml = '<span class="qb-option-verdict">Incorrect Selection</span>';
+          }
+        }
+      }
+
+      const tag = isTryMode ? 'button' : 'div';
+      const clickAttr = isTryMode ? `type="button" onclick="selectQbPreviewOption('${escapeHtml(opt.key)}')"` : '';
+      return `
+        <${tag} class="${cardClass}" ${clickAttr}>
+          <span class="qb-option-letter">${escapeHtml(opt.key)}</span>
+          <span class="qb-option-content">
+            <span class="qb-option-text">${escapeHtml(opt.text)}</span>
+            ${verdictHtml}
+          </span>
+        </${tag}>
+      `;
+    }).join('');
+
+    const tryFeedbackHtml = isTryMode
+      ? `<div class="qb-preview-feedback">
+          <span>${pickedKey
+            ? (pickedKey === activeQ.correctAnswer
+                ? 'Correct — matches the authoritative server answer key.'
+                : `Selected Option ${escapeHtml(pickedKey)}. Correct answer is Option ${escapeHtml(activeQ.correctAnswer)}.`)
+            : 'Candidate Preview Mode: click any option above to verify answer key accuracy.'}</span>
+          ${pickedKey ? `<button type="button" class="qb-btn" style="padding: 4px 10px; min-height: 28px;" onclick="setQbPreviewMode('try-mcq')">Reset</button>` : ''}
+        </div>`
+      : '';
+
+    inspectorHtml = `
+      <section class="qb-inspector" aria-label="Question Inspector">
+        <div class="qb-inspector-topbar">
+          <div class="qb-breadcrumb">
+            <span class="qb-breadcrumb-strong">Level ${escapeHtml(activeQ.level)}</span>
+            <span class="qb-sep" aria-hidden="true">·</span>
+            <span>${escapeHtml(activeQ.section || 'General QA')}</span>
+            <span class="qb-sep" aria-hidden="true">·</span>
+            <span>${escapeHtml(activeQ.category || 'QA & Process')}</span>
+            <span class="qb-sep" aria-hidden="true">·</span>
+            <span>${safeActiveId}</span>
+          </div>
+          <div class="qb-topbar-controls">
+            <div class="qb-mode-switch" role="tablist" aria-label="Inspector Display Mode">
+              <button type="button" class="qb-mode-btn ${!isTryMode ? 'active' : ''}" role="tab" aria-selected="${!isTryMode}" onclick="setQbPreviewMode('answer-key')">Answer Key</button>
+              <button type="button" class="qb-mode-btn ${isTryMode ? 'active' : ''}" role="tab" aria-selected="${isTryMode}" onclick="setQbPreviewMode('try-mcq')">Try MCQ</button>
+            </div>
+            <button type="button" class="qb-btn" onclick="openEditQuestionModal('${safeActiveId}')">Edit</button>
+            <button type="button" class="qb-btn qb-btn-danger" onclick="deleteQuestion('${safeActiveId}')">Delete</button>
+          </div>
+        </div>
+
+        <div class="qb-inspector-body">
+          <div class="qb-stem-block">
+            <div class="qb-stem-kicker">
+              <span>Question ${activeIndex + 1} of ${visibleList.length}</span>
+              <span class="qb-sep" aria-hidden="true">·</span>
+              <span class="qb-row-status ${activeStMeta.cls}" style="padding: 0;">${activeStMeta.icon}<span>${activeStMeta.label}</span></span>
+            </div>
+            <h3 class="qb-stem-primary">${escapeHtml(stemParts.primary)}</h3>
+            ${stemParts.secondary ? `<p class="qb-stem-secondary">${escapeHtml(stemParts.secondary)}</p>` : ''}
+          </div>
+
+          <div class="qb-options-grid">
+            ${optionsHtml}
+          </div>
+
+          ${tryFeedbackHtml}
+        </div>
+
+        <div class="qb-inspector-footer">
+          <div class="qb-action-group">
+            <button type="button" class="qb-btn qb-btn-verify ${activeStatus === 'verified' ? 'active' : ''}" onclick="setQbReviewStatus('${safeActiveId}', 'verified', true)">
+              ${activeStatus === 'verified' ? 'Verified' : 'Mark Verified & Next'}
+            </button>
+            <button type="button" class="qb-btn qb-btn-flag ${activeStatus === 'flagged' ? 'active' : ''}" onclick="setQbReviewStatus('${safeActiveId}', '${activeStatus === 'flagged' ? 'pending' : 'flagged'}', false)">
+              ${activeStatus === 'flagged' ? 'Flagged' : 'Flag for Review'}
+            </button>
+            ${activeStatus !== 'pending' && activeStatus !== 'needs-fix'
+              ? `<button type="button" class="qb-btn" onclick="setQbReviewStatus('${safeActiveId}', 'pending', false)">Clear Status</button>`
+              : ''}
+          </div>
+
+          <div class="qb-nav-group">
+            <button type="button" class="qb-btn" onclick="stepQbQuestion(-1)" ${activeIndex <= 0 ? 'disabled' : ''}>← Previous</button>
+            <span class="qb-position-counter">${activeIndex + 1} / ${visibleList.length}</span>
+            <button type="button" class="qb-btn" onclick="stepQbQuestion(1)" ${activeIndex >= visibleList.length - 1 ? 'disabled' : ''}>Next →</button>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  container.innerHTML = `
+    <div class="qb-split-shell">
+      <aside class="qb-sidebar" aria-label="Question Progress Sidebar">
+        <div class="qb-sidebar-head">
+          <div class="qb-sidebar-title-row">
+            <span class="qb-sidebar-title">Question Index</span>
+            <span class="qb-tabular-stat">${verifiedCount} / ${filtered.length} verified (${reviewPct}%)</span>
+          </div>
+          <div class="qb-progress-track" role="progressbar" aria-valuenow="${reviewPct}" aria-valuemin="0" aria-valuemax="100">
+            <div class="qb-progress-fill" style="transform: scaleX(${(reviewPct / 100).toFixed(4)});"></div>
+          </div>
+          <div class="qb-segmented" role="tablist" aria-label="Filter by review progress">
+            <button type="button" class="qb-seg-btn ${qbSplitState.statusFilter === 'all' ? 'active' : ''}" onclick="setQbStatusFilter('all')">All (${filtered.length})</button>
+            <button type="button" class="qb-seg-btn ${qbSplitState.statusFilter === 'pending' ? 'active' : ''}" onclick="setQbStatusFilter('pending')">Pending (${pendingCount})</button>
+            <button type="button" class="qb-seg-btn ${qbSplitState.statusFilter === 'verified' ? 'active' : ''}" onclick="setQbStatusFilter('verified')">Done (${verifiedCount})</button>
+            <button type="button" class="qb-seg-btn ${qbSplitState.statusFilter === 'flagged' ? 'active' : ''}" onclick="setQbStatusFilter('flagged')">Flag (${flaggedCount})</button>
+          </div>
+        </div>
+        <div class="qb-list" id="qbSidebarList">
+          ${sidebarRowsHtml}
+        </div>
+      </aside>
+      ${inspectorHtml}
+    </div>
+  `;
+
+  if (preserveScroll) {
+    const newListEl = document.getElementById('qbSidebarList');
+    if (newListEl) newListEl.scrollTop = prevScrollTop;
+  }
 }
+
+window.selectQbQuestion = selectQbQuestion;
+window.setQbStatusFilter = setQbStatusFilter;
+window.setQbReviewStatus = setQbReviewStatus;
+window.setQbPreviewMode = setQbPreviewMode;
+window.selectQbPreviewOption = selectQbPreviewOption;
+window.stepQbQuestion = stepQbQuestion;
 
 function openAddQuestionModal() {
   document.getElementById('modalQTitle').innerText = '➕ Add New Question';
@@ -3332,11 +4231,11 @@ function saveQuestionFromModal(e) {
   const correctAnswer = document.getElementById('modalQCorrect').value;
 
   if (!qText) {
-    alert('Please enter question text');
+    showToast('Please enter question text');
     return;
   }
   if (!optA || !optB) {
-    alert('Please provide at least Option A and Option B');
+    showToast('Please provide at least Option A and Option B');
     return;
   }
 
@@ -3358,7 +4257,6 @@ function saveQuestionFromModal(e) {
   if (!QUESTION_BANK[level]) QUESTION_BANK[level] = [];
 
   if (qId) {
-    // Edit existing - remove from any previous level bucket in case level was modified
     ['L', 'U', 'O'].forEach(lvl => {
       const idx = (QUESTION_BANK[lvl] || []).findIndex(q => String(q.id).trim() === String(qId).trim());
       if (idx !== -1) QUESTION_BANK[lvl].splice(idx, 1);
@@ -3366,7 +4264,6 @@ function saveQuestionFromModal(e) {
     QUESTION_BANK[level].push(newQ);
     showToast('Question updated successfully!');
   } else {
-    // Add new
     QUESTION_BANK[level].push(newQ);
     showToast('New question added successfully!');
   }
@@ -3376,8 +4273,9 @@ function saveQuestionFromModal(e) {
   renderQuestionsManager();
 }
 
-function deleteQuestion(qId) {
-  if (!confirm('Are you sure you want to delete this question?')) return;
+async function deleteQuestion(qId) {
+  const confirmed = await showInAppConfirm('Delete Question', 'Are you sure you want to delete this question from the Question Bank?', 'Delete Question');
+  if (!confirmed) return;
 
   let deleted = false;
   ['L', 'U', 'O'].forEach(lvl => {
@@ -3400,9 +4298,12 @@ function deleteQuestion(qId) {
 // Cloud Sync for Employees & Security Settings
 async function syncCloudEmployees() {
   try {
-    const res = await fetchWithTimeout('/api/employees', { headers: getAuthHeaders(), credentials: 'include' }, 3500);
+    const res = await fetchWithTimeout('/api/employees', {}, 3500);
     const data = await res.json();
     if (data.success && data.employees && Array.isArray(data.employees) && data.employees.length > 0) {
+      if (typeof data.leftCount === 'number') {
+        window._lastLeftEmployeesCount = data.leftCount;
+      }
       EMPLOYEES.length = 0;
       EMPLOYEES.push(...data.employees);
       try {
@@ -3410,6 +4311,9 @@ async function syncCloudEmployees() {
       } catch (e) {}
       if (document.getElementById('empDirectoryTbody')) {
         renderEmployeeDirectory();
+      }
+      if (document.getElementById('dashboardProdSectionTableBody')) {
+        renderDashboardProdSectionMatrix();
       }
       populateOjtEmployeeSwitcher();
     }
@@ -3431,44 +4335,45 @@ function saveCustomEmployeesToServer() {
 }
 
 async function syncCloudSettings() {
+  startAdminDbHealthPolling();
   try {
     const res = await fetchWithTimeout('/api/settings', { headers: getAuthHeaders(), credentials: 'include' }, 3000);
     const data = await res.json();
     if (data.success && data.settings) {
       const s = data.settings;
-      if (s.adminEmail) {
-        const el = document.getElementById('secAdminEmail');
-        if (el) el.value = s.adminEmail;
-      }
-      if (s.passingPct) {
-        const el = document.getElementById('secPassingPct');
-        if (el) el.value = s.passingPct;
-      }
-      if (s.maxTabSwitches) {
-        const el = document.getElementById('secMaxTabSwitches');
-        if (el) el.value = s.maxTabSwitches;
-      }
-      if (s.tabAction) {
-        const el = document.getElementById('secTabAction');
-        if (el) el.value = s.tabAction;
-      }
-      if (s.otpDuration) {
-        const el = document.getElementById('secOtpDuration');
-        if (el) el.value = s.otpDuration;
-      }
+      window.PORTAL_SETTINGS = { ...window.PORTAL_SETTINGS, ...s };
+      const elEmail = document.getElementById('secAdminEmail');
+      if (elEmail && s.adminEmail !== undefined) elEmail.value = s.adminEmail || '';
+      const elPass = document.getElementById('secPassingPct');
+      if (elPass) elPass.value = s.examPassingPct || s.passingPct || 50;
+      const elOjtPass = document.getElementById('secOjtPassingPct');
+      if (elOjtPass) elOjtPass.value = s.ojtPassingPct || 70;
+      const elDur = document.getElementById('secExamDuration');
+      if (elDur) elDur.value = s.examDurationMinutes || 45;
+      const elTab = document.getElementById('secMaxTabSwitches');
+      if (elTab) elTab.value = s.maxTabSwitches || 3;
+      const elAct = document.getElementById('secTabAction');
+      if (elAct) elAct.value = s.tabSwitchAction || s.tabAction || 'terminate';
     }
   } catch (e) {}
 }
 
 function saveSecuritySettings(e) {
   if (e) e.preventDefault();
-  const otpDurationEl = document.getElementById('secOtpDuration');
+  const elEmail = document.getElementById('secAdminEmail');
+  const elPass = document.getElementById('secPassingPct');
+  const elOjtPass = document.getElementById('secOjtPassingPct');
+  const elDur = document.getElementById('secExamDuration');
+  const elTab = document.getElementById('secMaxTabSwitches');
+  const elAct = document.getElementById('secTabAction');
+
   const settings = {
-    adminEmail: document.getElementById('secAdminEmail').value.trim(),
-    passingPct: parseInt(document.getElementById('secPassingPct').value) || 70,
-    maxTabSwitches: parseInt(document.getElementById('secMaxTabSwitches').value) || 3,
-    tabAction: document.getElementById('secTabAction').value,
-    otpDuration: otpDurationEl ? (parseInt(otpDurationEl.value) || 60) : 60
+    adminEmail: elEmail ? elEmail.value.trim() : '',
+    examPassingPct: elPass ? (parseInt(elPass.value, 10) || 50) : 50,
+    ojtPassingPct: elOjtPass ? (parseInt(elOjtPass.value, 10) || 70) : 70,
+    examDurationMinutes: elDur ? (parseInt(elDur.value, 10) || 45) : 45,
+    maxTabSwitches: elTab ? (parseInt(elTab.value, 10) || 3) : 3,
+    tabSwitchAction: elAct ? elAct.value : 'terminate'
   };
 
   try {
@@ -3478,7 +4383,12 @@ function saveSecuritySettings(e) {
       credentials: 'include',
       body: JSON.stringify({ settings: settings })
     }).then(res => res.json()).then(data => {
-      showToast('Security Settings saved & updated in Cloud DB!');
+      if (data && data.success) {
+        window.PORTAL_SETTINGS = { ...window.PORTAL_SETTINGS, ...(data.settings || settings) };
+        showToast('Assessment & Security thresholds saved to Cloud DB!');
+      } else {
+        showToast((data && data.message) || 'Failed to save settings');
+      }
     }).catch(err => showToast('Failed to save settings: ' + err.message));
   } catch (err) {
     showToast('Failed to save settings: ' + err.message);
@@ -3486,34 +4396,106 @@ function saveSecuritySettings(e) {
 }
 
 // Employee Directory View
+function populateEmpDirectorySectionFilter() {
+  const selectEl = document.getElementById('empDirectorySectionFilter');
+  if (!selectEl) return;
+  const prevValue = selectEl.value || 'ALL';
+
+  const canonicalQaSections = [
+    'Tire Building QA',
+    'Final Finish QA',
+    'Final Finish RRO & ALT QA',
+    'Tire Curing QA',
+    'Solid Tire QA',
+    'Preparatory QA',
+    'Warehouse QA',
+    'FID Inspector QA'
+  ];
+
+  const seenNormalized = new Set(canonicalQaSections.map(s => normalizeSectionName(s)));
+  const extraSections = [];
+
+  (EMPLOYEES || []).forEach(emp => {
+    const rawSec = String(emp.section || '').trim();
+    if (!rawSec || rawSec === '-') return;
+    const norm = normalizeSectionName(rawSec);
+    if (!seenNormalized.has(norm)) {
+      seenNormalized.add(norm);
+      extraSections.push(rawSec);
+    }
+  });
+  extraSections.sort((a, b) => a.localeCompare(b));
+
+  const allOptions = ['ALL', ...canonicalQaSections, ...extraSections];
+  const currentSignature = Array.from(selectEl.options).map(o => o.value).join('|');
+  const nextSignature = allOptions.join('|');
+  if (currentSignature !== nextSignature) {
+    selectEl.innerHTML = `<option value="ALL">All QA Sections</option>` +
+      canonicalQaSections.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('') +
+      (extraSections.length > 0
+        ? `<optgroup label="Other Sections">${extraSections.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}</optgroup>`
+        : '');
+    selectEl.value = allOptions.includes(prevValue) ? prevValue : 'ALL';
+  }
+}
+
 function renderEmployeeDirectory() {
+  populateEmpDirectorySectionFilter();
+
   const searchInput = document.getElementById('empDirectorySearch');
   const search = searchInput ? searchInput.value.toLowerCase().trim() : '';
+  const sectionFilterEl = document.getElementById('empDirectorySectionFilter');
+  const sectionFilter = sectionFilterEl ? sectionFilterEl.value : 'ALL';
+  const normalizedTargetSec = sectionFilter !== 'ALL' ? normalizeSectionName(sectionFilter) : '';
+
   const tbody = document.getElementById('empDirectoryTbody');
   if (!tbody) return;
   tbody.innerHTML = '';
 
   const filtered = EMPLOYEES.filter(emp => {
+    if (sectionFilter !== 'ALL') {
+      const empSecRaw = String(emp.section || '').trim();
+      const empSecNorm = normalizeSectionName(empSecRaw);
+      const exactMatch = empSecRaw.toLowerCase() === sectionFilter.toLowerCase();
+      if (!exactMatch && empSecNorm !== normalizedTargetSec) return false;
+    }
     if (!search) return true;
-    return emp.empNo.toLowerCase().includes(search) || emp.name.toLowerCase().includes(search) || emp.dept.toLowerCase().includes(search);
+    return String(emp.empNo).toLowerCase().includes(search) ||
+      String(emp.name).toLowerCase().includes(search) ||
+      String(emp.dept).toLowerCase().includes(search) ||
+      String(emp.section || '').toLowerCase().includes(search);
   });
 
   const countEl = document.getElementById('empDirCountText');
- if (countEl) countEl.innerText = filtered.length;
+  if (countEl) countEl.innerText = filtered.length;
+  const suffixEl = document.getElementById('empDirTotalSuffix');
+  if (suffixEl) {
+    suffixEl.innerText = (sectionFilter !== 'ALL' || search)
+      ? `of ${EMPLOYEES.length} employees`
+      : 'employees';
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--text-muted);">No matching employees found in directory.</td></tr>`;
+    return;
+  }
 
   filtered.forEach(emp => {
     const tr = document.createElement('tr');
+    const safeNo = escapeHtml(emp.empNo);
+    const lvl = String(emp.currentLevel || 'I').toUpperCase();
     tr.innerHTML = `
-      <td><strong>${emp.empNo}</strong></td>
-      <td>${emp.name}</td>
-      <td>${emp.dept}</td>
-      <td>${emp.section || '-'}</td>
-      <td>${emp.doj || '-'}</td>
-      <td><span style="background: #E0F2FE; color: #0369A1; font-weight: 700; padding: 2px 8px; border-radius: 4px;">${emp.currentLevel || 'I'}</span></td>
-      <td>
-        <div style="display: flex; gap: 6px;">
-          <button class="btn-reset" style="padding: 3px 8px; font-size: 0.76rem; background: #F1F5F9; color: #005B9E; border-color: #CBD5E1;" onclick="openEditEmpModal('${emp.empNo}')">✏️ Edit</button>
-          <button class="btn-reset" style="padding: 3px 8px; font-size: 0.76rem; color: #E31B23; border-color: #FECDD3; background: #FFF1F2;" onclick="deleteEmployee('${emp.empNo}')">🗑️ Delete</button>
+      <td data-label="Emp No"><strong>${safeNo}</strong></td>
+      <td data-label="Name">${escapeHtml(emp.name)}</td>
+      <td data-label="Department">${escapeHtml(emp.dept)}</td>
+      <td data-label="Section">${escapeHtml(emp.section || '-')}</td>
+      <td data-label="DOJ">${escapeHtml(emp.doj || '-')}</td>
+      <td data-label="Level"><span class="iluo-badge iluo-badge-${lvl.toLowerCase()}">${escapeHtml(lvl)}</span></td>
+      <td data-label="Actions">
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button class="btn-reset" style="padding: 3px 8px; font-size: 0.76rem; background: #F1F5F9; color: #005B9E; border-color: #CBD5E1;" onclick="openEditEmpModal('${safeNo}')">✏️ Edit</button>
+          <button class="btn-reset" style="padding: 3px 8px; font-size: 0.76rem;" onclick="openEmployeeCertificateModal('${safeNo}')" title="View QR Certificate">🏅 Cert</button>
+          <button class="btn-reset" style="padding: 3px 8px; font-size: 0.76rem; color: #E31B23; border-color: #FECDD3; background: #FFF1F2;" onclick="deleteEmployee('${safeNo}')">🗑️ Delete</button>
         </div>
       </td>
     `;
@@ -3579,12 +4561,12 @@ function saveEmployeeFromModal(e) {
   const level = document.getElementById('modalEmpLevel').value;
 
   if (!empNo || !name) {
-    alert('Please enter both Employee ID and Name.');
+    showToast('Please enter both Employee ID and Name.');
     return;
   }
 
   if (!isEdit && EMPLOYEES.some(e => String(e.empNo).trim() === empNo)) {
-    alert(`Employee ID '${empNo}' already exists in the directory! Please use a unique Employee ID.`);
+    showToast(`Employee ID '${empNo}' already exists in the directory! Please use a unique Employee ID.`);
     return;
   }
 
@@ -3612,20 +4594,42 @@ function saveEmployeeFromModal(e) {
   populateOjtEmployeeSwitcher();
 }
 
-function deleteEmployee(empNo) {
-  if (!confirm(`Are you sure you want to delete Employee ${empNo} from the directory?`)) return;
-  const idx = EMPLOYEES.findIndex(e => String(e.empNo).trim() === String(empNo).trim());
-  if (idx !== -1) {
-    EMPLOYEES.splice(idx, 1);
-    saveCustomEmployeesToServer();
-    showToast(`Employee ${empNo} deleted from Directory`);
-    renderEmployeeDirectory();
-    if (document.getElementById('adminTableBody')) {
-      const searchInput = document.getElementById('adminSearchInput');
-      renderAdminTable(searchInput ? searchInput.value : '');
+async function deleteEmployee(empNo) {
+  const confirmed = await showInAppConfirm(
+    'Delete Employee',
+    `Remove Employee ${empNo} from the directory? A 15-minute soft-delete backup will be created automatically so HR can undo if needed.`,
+    'Delete Employee'
+  );
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch('/api/employees/' + encodeURIComponent(empNo), {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      showToast((data && data.message) || `Failed to delete Employee ${empNo}`);
+      return;
     }
-    populateOjtEmployeeSwitcher();
+  } catch (err) {
+    showToast('Network error deleting employee: ' + err.message);
+    return;
   }
+
+  const idx = EMPLOYEES.findIndex(e => String(e.empNo).trim() === String(empNo).trim());
+  if (idx !== -1) EMPLOYEES.splice(idx, 1);
+  try { localStorage.setItem(STORAGE_KEY_CUSTOM_EMPLOYEES, JSON.stringify(EMPLOYEES)); } catch (e) {}
+
+  showToast(`Employee ${empNo} removed (soft-backup created for undo).`);
+  if (typeof refreshUndoBanner === 'function') refreshUndoBanner();
+  renderEmployeeDirectory();
+  if (document.getElementById('adminTableBody')) {
+    const searchInput = document.getElementById('adminSearchInput');
+    renderAdminTable(searchInput ? searchInput.value : '');
+  }
+  populateOjtEmployeeSwitcher();
 }
 
 // Results Database Table & Reset Action
@@ -3633,66 +4637,85 @@ function renderAdminTable(query) {
   const records = getStoredRecords();
   const allOjt = getStoredOjtRecords();
   const tbody = document.getElementById('adminTableBody');
+  if (!tbody) return;
   tbody.innerHTML = '';
 
-  const q = query.toLowerCase().trim();
+  const q = (query || '').toLowerCase().trim();
+  const examPassPct = getExamPassThreshold();
+  const ojtPassPct = getOjtPassThreshold();
 
   const filtered = EMPLOYEES.filter(emp => {
     if (!q) return true;
     return (
-      emp.empNo.toLowerCase().includes(q) ||
-      emp.name.toLowerCase().includes(q) ||
-      emp.dept.toLowerCase().includes(q) ||
+      String(emp.empNo).toLowerCase().includes(q) ||
+      String(emp.name).toLowerCase().includes(q) ||
+      String(emp.dept).toLowerCase().includes(q) ||
       (emp.section && emp.section.toLowerCase().includes(q))
     );
   });
 
- document.getElementById('tableCountText').innerText = filtered.length;
+  const countTextEl = document.getElementById('tableCountText');
+  if (countTextEl) countTextEl.innerText = filtered.length;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="15" style="text-align:center;padding:28px;color:var(--text-muted);">No assessment records match your search.</td></tr>`;
+    return;
+  }
 
   filtered.forEach(emp => {
     const rec = records[emp.empNo] || {};
     const ojt = allOjt[emp.empNo] || {};
 
     const tr = document.createElement('tr');
+    const safeNo = escapeHtml(emp.empNo);
+    const safeName = escapeHtml(emp.name);
+    const safeNameJs = String(emp.name || '').replace(/'/g, "\\'");
 
     const statusBadge = rec.isCompleted
-      ? `<span class="${rec.status && rec.status.includes('Terminated') ? 'badge-fail' : 'badge-pass'}">${rec.status || 'Completed'}</span>`
+      ? `<span class="${rec.status && rec.status.includes('Terminated') ? 'badge-fail' : (rec.status === 'Passed' ? 'badge-pass' : 'badge-fail')}">${escapeHtml(rec.status || 'Completed')}</span>`
       : rec.inProgress
       ? `<span class="badge-pending">In Progress (${rec.tabSwitchCount || 0} Sw)</span>`
-      : `<span style="color: #94A3B8;">Not Started</span>`;
+      : `<span style="color: #64748B;">Not Started</span>`;
 
     const hasOjt = ojt.totalScore !== undefined || ojt.scorePct !== undefined;
-    const isOjtQualified = ojt.qualificationStatus === 'Qualified' || (ojt.totalScore !== undefined && ojt.totalScore >= 35);
+    const ojtMax = ojt.maxScore || 50;
+    const ojtPctVal = ojt.scorePct !== undefined ? ojt.scorePct : (ojt.totalScore !== undefined ? Math.round((ojt.totalScore / ojtMax) * 100) : 0);
+    const isOjtQualified = ojt.qualificationStatus === 'Qualified' || (hasOjt && ojtPctVal >= ojtPassPct);
     const ojtBadge = hasOjt
-      ? `<span class="${isOjtQualified ? 'badge-pass' : 'badge-fail'}" style="cursor: pointer; display: inline-block; font-size: 0.78rem;" onclick="openOjtModalForEmployee('${emp.empNo}')" title="Total Score: ${ojt.totalScore || 0}/${ojt.maxScore || 50} Marks - Click to open">${ojt.qualificationStatus || (isOjtQualified ? 'Qualified' : 'Not Qualified')} (${ojt.totalScore || 0}/${ojt.maxScore || 50} Marks)</span>`
-      : `<span style="color: #94A3B8; font-size: 0.8rem; cursor: pointer; text-decoration: underline dotted;" onclick="openOjtModalForEmployee('${emp.empNo}')" title="Click to open OJT evaluation">Pending</span>`;
+      ? `<span class="${isOjtQualified ? 'badge-pass' : 'badge-fail'}" style="cursor: pointer; display: inline-block; font-size: 0.78rem;" onclick="openOjtModalForEmployee('${safeNo}')" title="Total Score: ${ojt.totalScore || 0}/${ojtMax} Marks - Click to open">${escapeHtml(ojt.qualificationStatus || (isOjtQualified ? 'Qualified' : 'Not Qualified'))} (${ojt.totalScore || 0}/${ojtMax} Marks)</span>`
+      : `<span style="color: #64748B; font-size: 0.8rem; cursor: pointer; text-decoration: underline dotted;" onclick="openOjtModalForEmployee('${safeNo}')" title="Click to open OJT evaluation">Pending</span>`;
+
+    const qCount = (rec.submittedQuestions && rec.submittedQuestions.length) || ((emp.targetLevel === 'L' || emp.currentLevel === 'I') ? 20 : ((emp.targetLevel === 'U' || emp.currentLevel === 'L') ? 30 : 40));
+    const minPassMarks = Math.ceil(qCount * (examPassPct / 100));
+    const isExamPass = rec.status === 'Passed' || (rec.markPct !== undefined ? rec.markPct >= examPassPct : (rec.totalMark !== undefined && rec.totalMark >= minPassMarks));
 
     const hasRecord = rec.isCompleted || rec.inProgress;
     const actionBtn = `
       <div style="display: flex; gap: 5px; flex-wrap: wrap;">
-        <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">DOCX</button>
-        <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #DC2626; border-color: #DC2626;" onclick="downloadEmployeePDF('${emp.empNo}')" title="Download Official PDF Report">PDF</button>
-        <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #059669; border-color: #059669;" onclick="openOjtModalForEmployee('${emp.empNo}')">OJT Form</button>
-        ${hasRecord ? `<button class="btn-reset" style="padding: 3px 8px; font-size: 0.75rem;" onclick="confirmAndResetExam('${emp.empNo}', '${emp.name.replace(/'/g, "\\'")}')">Reset</button>` : ''}
+        <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${safeNo}')" title="Download Official Word Document (DOCX)">DOCX</button>
+        <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #DC2626; border-color: #DC2626;" onclick="downloadEmployeePDF('${safeNo}')" title="Download Official PDF Report">PDF</button>
+        <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #059669; border-color: #059669;" onclick="openOjtModalForEmployee('${safeNo}')">OJT Form</button>
+        <button class="btn-secondary" style="padding: 3px 8px; font-size: 0.75rem;" onclick="openEmployeeCertificateModal('${safeNo}')" title="View QR Certificate">Cert</button>
+        ${hasRecord ? `<button class="btn-reset" style="padding: 3px 8px; font-size: 0.75rem;" onclick="confirmAndResetExam('${safeNo}', '${safeNameJs}')">Reset</button>` : ''}
       </div>
     `;
 
     tr.innerHTML = `
-      <td><strong>${emp.empNo}</strong></td>
-      <td>${emp.name}</td>
-      <td>${emp.doj || '-'}</td>
-      <td>${emp.dept}</td>
-      <td>${emp.section || '-'}</td>
-      <td>${emp.currentLevel || 'I'}</td>
-      <td>${rec.uMark !== undefined ? rec.uMark : '-'}</td>
-      <td>${rec.lMark !== undefined ? rec.lMark : '-'}</td>
-      <td>${rec.oMark !== undefined ? rec.oMark : '-'}</td>
-      <td><strong>${rec.totalMark !== undefined ? rec.totalMark : '-'}</strong></td>
-      <td>${rec.totalMark !== undefined ? (rec.totalMark >= 21 ? 'Pass (≥21)' : 'Retest (<21)') : '-'}</td>
-      <td>${statusBadge}</td>
-      <td>${ojtBadge}</td>
-      <td>${rec.attemptDate || '-'}</td>
-      <td>${actionBtn}</td>
+      <td data-label="Emp No"><strong>${safeNo}</strong></td>
+      <td data-label="Name">${safeName}</td>
+      <td data-label="DOJ">${escapeHtml(emp.doj || '-')}</td>
+      <td data-label="Dept">${escapeHtml(emp.dept)}</td>
+      <td data-label="Section">${escapeHtml(emp.section || '-')}</td>
+      <td data-label="Level">${escapeHtml(emp.currentLevel || 'I')}</td>
+      <td data-label="U">${rec.uMark !== undefined ? rec.uMark : '-'}</td>
+      <td data-label="L">${rec.lMark !== undefined ? rec.lMark : '-'}</td>
+      <td data-label="O">${rec.oMark !== undefined ? rec.oMark : '-'}</td>
+      <td data-label="Total"><strong>${rec.totalMark !== undefined ? rec.totalMark : '-'}</strong></td>
+      <td data-label="Threshold">${rec.totalMark !== undefined ? (isExamPass ? `Pass (≥${examPassPct}%)` : `Retest (<${examPassPct}%)`) : '-'}</td>
+      <td data-label="Exam Status">${statusBadge}</td>
+      <td data-label="OJT Status">${ojtBadge}</td>
+      <td data-label="Date">${escapeHtml(rec.attemptDate || '-')}</td>
+      <td data-label="Actions">${actionBtn}</td>
     `;
 
     tbody.appendChild(tr);
@@ -3704,7 +4727,7 @@ let _browserLogoBase64Cache = null;
 async function getBrowserLogoBase64() {
   if (_browserLogoBase64Cache !== null) return _browserLogoBase64Cache;
   try {
-    const resp = await fetch('atg_logo.png');
+    const resp = await fetch('yokohama_logo.png');
     if (resp.ok) {
       const blob = await resp.blob();
       return new Promise((resolve) => {
@@ -3727,83 +4750,6 @@ async function getBrowserLogoBase64() {
   return '';
 }
 
-// Robust DOM-staged PDF download engine to prevent html2canvas blank page/scroll offset issues
-async function executeHtml2PdfDownload(htmlString, opt, isLandscape = false) {
-  if (typeof window.html2pdf === 'undefined') {
-    throw new Error('html2pdf library is not loaded');
-  }
-
-  // Create an off-screen wrapper positioned off-viewport so it does NOT disturb layout or visible UI
-  const offscreenWrapper = document.createElement('div');
-  offscreenWrapper.id = 'pdf-render-offscreen-wrapper';
-  offscreenWrapper.style.position = 'absolute';
-  offscreenWrapper.style.left = '-99999px';
-  offscreenWrapper.style.top = '0';
-  offscreenWrapper.style.width = isLandscape ? '1060px' : '730px';
-  offscreenWrapper.style.overflow = 'visible';
-
-  // Inner content container in standard document flow with 100% opacity and explicit dimensions
-  const contentDiv = document.createElement('div');
-  contentDiv.style.width = isLandscape ? '1060px' : '730px';
-  contentDiv.style.background = '#ffffff';
-  contentDiv.style.color = '#0F172A';
-  contentDiv.style.boxSizing = 'border-box';
-
-  // Parse HTML string with DOMParser to cleanly preserve styles and full DOM tree
-  const parser = new DOMParser();
-  const parsedDoc = parser.parseFromString(htmlString, 'text/html');
-
-  // Copy head styles
-  parsedDoc.head.querySelectorAll('style').forEach(st => {
-    contentDiv.appendChild(st.cloneNode(true));
-  });
-
-  // Copy all body elements
-  Array.from(parsedDoc.body.childNodes).forEach(node => {
-    contentDiv.appendChild(node.cloneNode(true));
-  });
-
-  offscreenWrapper.appendChild(contentDiv);
-  document.body.appendChild(offscreenWrapper);
-
-  // Configure html2canvas to eliminate scroll offset and blank page issues
-  const html2canvasConfig = {
-    scale: 2,
-    useCORS: true,
-    logging: false,
-    scrollX: 0,
-    scrollY: 0,
-    backgroundColor: '#ffffff',
-    ...(opt.html2canvas || {})
-  };
-
-  const finalOpt = {
-    ...opt,
-    html2canvas: html2canvasConfig
-  };
-
-  try {
-    // Wait for any embedded images inside the content container to finish loading
-    const images = Array.from(contentDiv.querySelectorAll('img'));
-    if (images.length > 0) {
-      await Promise.all(images.map(img => {
-        if (img.complete) return Promise.resolve();
-        return new Promise(res => {
-          img.onload = res;
-          img.onerror = res;
-          setTimeout(res, 800);
-        });
-      }));
-    }
-
-    await window.html2pdf().set(finalOpt).from(contentDiv).save();
-  } finally {
-    if (offscreenWrapper.parentNode) {
-      offscreenWrapper.parentNode.removeChild(offscreenWrapper);
-    }
-  }
-}
-
 // Generate and immediately download a 100% real, dynamic .pdf file directly in the browser
 async function generateAndDownloadClientSidePdf(empNo, recordData = null) {
   if (!empNo) throw new Error('Employee ID is required');
@@ -3823,7 +4769,7 @@ async function generateAndDownloadClientSidePdf(empNo, recordData = null) {
   if (typeof window.generateOfficialReportHtml !== 'function') {
     await new Promise((resolve, reject) => {
       const script = document.createElement('script');
-      script.src = 'report_html_generator.js?v=48.0';
+      script.src = 'report_html_generator.js?v=46.0';
       script.onload = resolve;
       script.onerror = () => reject(new Error('Failed to load report_html_generator library'));
       document.head.appendChild(script);
@@ -3873,26 +4819,27 @@ async function generateAndDownloadClientSidePdf(empNo, recordData = null) {
   const reportHtml = window.generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmpl, logoBase64);
 
   const safeEmpName = (emp.name || empNo).replace(/[\s\\/]+/g, '_');
-  const filename = `ATC_ILUO_Report_${empNo}_${safeEmpName}.pdf`;
+  const filename = `Yokohama_ILUO_Report_${empNo}_${safeEmpName}.pdf`;
 
   const opt = {
     margin: [6, 8, 6, 8],
     filename: filename,
     image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 1.5, useCORS: true, logging: false, scrollX: 0, scrollY: 0, backgroundColor: '#FFFFFF' },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     pagebreak: { mode: ['css', 'legacy'] }
   };
 
-  await executeHtml2PdfDownload(reportHtml, opt, false);
+  await window.html2pdf().set(opt).from(reportHtml).save();
 }
 window.generateAndDownloadClientSidePdf = generateAndDownloadClientSidePdf;
 
 // Download Official PDF Evaluation Report for Employee Assessment
 async function downloadEmployeePDF(empNo) {
-  if (!empNo) return alert('Employee ID is required.');
+  if (!empNo) { showToast('Employee ID is required.'); return; }
   showToast(`Generating official PDF report for Employee ${empNo}...`);
+  if (typeof logExportAudit === 'function') logExportAudit('EMPLOYEE_PDF', empNo, `PDF report download for ${empNo}`);
 
-  // Priority 1: Instant high-fidelity client-side PDF generation via html2pdf
   try {
     await generateAndDownloadClientSidePdf(empNo);
     showToast(`Official PDF report for Employee ${empNo} downloaded successfully!`);
@@ -3901,7 +4848,6 @@ async function downloadEmployeePDF(empNo) {
     console.warn('Client-side PDF generation error, trying server dynamic PDF renderer:', clientErr);
   }
 
-  // Priority 2: Server-side dynamic PDF endpoint
   try {
     const records = getStoredRecords();
     const recordData = records[empNo] || null;
@@ -3928,11 +4874,9 @@ async function downloadEmployeePDF(empNo) {
       if (contentType.includes('application/pdf') || res.url.endsWith('.pdf')) {
         const blob = await res.blob();
         const contentDisp = res.headers.get('Content-Disposition') || '';
-        let filename = `ATC_ILUO_Report_${empNo}.pdf`;
+        let filename = `Yokohama_ILUO_Report_${empNo}.pdf`;
         const fnMatch = contentDisp.match(/filename="?([^"]+)"?/);
-        if (fnMatch && fnMatch[1]) {
-          filename = fnMatch[1];
-        }
+        if (fnMatch && fnMatch[1]) filename = fnMatch[1];
 
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -3950,151 +4894,14 @@ async function downloadEmployeePDF(empNo) {
     console.error('Server PDF generation error:', servErr);
   }
 
-  // STRICT REQUIREMENT: NEVER download DOCX when user clicked PDF!
-  alert(`Could not generate PDF for Employee ${empNo}. Please ensure your browser allows file downloads and try again.`);
+  showToast(`Could not generate PDF for Employee ${empNo}. Please check browser download permissions.`);
 }
 window.downloadEmployeePDFReport = downloadEmployeePDF;
 
-// =====================================================================
-// DEPARTMENT COMPETENCY SUMMARY REPORT (PDF & PREVIEW)
-// Landscape A4 audit-ready PDF generation via html2pdf & report_html_generator
-// =====================================================================
-async function ensurePdfAndGeneratorLibraries() {
-  if (typeof window.html2pdf === 'undefined') {
-    await new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = 'html2pdf.bundle.min.js';
-      script.onload = resolve;
-      script.onerror = () => reject(new Error('Failed to load html2pdf library'));
-      document.head.appendChild(script);
-    });
-  }
-  if (typeof window.generateDepartmentSummaryHtml !== 'function') {
-    await new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = 'report_html_generator.js?v=47.0';
-      script.onload = resolve;
-      script.onerror = () => reject(new Error('Failed to load report_html_generator library'));
-      document.head.appendChild(script);
-    });
-  }
-}
-
-async function buildDepartmentSummaryHtmlData(deptOverride) {
-  await ensurePdfAndGeneratorLibraries();
-
-  const dept = (deptOverride || currentDashboardDeptTracker || 'PRODUCTION').toUpperCase().trim();
-  const allEmployees = (typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES)) ? EMPLOYEES : [];
-  const records = (typeof getStoredRecords === 'function') ? getStoredRecords() : {};
-  const ojtRecords = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
-
-  let sections = [];
-  let deptSlug = 'Production';
-
-  if (dept === 'PRODUCTION' || dept.includes('PROD')) {
-    sections = (typeof PROD_SECTIONS_LIST !== 'undefined') ? PROD_SECTIONS_LIST : [];
-    deptSlug = 'Production';
-  } else if (dept === 'QUALITY CONTROL' || dept === 'QUALITY' || dept.includes('QUAL')) {
-    sections = (typeof QA_SECTIONS_LIST !== 'undefined') ? QA_SECTIONS_LIST : [];
-    deptSlug = 'Quality_Control';
-  } else {
-    sections = (typeof ALL_PLANT_SECTIONS_LIST !== 'undefined') ? ALL_PLANT_SECTIONS_LIST : [];
-    deptSlug = 'All_Plant';
-  }
-
-  const logoBase64 = await getBrowserLogoBase64();
-  const now = new Date();
-  const generatedDate = now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
-  const dateFileStr = now.toISOString().slice(0, 10);
-  const filename = `ATC_${deptSlug}_Department_Summary_${dateFileStr}.pdf`;
-
-  const html = window.generateDepartmentSummaryHtml({
-    dept,
-    employees: allEmployees,
-    records,
-    ojtRecords,
-    sections,
-    logoBase64,
-    generatedDate,
-    shift: 'Shift 1 (06:00 - 14:00)'
-  });
-
-  return { html, dept, deptSlug, filename };
-}
-
-async function generateAndDownloadDepartmentSummaryPdf(deptOverride) {
-  showToast('Generating official Department Summary PDF...');
-
-  try {
-    const { html, deptSlug, filename } = await buildDepartmentSummaryHtmlData(deptOverride);
-
-    const opt = {
-      margin: [6, 8, 6, 8],
-      filename: filename,
-      image: { type: 'jpeg', quality: 0.98 },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
-      pagebreak: { mode: ['css', 'legacy'] }
-    };
-
-    await executeHtml2PdfDownload(html, opt, true);
-    showToast(`Official ${deptSlug.replace(/_/g, ' ')} Summary PDF downloaded successfully!`);
-  } catch (err) {
-    console.error('Department Summary PDF generation error:', err);
-    showToast('Could not compile client PDF. Opening printable report preview...');
-    previewDepartmentSummaryHtml(deptOverride);
-  }
-}
-window.generateAndDownloadDepartmentSummaryPdf = generateAndDownloadDepartmentSummaryPdf;
-
-async function previewDepartmentSummaryHtml(deptOverride) {
-  try {
-    const { html } = await buildDepartmentSummaryHtmlData(deptOverride);
-    const win = window.open('', '_blank');
-    if (win) {
-      win.document.open();
-      win.document.write(html);
-      win.document.close();
-      showToast('Department Summary report opened for printing/preview.');
-    } else {
-      alert('Popup blocker prevented opening the report preview. Please allow popups or use the direct Download PDF button.');
-    }
-  } catch (err) {
-    console.error('Preview error:', err);
-    alert('Unable to generate Department Summary preview: ' + (err.message || 'Unknown error'));
-  }
-}
-window.previewDepartmentSummaryHtml = previewDepartmentSummaryHtml;
-
-function downloadSelectedDepartmentSummaryPDF() {
-  const sel = document.getElementById('reportDeptSummarySelect');
-  const dept = (sel && sel.value) ? sel.value : 'PRODUCTION';
-  generateAndDownloadDepartmentSummaryPdf(dept);
-}
-window.downloadSelectedDepartmentSummaryPDF = downloadSelectedDepartmentSummaryPDF;
-
-function previewSelectedDepartmentSummaryPDF() {
-  const sel = document.getElementById('reportDeptSummarySelect');
-  const dept = (sel && sel.value) ? sel.value : 'PRODUCTION';
-  previewDepartmentSummaryHtml(dept);
-}
-window.previewSelectedDepartmentSummaryPDF = previewSelectedDepartmentSummaryPDF;
-
-function downloadCurrentDeptTrackerPDF() {
-  const dept = (typeof currentDashboardDeptTracker !== 'undefined' && currentDashboardDeptTracker) ? currentDashboardDeptTracker : 'PRODUCTION';
-  generateAndDownloadDepartmentSummaryPdf(dept);
-}
-window.downloadCurrentDeptTrackerPDF = downloadCurrentDeptTrackerPDF;
-
-function downloadCurrentDeptPortalPDF() {
-  const dept = sessionStorage.getItem('iluo_dept_session') || 'PRODUCTION';
-  generateAndDownloadDepartmentSummaryPdf(dept);
-}
-window.downloadCurrentDeptPortalPDF = downloadCurrentDeptPortalPDF;
-
-// Download Official DOCX Evaluation Report for Employee Assessment (Universal Client + Server)
 async function downloadEmployeeDocx(empNo) {
-  if (!empNo) return alert('Employee ID is required.');
+  if (!empNo) { showToast('Employee ID is required.'); return; }
   showToast(`Generating official Word Document (.docx) report for Employee ${empNo}...`);
+  if (typeof logExportAudit === 'function') logExportAudit('EMPLOYEE_DOCX', empNo, `DOCX report download for ${empNo}`);
 
   try {
     const records = getStoredRecords();
@@ -4113,25 +4920,21 @@ async function downloadEmployeeDocx(empNo) {
       });
 
       if (!res.ok) {
-        // Fallback to GET endpoint
         res = await fetch(`/api/employee-docx/${encodeURIComponent(empNo)}`, {
           headers: (typeof getAuthHeaders === 'function' ? getAuthHeaders() : {}),
           credentials: 'include'
         });
       }
     } catch (netErr) {
-      console.warn('Server DOCX generation unreachable, using client-side fallback:', netErr.message);
       res = null;
     }
 
     if (res && res.ok) {
       const blob = await res.blob();
       const contentDisp = res.headers.get('Content-Disposition') || '';
-      let filename = `ATC_ILUO_Report_${empNo}.docx`;
+      let filename = `Yokohama_ILUO_Report_${empNo}.docx`;
       const fnMatch = contentDisp.match(/filename="?([^"]+)"?/);
-      if (fnMatch && fnMatch[1]) {
-        filename = fnMatch[1];
-      }
+      if (fnMatch && fnMatch[1]) filename = fnMatch[1];
 
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -4145,17 +4948,13 @@ async function downloadEmployeeDocx(empNo) {
       return;
     }
 
-    // Client-Side Generation Fallback (runs in browser when on Vercel / serverless / offline)
-    console.log('Generating DOCX on client-side for Employee', empNo);
     await generateClientSideDocx(empNo, recordData);
 
   } catch (err) {
-    console.error('DOCX Download error:', err);
     try {
       const records = getStoredRecords();
       await generateClientSideDocx(empNo, records[empNo] || null);
     } catch (clientErr) {
-      console.error('Client-side DOCX fallback error:', clientErr);
       showToast(`Could not generate DOCX: ${clientErr.message}`);
     }
   }
@@ -4173,7 +4972,7 @@ async function buildClientSideDocxBlob(empNo, recordData) {
     empNo: empNo,
     name: `Employee ${empNo}`,
     dept: 'QUALITY CONTROL',
-    section: 'Tire building QA',
+    section: 'Tire Building QA',
     doj: '-',
     targetLevel: 'O'
   };
@@ -4229,7 +5028,7 @@ async function buildClientSideDocxBlob(empNo, recordData) {
   });
 
   const safeName = (emp.name || empNo).replace(/[\s\\/]+/g, '_');
-  const filename = `ATC_ILUO_Report_${empNo}_${safeName}.docx`;
+  const filename = `Yokohama_ILUO_Report_${empNo}_${safeName}.docx`;
 
   return { blob, emp, filename };
 }
@@ -4253,27 +5052,36 @@ async function generateClientSidePdf(empNo, recordData) {
     showToast(`Official PDF report for Employee ${empNo} downloaded successfully!`);
   } catch (err) {
     console.error('generateClientSidePdf error:', err);
-    alert(`Could not generate PDF for Employee ${empNo}: ${err.message}`);
+    showToast(`Could not generate PDF for Employee ${empNo}: ${err.message}`);
   }
 }
 
-function confirmAndResetExam(empNo, empName) {
-  if (confirm(`Are you sure you want to RESET the assessment for Employee ${empNo} (${empName})?\n\nThis will clear all previous answers, marks, tab switch warnings, and status so they can take the test again.`)) {
-    const records = getStoredRecords();
-    if (records[empNo]) {
-      delete records[empNo];
-      localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(records));
-      try {
-        fetch('/api/records/' + encodeURIComponent(empNo), {
-          method: 'DELETE',
-          headers: getAuthHeaders(),
-          credentials: 'include'
-        }).catch(e => {});
-      } catch (e) {}
- showToast(`Exam reset successfully for Employee ${empNo}`);
-      renderAdminTable('');
-    }
+async function confirmAndResetExam(empNo, empName) {
+  const ok = await showInAppConfirm(
+    'Reset Employee Assessment',
+    `Reset assessment for Employee ${empNo} (${empName})? This will clear all previous answers, marks, and tab switch logs so they can take the test again.`,
+    'Reset Exam'
+  );
+  if (!ok) return;
+
+  const records = getStoredRecords();
+  if (records[empNo]) {
+    delete records[empNo];
+    localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(records));
   }
+  try {
+    await fetch('/api/records/' + encodeURIComponent(empNo), {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+  } catch (e) {}
+  showToast(`Exam reset successfully for Employee ${empNo}`);
+  if (typeof refreshUndoBanner === 'function') refreshUndoBanner();
+  renderAdminTable('');
+  if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
+  if (typeof renderResetIndividualTable === 'function') renderResetIndividualTable();
+  if (typeof onResetCascadeDeptChange === 'function') onResetCascadeDeptChange();
 }
 
 function filterAdminTable() {
@@ -4301,15 +5109,6 @@ function renderReportsCenter() {
   }
 }
 
-function sanitizeForCsv(val) {
-  if (val === undefined || val === null) return '';
-  const str = String(val);
-  if (/^[=+@\-\t\r]/.test(str)) {
-    return "'" + str;
-  }
-  return str;
-}
-
 function exportDataToCSV(dataArray, filename) {
   if (!dataArray || !dataArray.length) {
  showToast('No records available for export.');
@@ -4322,8 +5121,7 @@ function exportDataToCSV(dataArray, filename) {
   dataArray.forEach(row => {
     const vals = headers.map(h => {
       const val = row[h] === undefined || row[h] === null ? '' : String(row[h]);
-      const safeVal = sanitizeForCsv(val);
-      return `"${safeVal.replace(/"/g, '""')}"`;
+      return `"${val.replace(/"/g, '""')}"`;
     });
     rows.push(vals.join(','));
   });
@@ -4943,72 +5741,22 @@ function updateMasterWorkbookWithRecordsClient(wb, records, ojtRecords) {
   }
 }
 
-// Download Master Combined Excel (Production + QA Data with exact formatting and formulas)
+// Download Exact Template-Cloned Production Master Excel (.xlsx — 6 sheets, chart, live formulas)
 async function downloadCombinedProductionAndQAExcel() {
-  showToast('Preparing Master Excel download...');
-  try {
-    // 1. First attempt to fetch the official pre-generated master workbook from server
-    const res = await fetch('/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx');
-    if (res.ok) {
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        const arrayBuffer = await res.arrayBuffer();
-        if (arrayBuffer.byteLength > 2000 && typeof XLSX !== 'undefined') {
-          const workbook = XLSX.read(arrayBuffer, { type: 'array', cellStyles: true });
-          const allRecords = typeof getStoredRecords === 'function' ? getStoredRecords() : {};
-          const allOjtRecords = typeof getStoredOjtRecords === 'function' ? getStoredOjtRecords() : {};
-
-          updateMasterWorkbookWithRecordsClient(workbook, allRecords, allOjtRecords);
-          XLSX.writeFile(workbook, '1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx');
-          showToast('Combined Master Excel with live Safety and Section marks downloaded successfully!');
-          return;
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('Direct fetch failed, falling back to client generator:', err);
-  }
-
-  // 2. Client-side SheetJS generation fallback (Always succeeds, even if offline or server file not reachable)
-  try {
-    if (typeof XLSX !== 'undefined') {
-      const workbook = generateProductionFormatWorkbook();
-      XLSX.writeFile(workbook, '1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx');
-      showToast('Master Excel report (.xlsx) generated and downloaded successfully!');
-    } else {
-      exportAdminExcel();
-    }
-  } catch (genErr) {
-    console.error('Master Excel generation failed:', genErr);
-    exportAdminCSV();
-  }
+  return exportExactProductionExcel();
 }
 
-// Export Official Excel Report (Matches Production Skill Assessment Workbook)
-function exportAdminExcel() {
-  try {
-    const filename = `1. QA SKILL ASSESSMENT DATA ${new Date().toISOString().split('T')[0]}`;
-
-    if (typeof XLSX !== 'undefined') {
-      const workbook = generateProductionFormatWorkbook();
-      XLSX.writeFile(workbook, `${filename}.xlsx`);
-      showToast('Master Excel report matching official production format (.xlsx) downloaded successfully!');
-    } else {
-      const exportData = getAdminExportDataset();
-      exportDataToCSV(exportData, `${filename}.csv`);
-      showToast('Downloaded as CSV report (Excel compatible).');
-    }
-  } catch (err) {
-    console.error('Export Excel failed:', err);
-    exportAdminCSV();
-  }
+// Download Exact Template-Cloned QA Master Excel (.xlsx — 5 sheets, live formulas)
+async function exportAdminExcel() {
+  return exportExactQaExcel();
 }
 
 function exportAdminCSV() {
+  if (typeof logExportAudit === 'function') logExportAudit('MASTER_CSV', 'ALL_EMPLOYEES', 'Exported Master Skill Assessment CSV');
   const exportData = getAdminExportDataset();
-  const filename = `ATC_ILUO_QA_Assessment_Report_${new Date().toISOString().split('T')[0]}.csv`;
+  const filename = `Yokohama_ILUO_QA_Assessment_Report_${new Date().toISOString().split('T')[0]}.csv`;
   exportDataToCSV(exportData, filename);
- showToast('Master CSV report downloaded successfully!');
+  showToast('Master CSV report downloaded successfully!');
 }
 
 function exportSelectedSectionExcel() {
@@ -5024,6 +5772,7 @@ function exportSelectedSectionCSV() {
 }
 
 function exportFullQuestionBankExcel() {
+  if (typeof logExportAudit === 'function') logExportAudit('QUESTION_BANK_EXCEL', 'QUESTION_BANK', 'Exported Full Question Bank Excel');
   const allQs = [];
   ['L', 'U', 'O'].forEach(lvl => {
     (QUESTION_BANK[lvl] || []).forEach(q => {
@@ -5042,7 +5791,7 @@ function exportFullQuestionBankExcel() {
     });
   });
 
-  const filename = `ATC_QA_Question_Bank_Master_${new Date().toISOString().split('T')[0]}`;
+  const filename = `Yokohama_QA_Question_Bank_Master_${new Date().toISOString().split('T')[0]}`;
   try {
     if (typeof XLSX !== 'undefined') {
       const workbook = XLSX.utils.book_new();
@@ -5052,15 +5801,15 @@ function exportFullQuestionBankExcel() {
         XLSX.utils.book_append_sheet(workbook, ws, `${lvl} Level Questions`);
       });
       XLSX.writeFile(workbook, `${filename}.xlsx`);
- showToast('Master Question Bank Excel downloaded successfully!');
+      showToast('Master Question Bank Excel downloaded successfully!');
     } else {
       exportDataToCSV(allQs, `${filename}.csv`);
- showToast('Question Bank downloaded as CSV.');
+      showToast('Question Bank downloaded as CSV.');
     }
   } catch (err) {
     console.error('Question Bank Excel export error:', err);
     exportDataToCSV(allQs, `${filename}.csv`);
- showToast('Downloaded Question Bank as CSV.');
+    showToast('Downloaded Question Bank as CSV.');
   }
 }
 
@@ -5184,7 +5933,7 @@ function updateClearModalImpact() {
   }
 }
 
-function confirmExecuteClear() {
+async function confirmExecuteClear() {
   const secSelect = document.getElementById('clearModalSection');
   const lvlSelect = document.getElementById('clearModalLevel');
   const targetSection = secSelect ? secSelect.value : 'ALL';
@@ -5199,8 +5948,12 @@ function confirmExecuteClear() {
   const secLabel = targetSection === 'ALL' ? 'ALL Sections' : targetSection;
   const lvlLabel = targetLevel === 'ALL' ? 'ALL Levels (L, U, O)' : `Level ${targetLevel}`;
 
-  const promptMsg = `⚠️ ARE YOU SURE?\n\nYou are about to DELETE ${matchCount} questions from:\n\nSection: ${secLabel}\nLevel: ${lvlLabel}\n\nThis will remove them permanently from the Question Bank!`;
-  if (!confirm(promptMsg)) return;
+  const ok = await showInAppConfirm(
+    'Delete Filtered Questions',
+    `Delete ${matchCount} questions from Section: ${secLabel} (${lvlLabel})?`,
+    'Delete Questions'
+  );
+  if (!ok) return;
 
   deleteQuestionsBySectionAndLevel(targetSection, targetLevel);
   closeClearQuestionsModal();
@@ -5240,15 +5993,22 @@ function clearCurrentFilteredQuestions() {
   openClearQuestionsModal(secFilter, lvlFilter);
 }
 
-function confirmClearAllQuestionsBank() {
+async function confirmClearAllQuestionsBank() {
   const total = getTotalQuestionsInBank();
   if (total === 0) {
     showToast('Question bank is already empty.');
     return;
   }
 
-  const confirm1 = confirm(`⚠️ WARNING: DANGER ZONE!\n\nAre you sure you want to DELETE ALL ${total} QUESTIONS from the entire bank?\n\nThis will erase questions across ALL sections (L, U, and O levels)!`);
-  if (!confirm1) return;
+  const ok = await showTypedConfirmModal(
+    'Clear Entire Question Bank',
+    `WARNING: This will delete all ${total} questions across L, U, and O levels!`,
+    'CLEAR-ALL-QUESTIONS'
+  );
+  if (!ok) {
+    showToast('Clear cancelled: confirmation phrase did not match.');
+    return;
+  }
 
   QUESTION_BANK.L = [];
   QUESTION_BANK.U = [];
@@ -5260,14 +6020,18 @@ function confirmClearAllQuestionsBank() {
   renderQuestionsManager();
 }
 
-function restoreDefaultQuestionsBank() {
+async function restoreDefaultQuestionsBank() {
   if (typeof DEFAULT_QUESTION_BANK === 'undefined') {
     showToast('Default question bank snapshot not found.');
     return;
   }
 
-  const confirmRestore = confirm('🔄 Restore Default Question Bank?\n\nThis will restore the factory default questions for all sections and levels from the master curriculum.');
-  if (!confirmRestore) return;
+  const ok = await showInAppConfirm(
+    'Restore Default Question Bank',
+    'Restore the factory default questions for all sections and levels from the master curriculum?',
+    'Restore Defaults'
+  );
+  if (!ok) return;
 
   QUESTION_BANK.L = JSON.parse(JSON.stringify(DEFAULT_QUESTION_BANK.L || []));
   QUESTION_BANK.U = JSON.parse(JSON.stringify(DEFAULT_QUESTION_BANK.U || []));
@@ -5653,7 +6417,7 @@ async function handleQuestionFileUpload(event) {
   }
 
   if (errors.length > 0) {
-    alert(`Upload status:\n` + errors.join('\n'));
+    showToast('Upload issues: ' + errors.join(' | '));
   }
 }
 
@@ -5862,37 +6626,45 @@ function filterSectionEmployees() {
   sectionEmps.forEach(emp => {
     const rec = records[emp.empNo] || {};
     const tr = document.createElement('tr');
+    const safeNo = escapeHtml(emp.empNo);
+    const safeName = escapeHtml(emp.name);
+    const safeNameJs = String(emp.name || '').replace(/'/g, "\\'");
+    const examPassPct = getExamPassThreshold();
 
     const statusBadge = rec.isCompleted
-      ? `<span class="${rec.status && rec.status.includes('Terminated') ? 'badge-fail' : 'badge-pass'}">${rec.status || 'Completed'}</span>`
+      ? `<span class="${rec.status && rec.status.includes('Terminated') ? 'badge-fail' : (rec.status === 'Passed' ? 'badge-pass' : 'badge-fail')}">${escapeHtml(rec.status || 'Completed')}</span>`
       : rec.inProgress
       ? `<span class="badge-pending">In Progress (${rec.tabSwitchCount || 0} Sw)</span>`
-      : `<span style="color: #94A3B8;">Not Started</span>`;
+      : `<span style="color: #64748B;">Not Started</span>`;
+
+    const qCount = (rec.submittedQuestions && rec.submittedQuestions.length) || 20;
+    const minPassMarks = Math.ceil(qCount * (examPassPct / 100));
+    const isExamPass = rec.status === 'Passed' || (rec.markPct !== undefined ? rec.markPct >= examPassPct : (rec.totalMark !== undefined && rec.totalMark >= minPassMarks));
 
     const hasRecord = rec.isCompleted || rec.inProgress;
     const actionBtn = `
       <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-        <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${emp.empNo}')" title="Download Official Word Document (DOCX)">DOCX</button>
-        <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #DC2626; border-color: #DC2626;" onclick="downloadEmployeePDF('${emp.empNo}')" title="Download Official PDF Report">PDF</button>
-        <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #059669; border-color: #059669;" onclick="openOjtModalForEmployee('${emp.empNo}')">OJT Form</button>
-        ${hasRecord ? `<button class="btn-reset" style="padding: 3px 8px; font-size: 0.75rem;" onclick="confirmAndResetExam('${emp.empNo}', '${emp.name.replace(/'/g, "\\'")}')">Reset</button>` : ''}
+        <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #1E3A8A; border-color: #1E3A8A;" onclick="downloadEmployeeDocx('${safeNo}')" title="Download Official Word Document (DOCX)">DOCX</button>
+        <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #DC2626; border-color: #DC2626;" onclick="downloadEmployeePDF('${safeNo}')" title="Download Official PDF Report">PDF</button>
+        <button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; background: #059669; border-color: #059669;" onclick="openOjtModalForEmployee('${safeNo}')">OJT Form</button>
+        ${hasRecord ? `<button class="btn-reset" style="padding: 3px 8px; font-size: 0.75rem;" onclick="confirmAndResetExam('${safeNo}', '${safeNameJs}')">Reset</button>` : ''}
       </div>
     `;
 
     tr.innerHTML = `
-      <td><strong>${emp.empNo}</strong></td>
-      <td><strong>${emp.name}</strong></td>
-      <td><span class="skill-level-badge" style="background: #EFF6FF; color: var(--primary-color); border: 1px solid #BFDBFE;">${emp.currentLevel || 'I'} Level</span></td>
-      <td>${emp.qualification || '-'}</td>
-      <td>${emp.doj || '-'} <small style="color: var(--text-muted); display: block;">${emp.yearExp || ''}</small></td>
-      <td>${rec.uMark !== undefined ? rec.uMark : '-'}</td>
-      <td>${rec.lMark !== undefined ? rec.lMark : '-'}</td>
-      <td>${rec.oMark !== undefined ? rec.oMark : '-'}</td>
-      <td><strong style="color: var(--text-main); font-size: 0.95rem;">${rec.totalMark !== undefined ? rec.totalMark : '-'}</strong></td>
-      <td><strong>${rec.totalMark !== undefined ? (rec.totalMark >= 21 ? 'Pass (≥21)' : 'Retest (<21)') : '-'}</strong></td>
-      <td>${statusBadge}</td>
-      <td>${rec.attemptDate || '-'}</td>
-      <td>${actionBtn}</td>
+      <td data-label="Emp No"><strong>${safeNo}</strong></td>
+      <td data-label="Name"><strong>${safeName}</strong></td>
+      <td data-label="Level"><span class="iluo-badge iluo-badge-${String(emp.currentLevel || 'I').toLowerCase()}">${escapeHtml(emp.currentLevel || 'I')}</span></td>
+      <td data-label="Qualification">${escapeHtml(emp.qualification || '-')}</td>
+      <td data-label="DOJ">${escapeHtml(emp.doj || '-')} <small style="color: var(--text-muted); display: block;">${escapeHtml(emp.yearExp || '')}</small></td>
+      <td data-label="U">${rec.uMark !== undefined ? rec.uMark : '-'}</td>
+      <td data-label="L">${rec.lMark !== undefined ? rec.lMark : '-'}</td>
+      <td data-label="O">${rec.oMark !== undefined ? rec.oMark : '-'}</td>
+      <td data-label="Total"><strong style="color: var(--text-main); font-size: 0.95rem;">${rec.totalMark !== undefined ? rec.totalMark : '-'}</strong></td>
+      <td data-label="Threshold"><strong>${rec.totalMark !== undefined ? (isExamPass ? `Pass (≥${examPassPct}%)` : `Retest (<${examPassPct}%)`) : '-'}</strong></td>
+      <td data-label="Status">${statusBadge}</td>
+      <td data-label="Date">${escapeHtml(rec.attemptDate || '-')}</td>
+      <td data-label="Actions">${actionBtn}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -6065,8 +6837,10 @@ function exportCurrentSectionExcel(targetSecKey) {
   const currentSec = QA_SECTIONS_LIST.find(s => s.id === secKey) || QA_SECTIONS_LIST[0];
   const normSec = currentSec.normName;
   const records = getStoredRecords();
+  if (typeof logExportAudit === 'function') logExportAudit('SECTION_EXCEL', currentSec.title, `Exported Section Excel (${currentSec.title})`);
 
   const sectionEmps = EMPLOYEES.filter(emp => normalizeSectionName(emp.section) === normSec);
+  const ojtThreshold = getOjtPassThreshold();
 
   // Sheet 1: Employees & Marks
   const allOjt = getStoredOjtRecords();
@@ -6074,6 +6848,8 @@ function exportCurrentSectionExcel(targetSecKey) {
     const rec = records[emp.empNo] || {};
     const ojt = allOjt[emp.empNo] || {};
     const hasOjt = ojt.totalScore !== undefined || ojt.scorePct !== undefined;
+    const ojtPctVal = hasOjt ? (ojt.scorePct !== undefined ? ojt.scorePct : Math.round(((ojt.totalScore || 0) / (ojt.maxScore || 50)) * 100)) : 0;
+    const ojtStatus = hasOjt ? (ojt.qualificationStatus || (ojtPctVal >= ojtThreshold ? 'Qualified' : 'Not Qualified')) : 'Pending';
     const examStatus = rec.status || (rec.inProgress ? "In Progress" : "Not Started");
     let sMark = rec.safetyMark;
     let pMark = rec.processMark;
@@ -6140,7 +6916,7 @@ function exportCurrentSectionExcel(targetSecKey) {
   }));
 
   const cleanTitle = currentSec.title.replace(/[^a-zA-Z0-9]/g, '_');
-  const filename = `ATC_${cleanTitle}_Report_${new Date().toISOString().split('T')[0]}`;
+  const filename = `Yokohama_${cleanTitle}_Report_${new Date().toISOString().split('T')[0]}`;
 
   try {
     if (typeof XLSX !== 'undefined') {
@@ -6169,6 +6945,7 @@ function exportCurrentSectionCSV(targetSecKey) {
   const currentSec = QA_SECTIONS_LIST.find(s => s.id === secKey) || QA_SECTIONS_LIST[0];
   const normSec = currentSec.normName;
   const records = getStoredRecords();
+  if (typeof logExportAudit === 'function') logExportAudit('SECTION_CSV', currentSec.title, `Exported Section CSV (${currentSec.title})`);
 
   const sectionEmps = EMPLOYEES.filter(emp => normalizeSectionName(emp.section) === normSec);
 
@@ -6194,9 +6971,9 @@ function exportCurrentSectionCSV(targetSecKey) {
   }) : [{ "Notice": `No registered employees under ${currentSec.title}.` }];
 
   const cleanTitle = currentSec.title.replace(/[^a-zA-Z0-9]/g, '_');
-  const filename = `ATC_${cleanTitle}_Report_${new Date().toISOString().split('T')[0]}.csv`;
+  const filename = `Yokohama_${cleanTitle}_Report_${new Date().toISOString().split('T')[0]}.csv`;
   exportDataToCSV(empData, filename);
- showToast(`${currentSec.title} CSV report downloaded successfully!`);
+  showToast(`${currentSec.title} CSV report downloaded successfully!`);
 }
 
 // ---------------------------------------------------------------------
@@ -6537,25 +7314,31 @@ async function toggleTrainingSchedule(empNo) {
 
 async function unlockEmployeeExam(empNo, empName) {
   const nameStr = empName ? ` (${empName})` : '';
-  if (confirm(`Unlock assessment for Employee ${empNo}${nameStr}?\n\nThis will clear any previous completed status on the server and locally so the employee can start, re-test, and finish the examination.`)) {
-    const records = getStoredRecords();
-    if (records[empNo]) {
-      delete records[empNo];
-      localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(records));
-    }
-    try {
-      await fetch('/api/records/' + encodeURIComponent(empNo), {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-        credentials: 'include'
-      });
-    } catch (e) {}
+  const ok = await showInAppConfirm(
+    'Unlock Employee Assessment',
+    `Unlock assessment for Employee ${empNo}${nameStr}? Previous exam locks will be cleared so the candidate can re-take and complete the test.`,
+    'Unlock Exam'
+  );
+  if (!ok) return;
 
-    showToast(`Exam unlocked for Employee ${empNo}. The candidate can now start and finish their assessment.`);
-    if (typeof renderScheduledExamsTable === 'function') renderScheduledExamsTable();
-    if (typeof renderTrainingRequirements === 'function') renderTrainingRequirements();
-    if (typeof renderAdminTable === 'function') renderAdminTable('');
+  const records = getStoredRecords();
+  if (records[empNo]) {
+    delete records[empNo];
+    localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(records));
   }
+  try {
+    await fetch('/api/records/' + encodeURIComponent(empNo), {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+  } catch (e) {}
+
+  showToast(`Exam unlocked for Employee ${empNo}. The candidate can now start and finish their assessment.`);
+  if (typeof refreshUndoBanner === 'function') refreshUndoBanner();
+  if (typeof renderScheduledExamsTable === 'function') renderScheduledExamsTable();
+  if (typeof renderTrainingRequirements === 'function') renderTrainingRequirements();
+  if (typeof renderAdminTable === 'function') renderAdminTable('');
 }
 window.unlockEmployeeExam = unlockEmployeeExam;
 
@@ -6572,6 +7355,7 @@ function resetTrainingStatus(empNo) {
 }
 
 function exportTrainingPlanExcel() {
+  if (typeof logExportAudit === 'function') logExportAudit('TRAINING_PLAN_EXCEL', 'TRAINING_PLAN', 'Exported Training Plan Excel');
   const dataset = getAllTrainingDataset();
   const exportData = dataset.map((item, idx) => ({
     "S.No": idx + 1,
@@ -6590,7 +7374,7 @@ function exportTrainingPlanExcel() {
     "Scheduled Target Date": item.scheduledDate || ""
   }));
 
-  const filename = `ATC_ILUO_Training_Requirements_Plan_${new Date().toISOString().split('T')[0]}`;
+  const filename = `Yokohama_ILUO_Training_Requirements_Plan_${new Date().toISOString().split('T')[0]}`;
 
   try {
     if (typeof XLSX !== 'undefined') {
@@ -6598,10 +7382,10 @@ function exportTrainingPlanExcel() {
       const ws = XLSX.utils.json_to_sheet(exportData);
       XLSX.utils.book_append_sheet(workbook, ws, "Training Requirements Plan");
       XLSX.writeFile(workbook, `${filename}.xlsx`);
- showToast('Training Plan Excel (.xlsx) downloaded successfully!');
+      showToast('Training Plan Excel (.xlsx) downloaded successfully!');
     } else {
       exportDataToCSV(exportData, `${filename}.csv`);
- showToast('Downloaded Training Plan as CSV.');
+      showToast('Downloaded Training Plan as CSV.');
     }
   } catch (err) {
     console.error('Training plan export error:', err);
@@ -6624,32 +7408,15 @@ function getOjtTemplateForSection(secName) {
   if (s.includes('warehouse') || s.includes('data entry')) return OJT_OFFICIAL_TEMPLATES['89D'];
   if (s.includes('fid')) return OJT_OFFICIAL_TEMPLATES['90D'];
   if (s.includes('buffer') || s.includes('compound') || s.includes('replate')) return OJT_OFFICIAL_TEMPLATES['90G'];
-  // Default to Final Finish Repair Associate 84D
   return OJT_OFFICIAL_TEMPLATES['84D'] || Object.values(OJT_OFFICIAL_TEMPLATES)[0];
 }
 
 function getStoredOjtRecords() {
   try {
-    const seed = (typeof SEED_OJT_RECORDS !== 'undefined' && SEED_OJT_RECORDS && Object.keys(SEED_OJT_RECORDS).length > 0)
-      ? SEED_OJT_RECORDS
-      : ((typeof YOKOHAMA_SEED_OJT_RECORDS !== 'undefined' && YOKOHAMA_SEED_OJT_RECORDS && Object.keys(YOKOHAMA_SEED_OJT_RECORDS).length > 0)
-          ? YOKOHAMA_SEED_OJT_RECORDS
-          : {});
-
-    let ojt = JSON.parse(localStorage.getItem(STORAGE_KEY_OJT));
-    if (!ojt || typeof ojt !== 'object' || Object.keys(ojt).length === 0) {
-      if (seed && Object.keys(seed).length > 0) {
-        localStorage.setItem(STORAGE_KEY_OJT, JSON.stringify(seed));
-        return { ...seed };
-      }
-      return {};
-    }
-    if (seed && Object.keys(seed).length > 500 && Object.keys(ojt).length < 500) {
-      const merged = { ...seed, ...ojt };
-      localStorage.setItem(STORAGE_KEY_OJT, JSON.stringify(merged));
-      return merged;
-    }
-    return ojt;
+    const raw = localStorage.getItem(STORAGE_KEY_OJT);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return (parsed && typeof parsed === 'object') ? parsed : {};
   } catch (e) {
     return {};
   }
@@ -6657,9 +7424,13 @@ function getStoredOjtRecords() {
 
 async function makeZeroFinishExam() {
   const total = typeof EMPLOYEES !== 'undefined' ? EMPLOYEES.length : 1462;
-  const typed = prompt(`⚠️ CRITICAL DESTRUCTIVE ACTION ⚠️\n\nResetting all assessment records will clear all finished exams for all ${total} employees.\n\nTo confirm, type exactly: RESET-ALL-EXAMS`);
-  if (!typed || typed.trim() !== 'RESET-ALL-EXAMS') {
-    showToast('Reset cancelled: Confirmation phrase did not match.');
+  const ok = await showTypedConfirmModal(
+    'Reset All Assessment Records',
+    `CRITICAL DESTRUCTIVE ACTION: This clears finished exam records for all ${total} employees. A 15-minute soft-delete backup is stored for undo.`,
+    'RESET-ALL-EXAMS'
+  );
+  if (!ok) {
+    showToast('Reset cancelled: confirmation phrase did not match.');
     return;
   }
 
@@ -6672,22 +7443,22 @@ async function makeZeroFinishExam() {
     });
     const data = await res.json();
     if (data.success) {
-      // 1. Reset client LocalStorage
       localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify({}));
       localStorage.removeItem('iluo_preserve_local');
 
-      showToast(`All ${total} exams reset to 0 finished! Fresh assessment mode active.`);
+      showToast(`All ${total} exams reset to 0 finished! A 15-minute undo backup was created.`);
+      if (typeof refreshUndoBanner === 'function') refreshUndoBanner();
 
-      // 2. Re-render UI
       if (document.getElementById('adminTableBody')) {
         const searchInput = document.getElementById('adminSearchInput');
         renderAdminTable(searchInput ? searchInput.value : '');
       }
       if (document.getElementById('secEmpTableBody')) filterSectionTable();
       if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
-      if (currentUser) {
-        handleRoute();
-      }
+      if (typeof onResetCascadeDeptChange === 'function') onResetCascadeDeptChange();
+      if (typeof renderResetIndividualTable === 'function') renderResetIndividualTable();
+      if (typeof renderDatabaseInventoryCards === 'function') renderDatabaseInventoryCards();
+      if (currentUser) handleRoute();
     } else {
       showToast(data.message || 'Server rejected reset request.');
     }
@@ -6698,9 +7469,13 @@ async function makeZeroFinishExam() {
 
 async function resetAllOjtEvaluations() {
   const total = typeof EMPLOYEES !== 'undefined' ? EMPLOYEES.length : 1462;
-  const typed = prompt(`⚠️ CRITICAL DESTRUCTIVE ACTION ⚠️\n\nResetting all OJT evaluations will clear practical evaluations for all ${total} employees.\n\nTo confirm, type exactly: RESET-ALL-OJT`);
-  if (!typed || typed.trim() !== 'RESET-ALL-OJT') {
-    showToast('Reset cancelled: Confirmation phrase did not match.');
+  const ok = await showTypedConfirmModal(
+    'Reset All OJT Evaluations',
+    `CRITICAL DESTRUCTIVE ACTION: This clears practical OJT evaluations for all ${total} employees. A 15-minute soft-delete backup is stored for undo.`,
+    'RESET-ALL-OJT'
+  );
+  if (!ok) {
+    showToast('Reset cancelled: confirmation phrase did not match.');
     return;
   }
 
@@ -6713,15 +7488,10 @@ async function resetAllOjtEvaluations() {
     });
     const data = await res.json();
     if (data.success) {
-      // 1. Reset client LocalStorage
       localStorage.setItem(STORAGE_KEY_OJT, JSON.stringify({}));
-
-      showToast(`All ${total} OJT evaluations reset to 0 finished! Fresh OJT mode active.`);
-
-      // 2. Re-render OJT Dashboard
-      if (typeof renderOjtDashboard === 'function') {
-        renderOjtDashboard();
-      }
+      showToast(`All ${total} OJT evaluations reset! A 15-minute undo backup was created.`);
+      if (typeof refreshUndoBanner === 'function') refreshUndoBanner();
+      if (typeof renderOjtDashboard === 'function') renderOjtDashboard();
     } else {
       showToast(data.message || 'Server rejected OJT reset request.');
     }
@@ -6732,32 +7502,7 @@ async function resetAllOjtEvaluations() {
 window.makeZeroFinishExam = makeZeroFinishExam;
 
 async function restoreAllCompletedExams() {
-  if (confirm('Restore all 234+ completed demo exam records from backup?')) {
-    showToast('Restoring demo records from backup...');
-    try {
-      const res = await fetch('/api/records/restore-demo', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        credentials: 'include'
-      });
-      const data = await res.json();
-      if (data.success && data.records) {
-        localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(data.records));
-        localStorage.setItem('iluo_preserve_local', 'true');
-        showToast('Restored completed records!');
-      } else {
-        showToast('Could not restore demo records.');
-      }
-    } catch (e) {
-      showToast('Error restoring demo records: ' + e.message);
-    }
-    if (document.getElementById('adminTableBody')) {
-      const searchInput = document.getElementById('adminSearchInput');
-      renderAdminTable(searchInput ? searchInput.value : '');
-    }
-    if (document.getElementById('secEmpTableBody')) filterSectionTable();
-    if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
-  }
+  showToast('Demo data restore is disabled in production mode. Use Audit Log & Undo Backups to restore recent soft-deleted records.');
 }
 window.restoreAllCompletedExams = restoreAllCompletedExams;
 
@@ -6766,38 +7511,34 @@ function applyAll234CompletedRecords() {
 }
 window.applyAll234CompletedRecords = applyAll234CompletedRecords;
 
-// ---------------------------------------------------------------------
-// DEDICATED ADMIN SECTION & DEPARTMENT EXAM RESET MANAGEMENT
-// ---------------------------------------------------------------------
 async function resetSectionExams(secIdOrName, customTitle) {
-  const sec = (typeof getSectionObj === 'function') ? getSectionObj(secIdOrName) : (QA_SECTIONS_LIST.find(s => s.id === secIdOrName || s.normName === String(secIdOrName).toLowerCase() || s.title.toLowerCase() === String(secIdOrName).toLowerCase()));
-  const title = customTitle || (sec ? sec.title : secIdOrName);
-  const secId = sec ? sec.id : secIdOrName;
-  const normName = sec ? sec.normName : String(secIdOrName).toLowerCase().replace(/qa/g, '').trim();
+  const qaSec = QA_SECTIONS_LIST.find(s => s.id === secIdOrName || s.normName === String(secIdOrName).toLowerCase() || s.title.toLowerCase() === String(secIdOrName).toLowerCase());
+  const title = customTitle || (qaSec ? qaSec.title : secIdOrName);
+  const secId = qaSec ? qaSec.id : secIdOrName;
+  const normName = qaSec ? qaSec.normName : String(secIdOrName || '').toLowerCase().trim().replace(/\s+/g, ' ');
 
-  // Find employees in this section
   const sectionEmps = EMPLOYEES.filter(e => {
-    const s = normalizeSectionName(e.section || '');
-    return s.includes(normName) || normName.includes(s);
+    if (qaSec) {
+      const s = normalizeSectionName(e.section || '');
+      return !isProductionDeptClient(e.dept) && (s.includes(normName) || normName.includes(s));
+    }
+    return String(e.section || '').toLowerCase().trim().replace(/\s+/g, ' ') === normName;
   });
 
   const count = sectionEmps.length;
-  if (!confirm(`Are you sure you want to RESET all exams for Section: "${title}"?\n\nThis will reset ${count} employee records in this section back to "Not Started" so they can take their assessments freshly.`)) {
-    return;
-  }
+  const ok = await showInAppConfirm(
+    'Reset Section Assessments',
+    `Reset all exams for Section "${title}" (${count} employees)? Records will return to Not Started and an undo backup is stored.`,
+    'Reset Section'
+  );
+  if (!ok) return;
 
-  // 1. Delete from local records
   const records = getStoredRecords();
-  let clearedCount = 0;
   sectionEmps.forEach(e => {
-    if (records[e.empNo]) {
-      delete records[e.empNo];
-      clearedCount++;
-    }
+    if (records[e.empNo]) delete records[e.empNo];
   });
   localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(records));
 
-  // 2. Call server section reset API
   try {
     const res = await fetch('/api/records/reset-section', {
       method: 'POST',
@@ -6807,15 +7548,15 @@ async function resetSectionExams(secIdOrName, customTitle) {
     });
     const data = await res.json();
     if (data.success) {
-      showToast(`Section "${title}" exams reset successfully! (${count} employees reset to Not Started)`);
+      showToast(`Section "${title}" exams reset (${count} employees).`);
+      if (typeof refreshUndoBanner === 'function') refreshUndoBanner();
     } else {
-      showToast(`Section reset completed locally (${count} employees).`);
+      showToast((data && data.message) || `Section reset completed locally (${count} employees).`);
     }
   } catch (err) {
-    showToast(`Section "${title}" reset completed.`);
+    showToast(`Section "${title}" reset failed on server.`);
   }
 
-  // 3. Re-render views
   if (document.getElementById('adminTableBody')) {
     const searchInput = document.getElementById('adminSearchInput');
     renderAdminTable(searchInput ? searchInput.value : '');
@@ -6823,6 +7564,8 @@ async function resetSectionExams(secIdOrName, customTitle) {
   if (document.getElementById('secEmpTableBody')) filterSectionTable();
   if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
   if (typeof updateAdminResetSecInfo === 'function') updateAdminResetSecInfo();
+  if (typeof updateAdminResetDeptInfo === 'function') updateAdminResetDeptInfo();
+  if (typeof renderResetIndividualTable === 'function') renderResetIndividualTable();
   if (typeof renderSectionsExplorer === 'function' && typeof currentActiveSectionKey !== 'undefined') {
     renderSectionsExplorer(currentActiveSectionKey);
   }
@@ -6837,18 +7580,19 @@ async function resetDepartmentExams(deptName) {
   });
 
   const count = deptEmps.length;
-  if (!confirm(`Are you sure you want to RESET all exams for Department: "${normDept}"?\n\nThis will reset ${count} employee records in this department back to "Not Started" so they can take their assessments freshly.`)) {
-    return;
-  }
+  const ok = await showInAppConfirm(
+    'Reset Department Assessments',
+    `Reset all exams for Department "${normDept}" (${count} employees)? Records will return to Not Started and an undo backup is stored.`,
+    'Reset Department'
+  );
+  if (!ok) return;
 
-  // 1. Delete from local records
   const records = getStoredRecords();
   deptEmps.forEach(e => {
     if (records[e.empNo]) delete records[e.empNo];
   });
   localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(records));
 
-  // 2. Call server department reset API
   try {
     const res = await fetch('/api/records/reset-department', {
       method: 'POST',
@@ -6858,15 +7602,15 @@ async function resetDepartmentExams(deptName) {
     });
     const data = await res.json();
     if (data.success) {
-      showToast(`Department "${normDept}" exams reset successfully! (${count} employees reset to Not Started)`);
+      showToast(`Department "${normDept}" exams reset (${count} employees).`);
+      if (typeof refreshUndoBanner === 'function') refreshUndoBanner();
     } else {
-      showToast(`Department reset completed locally (${count} employees).`);
+      showToast((data && data.message) || `Department reset completed locally (${count} employees).`);
     }
   } catch (err) {
-    showToast(`Department "${normDept}" reset completed.`);
+    showToast(`Department "${normDept}" reset failed on server.`);
   }
 
-  // 3. Re-render views
   if (document.getElementById('adminTableBody')) {
     const searchInput = document.getElementById('adminSearchInput');
     renderAdminTable(searchInput ? searchInput.value : '');
@@ -6874,25 +7618,116 @@ async function resetDepartmentExams(deptName) {
   if (document.getElementById('secEmpTableBody')) filterSectionTable();
   if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
   if (typeof updateAdminResetDeptInfo === 'function') updateAdminResetDeptInfo();
+  if (typeof updateAdminResetSecInfo === 'function') updateAdminResetSecInfo();
+  if (typeof renderResetIndividualTable === 'function') renderResetIndividualTable();
 }
 window.resetDepartmentExams = resetDepartmentExams;
+
+function getSectionsForDepartmentClient(dept) {
+  const targetDept = String(dept || 'PRODUCTION').toUpperCase().trim();
+  const activeEmps = (EMPLOYEES || []).filter(e => !e.isLeft && e.status !== 'LEFT');
+  const records = getStoredRecords();
+
+  const matchingEmps = activeEmps.filter(e => {
+    const d = String(e.dept || 'QUALITY CONTROL').toUpperCase().trim();
+    return targetDept === 'ALL' || d === targetDept || d.includes(targetDept) || targetDept.includes(d);
+  });
+
+  const secMap = new Map();
+  if (targetDept === 'QUALITY CONTROL' || targetDept === 'ALL') {
+    QA_SECTIONS_LIST.forEach(s => {
+      secMap.set(s.normName, { value: s.id, label: `${s.title} (${s.code})`, dept: 'QUALITY CONTROL', total: 0, completed: 0, isQa: true, qaId: s.id, qaTitle: s.title });
+    });
+  }
+  if (targetDept === 'PRODUCTION' || targetDept === 'ALL') {
+    const prodSecs = (typeof ILUO_CONSTANTS !== 'undefined' && Array.isArray(ILUO_CONSTANTS.PRODUCTION_SECTIONS))
+      ? ILUO_CONSTANTS.PRODUCTION_SECTIONS
+      : PROD_SECTION_NAMES;
+    prodSecs.forEach(name => {
+      const k = String(name).toLowerCase().trim().replace(/\s+/g, ' ');
+      if (!secMap.has(k)) {
+        secMap.set(k, { value: name, label: name, dept: 'PRODUCTION', total: 0, completed: 0, isQa: false });
+      }
+    });
+  }
+
+  matchingEmps.forEach(e => {
+    const rawSec = String(e.section || 'General').trim();
+    const eDept = String(e.dept || 'QUALITY CONTROL').toUpperCase().trim();
+    const qaMatch = !isProductionDeptClient(eDept)
+      ? QA_SECTIONS_LIST.find(s => normalizeSectionName(rawSec) === s.normName)
+      : null;
+    const key = qaMatch ? qaMatch.normName : rawSec.toLowerCase().replace(/\s+/g, ' ');
+    if (!secMap.has(key)) {
+      secMap.set(key, { value: qaMatch ? qaMatch.id : rawSec, label: qaMatch ? `${qaMatch.title} (${qaMatch.code})` : rawSec, dept: eDept, total: 0, completed: 0, isQa: Boolean(qaMatch), qaId: qaMatch?.id, qaTitle: qaMatch?.title });
+    }
+    const entry = secMap.get(key);
+    entry.total++;
+    if (records[e.empNo] && records[e.empNo].isCompleted) entry.completed++;
+  });
+
+  return Array.from(secMap.values()).filter(s => s.total > 0 || s.isQa);
+}
+
+function onResetCascadeDeptChange() {
+  const deptSel = document.getElementById('adminResetDeptSelect');
+  const secSel = document.getElementById('adminResetSecSelect');
+  const dept = deptSel ? deptSel.value : 'PRODUCTION';
+
+  if (secSel) {
+    const prevVal = secSel.value;
+    const sections = getSectionsForDepartmentClient(dept);
+    if (sections.length === 0) {
+      secSel.innerHTML = '<option value="">No sections in selected department</option>';
+    } else {
+      secSel.innerHTML = sections.map(s => {
+        const prefix = dept === 'ALL' ? `[${s.dept}] ` : '';
+        return `<option value="${escapeHtml(s.value)}">${escapeHtml(prefix + s.label)} — ${s.completed}/${s.total} done</option>`;
+      }).join('');
+      if (prevVal && sections.some(s => s.value === prevVal)) {
+        secSel.value = prevVal;
+      }
+    }
+  }
+  updateAdminResetDeptInfo();
+  updateAdminResetSecInfo();
+}
+window.onResetCascadeDeptChange = onResetCascadeDeptChange;
 
 function updateAdminResetSecInfo() {
   const select = document.getElementById('adminResetSecSelect');
   const infoEl = document.getElementById('adminResetSecInfo');
   if (!select || !infoEl) return;
 
-  const secId = select.value;
-  const sec = QA_SECTIONS_LIST.find(s => s.id === secId) || QA_SECTIONS_LIST[0];
-  const sectionEmps = EMPLOYEES.filter(e => normalizeSectionName(e.section || '') === sec.normName);
-  const records = getStoredRecords();
+  const secVal = select.value;
+  if (!secVal) {
+    infoEl.innerHTML = 'No section selected.';
+    return;
+  }
 
-  let completed = 0;
-  sectionEmps.forEach(e => {
-    if (records[e.empNo] && records[e.empNo].isCompleted) completed++;
+  const qaSec = QA_SECTIONS_LIST.find(s => s.id === secVal || s.normName === secVal.toLowerCase());
+  const normName = qaSec ? qaSec.normName : secVal.toLowerCase().trim().replace(/\s+/g, ' ');
+  const title = qaSec ? qaSec.title : secVal;
+
+  const sectionEmps = EMPLOYEES.filter(e => {
+    if (e.isLeft || e.status === 'LEFT') return false;
+    if (qaSec) {
+      const s = normalizeSectionName(e.section || '');
+      return !isProductionDeptClient(e.dept) && (s.includes(normName) || normName.includes(s));
+    }
+    return String(e.section || '').toLowerCase().trim().replace(/\s+/g, ' ') === normName;
   });
 
-  infoEl.innerHTML = `<strong>Section:</strong> ${sec.title} &bull; <strong>Total Staff:</strong> ${sectionEmps.length} &bull; <strong>Completed:</strong> <span style="color: ${completed > 0 ? '#059669' : '#64748B'}; font-weight: 700;">${completed}</span> &bull; <strong>Not Started:</strong> ${sectionEmps.length - completed}`;
+  const records = getStoredRecords();
+  let completed = 0, inProgress = 0;
+  sectionEmps.forEach(e => {
+    const r = records[e.empNo];
+    if (r && r.isCompleted) completed++;
+    else if (r && r.inProgress) inProgress++;
+  });
+  const notFinished = sectionEmps.length - completed;
+
+  infoEl.innerHTML = `<strong>Section:</strong> ${escapeHtml(title)} &bull; <strong>Active Staff:</strong> ${sectionEmps.length} &bull; <strong>Completed:</strong> <span style="color: ${completed > 0 ? '#059669' : 'var(--text-muted)'}; font-weight: 700;">${completed}</span> &bull; <strong>Not Finished:</strong> ${notFinished} (${inProgress} in progress)`;
 }
 window.updateAdminResetSecInfo = updateAdminResetSecInfo;
 
@@ -6903,35 +7738,91 @@ function updateAdminResetDeptInfo() {
 
   const dept = select.value;
   const deptEmps = EMPLOYEES.filter(e => {
+    if (e.isLeft || e.status === 'LEFT') return false;
     const d = String(e.dept || 'QUALITY CONTROL').toUpperCase().trim();
-    return d === dept.toUpperCase() || d.includes(dept.toUpperCase());
+    return dept === 'ALL' || d === dept.toUpperCase() || d.includes(dept.toUpperCase());
   });
   const records = getStoredRecords();
 
-  let completed = 0;
+  let completed = 0, inProgress = 0;
   deptEmps.forEach(e => {
-    if (records[e.empNo] && records[e.empNo].isCompleted) completed++;
+    const r = records[e.empNo];
+    if (r && r.isCompleted) completed++;
+    else if (r && r.inProgress) inProgress++;
   });
 
-  infoEl.innerHTML = `<strong>Department:</strong> ${dept} &bull; <strong>Total Staff:</strong> ${deptEmps.length} &bull; <strong>Completed:</strong> <span style="color: ${completed > 0 ? '#059669' : '#64748B'}; font-weight: 700;">${completed}</span> &bull; <strong>Not Started:</strong> ${deptEmps.length - completed}`;
+  const sectionsCount = new Set(deptEmps.map(e => (e.section || '').trim()).filter(Boolean)).size;
+  infoEl.innerHTML = `<strong>Department:</strong> ${escapeHtml(dept)} (${sectionsCount} sections) &bull; <strong>Active Staff:</strong> ${deptEmps.length} &bull; <strong>Completed:</strong> <span style="color: ${completed > 0 ? '#059669' : 'var(--text-muted)'}; font-weight: 700;">${completed}</span> &bull; <strong>Not Finished:</strong> ${deptEmps.length - completed}`;
 }
 window.updateAdminResetDeptInfo = updateAdminResetDeptInfo;
 
 function triggerAdminSecReset() {
   const select = document.getElementById('adminResetSecSelect');
-  if (!select) return;
-  const secId = select.value;
-  const sec = QA_SECTIONS_LIST.find(s => s.id === secId);
-  resetSectionExams(secId, sec ? sec.title : secId);
+  if (!select || !select.value) {
+    showToast('Please select a section first.');
+    return;
+  }
+  const secVal = select.value;
+  const sec = QA_SECTIONS_LIST.find(s => s.id === secVal);
+  resetSectionExams(secVal, sec ? sec.title : secVal);
 }
 window.triggerAdminSecReset = triggerAdminSecReset;
 
 function triggerAdminDeptReset() {
   const select = document.getElementById('adminResetDeptSelect');
   if (!select) return;
+  if (select.value === 'ALL') {
+    makeZeroFinishExam();
+    return;
+  }
   resetDepartmentExams(select.value);
 }
 window.triggerAdminDeptReset = triggerAdminDeptReset;
+
+function renderResetIndividualTable() {
+  const tbody = document.getElementById('resetIndTableBody');
+  if (!tbody) return;
+  const q = (document.getElementById('resetIndSearchInput')?.value || '').toLowerCase().trim();
+  const records = getStoredRecords();
+
+  const candidates = (EMPLOYEES || [])
+    .filter(e => !e.isLeft && e.status !== 'LEFT')
+    .map(emp => ({ emp, rec: records[emp.empNo] || null }))
+    .filter(({ emp, rec }) => {
+      if (!rec || (!rec.isCompleted && !rec.inProgress)) return false;
+      if (!q) return true;
+      const hay = `${emp.empNo || ''} ${emp.name || ''} ${emp.section || ''} ${emp.dept || ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+
+  if (candidates.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted);">${q ? 'No active completed or in-progress exams match your search.' : 'No completed or in-progress exams currently exist to reset.'}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = candidates.slice(0, 60).map(({ emp, rec }) => {
+    const m = getExamMarksAndPctClient(rec, emp);
+    const safeNameJs = String(emp.name || '').replace(/'/g, "\\'");
+    const statusHtml = rec.isCompleted
+      ? `<span class="${m.passed ? 'badge-pass' : 'badge-fail'}">${escapeHtml(rec.status || (m.passed ? 'Passed' : 'Failed'))}</span>`
+      : `<span class="badge-pending">In Progress</span>`;
+    const scoreHtml = rec.isCompleted ? `<strong>${m.marks}/${m.totalQ}</strong> (${m.pct}%)` : '—';
+    return `
+      <tr>
+        <td data-label="Emp No"><strong>${escapeHtml(emp.empNo)}</strong></td>
+        <td data-label="Name">${escapeHtml(emp.name)}</td>
+        <td data-label="Department">${escapeHtml(emp.dept || '-')}</td>
+        <td data-label="Section">${escapeHtml(emp.section || '-')}</td>
+        <td data-label="Status">${statusHtml}</td>
+        <td data-label="Score">${scoreHtml}</td>
+        <td data-label="Action" style="text-align:center;">
+          <button type="button" class="btn-reset" style="padding:4px 10px;font-size:0.76rem;" onclick="confirmAndResetExam('${escapeHtml(emp.empNo)}', '${safeNameJs}')">Reset Exam</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+window.renderResetIndividualTable = renderResetIndividualTable;
 
 function resetCurrentActiveSectionExams() {
   const secKey = typeof currentActiveSectionKey !== 'undefined' ? currentActiveSectionKey : 'warehouse';
@@ -7120,14 +8011,17 @@ async function scheduleSectionExam() {
   const scheduledDate = (dateInput && dateInput.value) ? dateInput.value : new Date().toISOString().split('T')[0];
   const chosenLvl = (selectLvl && selectLvl.value) ? selectLvl.value : 'AUTO';
 
-  if (!confirm(`📅 Schedule Assessment for entire QA Section: "${sec.title}"?\n\n• Total Candidates: ${sectionEmps.length}\n• Target Date: ${scheduledDate}\n• Target Level: ${chosenLvl === 'AUTO' ? 'Auto Next Level per Employee' : 'Level ' + chosenLvl}\n\nThis will clear any completed exam locks so all section employees can start & finish their assessment without restrictions.`)) {
-    return;
-  }
+  const ok = await showInAppConfirm(
+    'Schedule Section Assessment',
+    `Schedule assessment for QA Section "${sec.title}" (${sectionEmps.length} candidates) on ${scheduledDate} (${chosenLvl === 'AUTO' ? 'Auto Next Level' : 'Level ' + chosenLvl})?`,
+    'Schedule Section'
+  );
+  if (!ok) return;
 
   showToast(`Scheduling exams & unlocking candidates for ${sec.title}...`);
 
-  // 1. Update training status and clear local exam records
   const records = getStoredRecords();
+  const scheduleItems = [];
   sectionEmps.forEach(emp => {
     let tgtLvl = chosenLvl;
     if (tgtLvl === 'AUTO') {
@@ -7135,34 +8029,38 @@ async function scheduleSectionExam() {
       tgtLvl = (LEVEL_RULES[curLvl] && LEVEL_RULES[curLvl].nextLevel) ? LEVEL_RULES[curLvl].nextLevel : 'L';
     }
 
-    saveTrainingRecord(emp.empNo, {
+    const schedObj = {
+      empNo: emp.empNo,
       status: 'SCHEDULED',
       date: scheduledDate,
       targetLevel: tgtLvl,
       scheduledBy: 'Admin (Section Bulk)',
       scheduledAt: new Date().toISOString()
-    });
+    };
+    saveTrainingRecord(emp.empNo, schedObj);
+    scheduleItems.push(schedObj);
 
-    if (records[emp.empNo]) {
-      delete records[emp.empNo];
-    }
+    if (records[emp.empNo]) delete records[emp.empNo];
   });
 
   localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(records));
 
-  // 2. Reset section exam records on server to prevent 409 conflict
   try {
+    await fetch('/api/schedules', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify({ schedules: scheduleItems })
+    }).catch(() => {});
     await fetch('/api/records/reset-section', {
       method: 'POST',
       headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify({ section: sec.title, sectionId: sec.id })
     });
-  } catch (err) {
-    console.warn('Server reset-section network response:', err.message);
-  }
+  } catch (err) {}
 
-  showToast(`✅ Successfully scheduled exams for all ${sectionEmps.length} employees in ${sec.title}!`);
+  showToast(`Successfully scheduled exams for all ${sectionEmps.length} employees in ${sec.title}!`);
 
   updateScheduleSectionPreview();
   renderScheduledExamsTable();
@@ -7192,37 +8090,44 @@ async function scheduleIndividualEmployeeExam() {
   const curLvl = emp.currentLevel || 'I';
   let tgtLvl = (selectLvl && selectLvl.value !== 'AUTO') ? selectLvl.value : ((LEVEL_RULES[curLvl] && LEVEL_RULES[curLvl].nextLevel) || 'L');
 
-  if (!confirm(`📅 Schedule Exam for Employee ${emp.empNo} (${emp.name})?\n\n• QA Section: ${emp.section}\n• Target Level: Level ${tgtLvl}\n• Scheduled Date: ${scheduledDate}\n\nThis will clear any previous exam locks locally and on the server so the candidate can start, take, and finish their exam.`)) {
-    return;
-  }
+  const ok = await showInAppConfirm(
+    'Schedule Employee Assessment',
+    `Schedule Level ${tgtLvl} exam for ${emp.name} (${emp.empNo}) in ${emp.section} on ${scheduledDate}?`,
+    'Schedule Exam'
+  );
+  if (!ok) return;
 
-  saveTrainingRecord(emp.empNo, {
+  const schedObj = {
+    empNo: emp.empNo,
     status: 'SCHEDULED',
     date: scheduledDate,
     targetLevel: tgtLvl,
     scheduledBy: 'Admin (Individual)',
     scheduledAt: new Date().toISOString()
-  });
+  };
+  saveTrainingRecord(emp.empNo, schedObj);
 
-  // Clear previous exam record locally
   const records = getStoredRecords();
   if (records[emp.empNo]) {
     delete records[emp.empNo];
     localStorage.setItem(STORAGE_KEY_RECORDS, JSON.stringify(records));
   }
 
-  // Clear previous exam record on server
   try {
+    await fetch('/api/schedules', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(schedObj)
+    }).catch(() => {});
     await fetch('/api/records/' + encodeURIComponent(emp.empNo), {
       method: 'DELETE',
       headers: getAuthHeaders(),
       credentials: 'include'
     });
-  } catch (e) {
-    console.warn('Server delete record network error:', e.message);
-  }
+  } catch (e) {}
 
-  showToast(`✅ Exam scheduled & unlocked for ${emp.name} (${emp.empNo}) on ${scheduledDate}!`);
+  showToast(`Exam scheduled & unlocked for ${emp.name} (${emp.empNo}) on ${scheduledDate}!`);
 
   updateScheduleEmpPreview();
   renderScheduledExamsTable();
@@ -7258,21 +8163,19 @@ function renderScheduledExamsTable() {
     }
   }
 
-  if (countBadge) {
-    countBadge.innerText = `${scheduledList.length} Scheduled`;
-  }
+  if (countBadge) countBadge.innerText = `${scheduledList.length} Scheduled`;
 
   const filtered = scheduledList.filter(item => {
     if (!query) return true;
-    return item.empNo.toLowerCase().includes(query) ||
-           item.name.toLowerCase().includes(query) ||
-           item.section.toLowerCase().includes(query);
+    return String(item.empNo).toLowerCase().includes(query) ||
+      String(item.name).toLowerCase().includes(query) ||
+      String(item.section).toLowerCase().includes(query);
   });
 
   if (filtered.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="8" style="text-align: center; padding: 24px 16px; color: #94A3B8; font-size: 0.88rem;">
+        <td colspan="8" style="text-align: center; padding: 24px 16px; color: #64748B; font-size: 0.88rem;">
           ${scheduledList.length === 0 ? 'No exams currently scheduled. Use the Section Exam or Individual Employee cards above to schedule assessments.' : 'No scheduled exams match your search filter.'}
         </td>
       </tr>
@@ -7281,29 +8184,32 @@ function renderScheduledExamsTable() {
   }
 
   tbody.innerHTML = filtered.map((item, idx) => {
+    const safeNo = escapeHtml(item.empNo);
+    const safeName = escapeHtml(item.name);
+    const safeNameJs = String(item.name || '').replace(/'/g, "\\'");
     return `
       <tr>
-        <td style="font-weight: 700; color: var(--text-muted);">${idx + 1}</td>
-        <td><strong style="color: #005B9E; font-family: monospace;">${item.empNo}</strong></td>
-        <td><strong>${item.name}</strong></td>
-        <td><span style="font-size: 0.85rem; color: #475569;">${item.section}</span></td>
-        <td>
-          <span class="skill-level-badge level-${item.targetLevel}" style="font-size: 0.76rem; padding: 2px 8px;">
-            Level ${item.targetLevel}
+        <td data-label="#" style="font-weight: 700; color: var(--text-muted);">${idx + 1}</td>
+        <td data-label="Emp No"><strong style="color: #005B9E; font-family: monospace;">${safeNo}</strong></td>
+        <td data-label="Name"><strong>${safeName}</strong></td>
+        <td data-label="Section"><span style="font-size: 0.85rem; color: #475569;">${escapeHtml(item.section)}</span></td>
+        <td data-label="Target Level">
+          <span class="iluo-badge iluo-badge-${String(item.targetLevel).toLowerCase()}" style="font-size: 0.76rem; padding: 2px 8px;">
+            Level ${escapeHtml(item.targetLevel)}
           </span>
         </td>
-        <td style="font-size: 0.82rem; font-weight: 600; color: #1E40AF;">${item.date}</td>
-        <td>
+        <td data-label="Target Date" style="font-size: 0.82rem; font-weight: 600; color: #1E40AF;">${escapeHtml(item.date)}</td>
+        <td data-label="Status">
           <span style="background: #DBEAFE; color: #1E40AF; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 0.74rem;">
             Scheduled
           </span>
         </td>
-        <td style="text-align: center;">
+        <td data-label="Actions" style="text-align: center;">
           <div style="display: flex; gap: 6px; justify-content: center;">
-            <button class="btn-secondary" style="padding: 3px 8px; font-size: 0.72rem; background: #FEF2F2; color: #DC2626; border-color: #FCA5A5;" onclick="cancelScheduledExam('${item.empNo}', '${item.name}')" title="Cancel scheduled exam">
+            <button class="btn-secondary" style="padding: 3px 8px; font-size: 0.72rem; background: #FEF2F2; color: #DC2626; border-color: #FCA5A5;" onclick="cancelScheduledExam('${safeNo}', '${safeNameJs}')" title="Cancel scheduled exam">
               Cancel
             </button>
-            <button class="btn-primary" style="padding: 3px 8px; font-size: 0.72rem; background: #0284C7; border-color: #0284C7;" onclick="unlockEmployeeExam('${item.empNo}', '${item.name}')" title="Re-clear & unlock assessment">
+            <button class="btn-primary" style="padding: 3px 8px; font-size: 0.72rem; background: #0284C7; border-color: #0284C7;" onclick="unlockEmployeeExam('${safeNo}', '${safeNameJs}')" title="Re-clear & unlock assessment">
               Unlock
             </button>
           </div>
@@ -7314,14 +8220,18 @@ function renderScheduledExamsTable() {
 }
 window.renderScheduledExamsTable = renderScheduledExamsTable;
 
-function cancelScheduledExam(empNo, name) {
+async function cancelScheduledExam(empNo, name) {
   const nameStr = name ? ` (${name})` : '';
-  if (confirm(`Cancel scheduled assessment for Employee ${empNo}${nameStr}?`)) {
-    resetTrainingStatus(empNo);
-    renderScheduledExamsTable();
-    updateScheduleSectionPreview();
-    updateScheduleEmpPreview();
-  }
+  const ok = await showInAppConfirm(
+    'Cancel Scheduled Exam',
+    `Cancel scheduled assessment for Employee ${empNo}${nameStr}?`,
+    'Cancel Schedule'
+  );
+  if (!ok) return;
+  resetTrainingStatus(empNo);
+  renderScheduledExamsTable();
+  updateScheduleSectionPreview();
+  updateScheduleEmpPreview();
 }
 window.cancelScheduledExam = cancelScheduledExam;
 
@@ -7911,7 +8821,7 @@ function downloadCurrentOjtExcel() {
   const isQual = (radioYes && radioYes.checked) || (pct >= 70);
 
   const cleanName = emp.name.replace(/[^a-zA-Z0-9]/g, '_');
-  const filename = `ATC_OJT_${tmpl.id}_${emp.empNo}_${cleanName}`;
+  const filename = `Yokohama_OJT_${tmpl.id}_${emp.empNo}_${cleanName}`;
 
   try {
     if (typeof XLSX !== 'undefined' && tmpl.base64) {
@@ -8025,7 +8935,7 @@ async function downloadCurrentOjtDocx() {
       });
 
       const cleanName = emp.name.replace(/[^a-zA-Z0-9]/g, '_');
-      const filename = `ATC_OJT_${tmpl.id}_${emp.empNo}_${cleanName}.docx`;
+      const filename = `Yokohama_OJT_${tmpl.id}_${emp.empNo}_${cleanName}.docx`;
 
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -8075,17 +8985,7 @@ function switchRolePortal(role) {
   });
 
   if (role === 'employee') {
-    const btn = document.getElementById('tabRoleEmp');
-    if (btn) btn.classList.add('active');
-    const sessionStr = localStorage.getItem(STORAGE_KEY_SESSION);
-    let session = null;
-    try { session = sessionStr ? JSON.parse(sessionStr) : null; } catch(e) {}
-    if (session && (session.role === 'emp' || session.roleClaim === 'employee') && session.empNo) {
-      currentUser = session;
-      navigateTo('/employee/dashboard');
-    } else {
-      navigateTo('/employee');
-    }
+    window.location.href = '/employee.html';
     return;
   } else if (role === 'section') {
     const btn = document.getElementById('tabRoleSection');
@@ -8115,24 +9015,33 @@ function switchRolePortal(role) {
 // ---------------------------------------------------------------------
 // 5-SECTION OJT PORTAL LOGIC (Safety, CI & TPM, Quality, Technical, HR)
 // ---------------------------------------------------------------------
+const OJT_SECTION_SVGS = {
+  'Safety': '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>',
+  'CI & TPM': '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>',
+  'Quality': '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
+  'Technical': '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
+  'HR': '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'
+};
+
 function selectOjtLoginSection(secName) {
   const input = document.getElementById('ojtSelectedSectionInput');
   if (input) input.value = secName;
 
   const label = document.getElementById('ojtSelectedSectionLabel');
   const btnSubmit = document.getElementById('btnSubmitOjtLogin');
+  const pwdInput = document.getElementById('ojtSectionPassword');
 
   const meta = {
-    'Safety': { icon: '🦺', color: '#059669', title: 'Safety Section' },
-    'CI & TPM': { icon: '⚙️', color: '#2563EB', title: 'CI & TPM Section' },
-    'Quality': { icon: '🎯', color: '#DC2626', title: 'Quality Section' },
-    'Technical': { icon: '🔧', color: '#7C3AED', title: 'Technical Section' },
-    'HR': { icon: '👥', color: '#D97706', title: 'HR Section' }
+    'Safety': { svg: OJT_SECTION_SVGS['Safety'], color: '#059669', title: 'Safety Section' },
+    'CI & TPM': { svg: OJT_SECTION_SVGS['CI & TPM'], color: '#2563EB', title: 'CI & TPM Section' },
+    'Quality': { svg: OJT_SECTION_SVGS['Quality'], color: '#DC2626', title: 'Quality Section' },
+    'Technical': { svg: OJT_SECTION_SVGS['Technical'], color: '#7C3AED', title: 'Technical Section' },
+    'HR': { svg: OJT_SECTION_SVGS['HR'], color: '#D97706', title: 'HR Section' }
   };
-  const m = meta[secName] || { icon: '📋', color: '#059669', title: secName };
+  const m = meta[secName] || { svg: OJT_SECTION_SVGS['Safety'], color: '#059669', title: secName };
 
   if (label) {
-    label.innerHTML = `${m.icon} ${m.title}`;
+    label.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;">${m.svg}<span>${escapeHtml(m.title)}</span></span>`;
     label.style.color = m.color;
   }
   if (btnSubmit) {
@@ -8195,6 +9104,8 @@ async function handleOjtSectionLogin(e) {
       if (dashWrapper) dashWrapper.style.display = 'block';
 
       renderOjtDashboard(section);
+      syncCloudRecords();
+      syncCloudOjtEvaluations();
       showToast(`Signed in as ${section} Evaluator`);
       if (pwdInput) pwdInput.value = '';
     } else {
@@ -8214,9 +9125,11 @@ function quickEnterOjtSection(secName) {
   selectOjtLoginSection(secName);
 }
 
-function ojtLogout() {
+async function ojtLogout() {
   sessionStorage.removeItem('iluo_ojt_session');
   try { localStorage.removeItem('iluo_ojt_session'); } catch (e) {}
+  try { await fetch('/api/auth/logout', { method: 'POST', headers: getAuthHeaders(), credentials: 'include' }); } catch (e) {}
+  updateUserBadge(null);
   const loginWrapper = document.getElementById('ojtLoginWrapper');
   const dashWrapper = document.getElementById('ojtDashboardWrapper');
   if (loginWrapper) loginWrapper.style.display = 'flex';
@@ -8232,16 +9145,21 @@ function ojtLogout() {
 function renderOjtDashboard(secName) {
   const activeSec = secName || sessionStorage.getItem('iluo_ojt_session') || 'Safety';
   const meta = {
-    'Safety': { icon: '🦺', color: '#059669', title: 'Safety Section Skill Assessment Center', badge: 'Safety Evaluator Active' },
-    'CI & TPM': { icon: '⚙️', color: '#2563EB', title: 'CI & TPM Section Skill Assessment Center', badge: 'CI & TPM Evaluator Active' },
-    'Quality': { icon: '🎯', color: '#DC2626', title: 'Quality Section Skill Assessment Center', badge: 'Quality Evaluator Active' },
-    'Technical': { icon: '🔧', color: '#7C3AED', title: 'Technical Section Skill Assessment Center', badge: 'Technical Evaluator Active' },
-    'HR': { icon: '👥', color: '#D97706', title: 'HR Section Skill Assessment Center', badge: 'HR Evaluator Active' }
+    'Safety': { svg: OJT_SECTION_SVGS['Safety'], color: '#059669', title: 'Safety Section Skill Assessment Center', badge: 'Safety Evaluator Active' },
+    'CI & TPM': { svg: OJT_SECTION_SVGS['CI & TPM'], color: '#2563EB', title: 'CI & TPM Section Skill Assessment Center', badge: 'CI & TPM Evaluator Active' },
+    'Quality': { svg: OJT_SECTION_SVGS['Quality'], color: '#DC2626', title: 'Quality Section Skill Assessment Center', badge: 'Quality Evaluator Active' },
+    'Technical': { svg: OJT_SECTION_SVGS['Technical'], color: '#7C3AED', title: 'Technical Section Skill Assessment Center', badge: 'Technical Evaluator Active' },
+    'HR': { svg: OJT_SECTION_SVGS['HR'], color: '#D97706', title: 'HR Section Skill Assessment Center', badge: 'HR Evaluator Active' }
   };
   const m = meta[activeSec] || meta['Safety'];
 
   const iconEl = document.getElementById('ojtActiveSectionIcon');
-  if (iconEl) iconEl.innerText = m.icon;
+  if (iconEl) {
+    iconEl.className = 'portal-svg-icon';
+    iconEl.style.background = `${m.color}1A`;
+    iconEl.style.color = m.color;
+    iconEl.innerHTML = m.svg;
+  }
 
   const titleEl = document.getElementById('ojtActiveSectionTitle');
   if (titleEl) titleEl.innerText = m.title;
@@ -8327,7 +9245,7 @@ function renderOjtDashboardTable() {
   }
 
   if (filtered.length === 0) {
-    tbody.innerHTML = renderTableEmptyState(10, 'No employees match the selected search or filter criteria.', 'resetActiveFilters()');
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 36px 20px; color: #94A3B8; font-size: 0.95rem;">No employees match the selected search or filter criteria.</td></tr>`;
     return;
   }
 
@@ -8374,11 +9292,8 @@ function renderOjtDashboardTable() {
         <td style="padding: 14px 18px;">${statusBadge}</td>
         <td style="text-align: center; padding: 14px 18px;">
           <div style="display: flex; justify-content: center; align-items: center;">
-            <button type="button" class="btn-primary" style="padding: 5px 10px; font-size: 0.78rem; background: #059669; border-color: #059669; font-weight: 700; white-space: nowrap; border-radius: 6px; cursor: pointer;" onclick="openOjtRubricDrawer('${emp.empNo}')" title="Open Digital Practical OJT Rubric Drawer">
-              Rubric &raquo;
-            </button>
-            <button type="button" class="btn-secondary" style="padding: 5px 8px; font-size: 0.75rem; border-radius: 6px;" onclick="openOjtModalForEmployee('${emp.empNo}')" title="Standard OJT Dialog">
-              OJT
+            <button type="button" class="btn-primary" style="padding: 6px 14px; font-size: 0.8rem; background: #059669; border-color: #059669; font-weight: 700; white-space: nowrap; border-radius: 6px; box-shadow: 0 2px 4px rgba(5,150,105,0.2); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" onclick="openOjtModalForEmployee('${emp.empNo}')" title="Score OJT Practical Evaluation">
+              📋 OJT
             </button>
           </div>
         </td>
@@ -8421,6 +9336,8 @@ async function handleSectionLogin(e) {
       if (dashWrapper) dashWrapper.style.display = 'block';
 
       renderSectionDashboard(secName);
+      syncCloudRecords().then(() => renderSectionDashboard(secName));
+      syncCloudOjtEvaluations().then(() => renderSectionDashboard(secName));
       showToast(`Welcome to ${secName} Portal`);
       if (pwdInput) pwdInput.value = '';
     } else {
@@ -8441,28 +9358,62 @@ function switchSectionView(secName) {
   renderSectionDashboard(secName);
 }
 
-function logoutSection() {
+async function logoutSection() {
   sessionStorage.removeItem('iluo_section_session');
+  sessionStorage.removeItem('iluo_section_token');
+  try { await fetch('/api/auth/logout', { method: 'POST', headers: getAuthHeaders(), credentials: 'include' }); } catch (e) {}
+  updateUserBadge(null);
   const loginWrapper = document.getElementById('sectionLoginWrapper');
   const dashWrapper = document.getElementById('sectionDashboardWrapper');
   if (loginWrapper) loginWrapper.style.display = 'flex';
   if (dashWrapper) dashWrapper.style.display = 'none';
+  showToast('Signed out of Section Portal');
+}
+
+let currentSectionStatusFilter = 'ALL'; // 'ALL' | 'COMPLETED' | 'NOT_FINISHED'
+
+function setSectionStatusFilter(mode) {
+  currentSectionStatusFilter = mode || 'ALL';
+  document.getElementById('secStatusTabAll')?.classList.toggle('active', currentSectionStatusFilter === 'ALL');
+  document.getElementById('secStatusTabCompleted')?.classList.toggle('active', currentSectionStatusFilter === 'COMPLETED');
+  document.getElementById('secStatusTabPending')?.classList.toggle('active', currentSectionStatusFilter === 'NOT_FINISHED');
+  filterSectionTable();
+}
+window.setSectionStatusFilter = setSectionStatusFilter;
+
+function getSectionScopeEmployees(secName) {
+  const secNorm = normalizeSectionName(secName || '');
+  return (EMPLOYEES || []).filter(e => {
+    if (e.isLeft || e.status === 'LEFT') return false;
+    const rawS = String(e.section || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const s = normalizeSectionName(e.section || '');
+    return s === secNorm || rawS === String(secName || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  });
 }
 
 function renderSectionDashboard(secName) {
+  currentActiveSection = secName;
   const title = document.getElementById('secDashboardTitle');
   if (title) title.innerText = secName;
   const switchDropdown = document.getElementById('secSwitchDropdown');
   if (switchDropdown) switchDropdown.value = secName;
 
-  // Filter employees for this section
-  const secNorm = secName.toLowerCase().replace(/\s+/g, ' ').trim();
-  const emps = EMPLOYEES.filter(e => {
-    const s = (e.section || '').toLowerCase().replace(/\s+/g, ' ').trim();
-    return s.includes(secNorm) || secNorm.includes(s);
-  });
+  let emps = getSectionScopeEmployees(secName);
+  if (emps.length === 0) {
+    const secNorm = normalizeSectionName(secName);
+    emps = EMPLOYEES.filter(e => {
+      if (e.isLeft || e.status === 'LEFT') return false;
+      const s = normalizeSectionName(e.section || '');
+      return s === secNorm || s.includes(secNorm) || secNorm.includes(s);
+    });
+  }
 
-  // Count ILUO distribution
+  const subEl = document.getElementById('secDashboardSubtitle');
+  if (subEl) {
+    const deptLabel = emps[0]?.dept || (isProductionDeptClient(secName) ? 'PRODUCTION' : 'QUALITY CONTROL');
+    subEl.textContent = `${deptLabel} Department · ${emps.length} Active Associates · Completion & Score Analytics`;
+  }
+
   let countI = 0, countL = 0, countU = 0, countO = 0;
   emps.forEach(e => {
     const lvl = (e.currentLevel || 'L').toUpperCase();
@@ -8481,44 +9432,25 @@ function renderSectionDashboard(secName) {
   const elO = document.getElementById('secCountO');
   if (elO) elO.innerText = countO;
 
-  renderSectionEmployeesTable(emps);
+  if (typeof renderSectionExecAnalytics === 'function') renderSectionExecAnalytics(emps, secName);
+  filterSectionTable();
   renderSectionTrainingRequirements(emps);
+  if (typeof renderSectionInsights === 'function') renderSectionInsights(emps, secName);
 }
 
 function renderSectionEmployeesTable(emps) {
   const tbody = document.getElementById('secEmpTableBody');
   if (!tbody) return;
 
-  currentFilteredSecEmps = emps || [];
   const records = getStoredRecords();
 
   if (!emps || emps.length === 0) {
-    tbody.innerHTML = renderTableEmptyState(7, 'No employees found matching active filters in this section.', 'resetActiveFilters()');
-    const pageInfo = document.getElementById('secPageInfo');
-    if (pageInfo) pageInfo.textContent = 'Page 0 of 0';
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">No employees found in this section.</td></tr>`;
     return;
   }
 
-  // Calculate pagination
-  const total = emps.length;
-  const totalPages = Math.ceil(total / secRosterPageSize) || 1;
-  if (secRosterPage > totalPages) secRosterPage = totalPages;
-  if (secRosterPage < 1) secRosterPage = 1;
-
-  const startIndex = (secRosterPage - 1) * secRosterPageSize;
-  const endIndex = Math.min(startIndex + secRosterPageSize, total);
-  const pagedEmps = emps.slice(startIndex, endIndex);
-
-  const pageInfo = document.getElementById('secPageInfo');
-  if (pageInfo) pageInfo.textContent = `Page ${secRosterPage} of ${totalPages} (${total} total)`;
-
-  const btnPrev = document.getElementById('btnSecPrevPage');
-  if (btnPrev) btnPrev.disabled = (secRosterPage <= 1);
-  const btnNext = document.getElementById('btnSecNextPage');
-  if (btnNext) btnNext.disabled = (secRosterPage >= totalPages);
-
   let html = '';
-  pagedEmps.forEach(e => {
+  emps.forEach(e => {
     const curLvl = (e.currentLevel || 'L').toUpperCase();
     const curRules = LEVEL_RULES[curLvl] || LEVEL_RULES['L'];
     const tgtLvl = (curRules && curRules.nextLevel) ? curRules.nextLevel : (curLvl === 'L' ? 'U' : 'O');
@@ -8526,34 +9458,33 @@ function renderSectionEmployeesTable(emps) {
     const rec = records[e.empNo];
 
     // Knowledge marks & status
+    const examPassPct = getExamPassThreshold();
     let knowText = '<span style="color: #64748B; font-size: 0.82rem; font-weight: 500;">Pending</span>';
     let isKnowPass = false;
     if (rec && rec.isCompleted) {
       const qCount = rec.submittedQuestions ? rec.submittedQuestions.length : 20;
       const marks = rec.totalMark !== undefined ? rec.totalMark : (rec.submittedQuestions ? rec.submittedQuestions.filter(q => q.isCorrect).length : 0);
-      isKnowPass = rec.status === 'Passed' || marks >= Math.ceil(qCount * 0.7);
+      const minPassMarks = Math.ceil(qCount * (examPassPct / 100));
+      isKnowPass = rec.status === 'Passed' || (rec.markPct !== undefined ? rec.markPct >= examPassPct : marks >= minPassMarks);
       knowText = `<span style="font-weight: 700; color: ${isKnowPass ? '#059669' : '#DC2626'}; font-size: 0.88rem; white-space: nowrap;">${marks} / ${qCount} Marks</span>`;
     }
 
     // Status
     let statusText = '<span style="background: #F1F5F9; color: #64748B; padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 0.8rem; display: inline-block; white-space: nowrap;">Pending</span>';
     if (isKnowPass) {
-      statusText = `<span style="background: #ECFDF5; color: #166534; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; display: inline-block; white-space: nowrap;">Passed (${tgtLvl})</span>`;
+      statusText = `<span style="background: #ECFDF5; color: #166534; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; display: inline-block; white-space: nowrap;">Passed (${escapeHtml(tgtLvl)})</span>`;
     } else if (rec && rec.isCompleted && !isKnowPass) {
       statusText = `<span style="background: #FEF2F2; color: #DC2626; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; display: inline-block; white-space: nowrap;">Retest Req.</span>`;
     }
 
     html += `
       <tr style="border-bottom: 1px solid #E2E8F0; transition: background 0.15s ease;">
-        <td style="text-align: center; padding: 14px 10px;">
-          <input type="checkbox" class="sec-emp-checkbox" value="${e.empNo}" aria-label="Select ${e.name}">
-        </td>
-        <td style="font-weight: 700; color: var(--primary-dark); padding: 14px 16px; font-size: 0.95rem;">${e.empNo}</td>
-        <td style="padding: 14px 20px;"><strong style="color: #0F172A; font-size: 0.95rem;">${e.name}</strong></td>
-        <td style="text-align: center; padding: 14px 12px;"><span class="iluo-badge iluo-badge-${curLvl.toLowerCase()}">${curLvl}</span></td>
-        <td style="text-align: center; padding: 14px 12px;"><strong style="color: var(--accent-red); font-size: 0.95rem;">${tgtLvl}</strong></td>
-        <td style="padding: 14px 18px;">${knowText}</td>
-        <td style="padding: 14px 18px;">${statusText}</td>
+        <td data-label="Emp No" style="font-weight: 700; color: var(--primary-dark); padding: 14px 16px; font-size: 0.95rem;">${escapeHtml(e.empNo)}</td>
+        <td data-label="Name" style="padding: 14px 20px;"><strong style="color: #0F172A; font-size: 0.95rem;">${escapeHtml(e.name)}</strong></td>
+        <td data-label="Current Level" style="text-align: center; padding: 14px 12px;"><span class="iluo-badge iluo-badge-${curLvl.toLowerCase()}" style="width: 26px; height: 26px; font-size: 0.8rem;">${escapeHtml(curLvl)}</span></td>
+        <td data-label="Target Level" style="text-align: center; padding: 14px 12px;"><strong style="color: var(--accent-red); font-size: 0.95rem;">${escapeHtml(tgtLvl)}</strong></td>
+        <td data-label="Knowledge" style="padding: 14px 18px;">${knowText}</td>
+        <td data-label="Status" style="padding: 14px 18px;">${statusText}</td>
       </tr>
     `;
   });
@@ -8565,16 +9496,30 @@ function filterSectionTable() {
   const search = (document.getElementById('secEmpSearchInput')?.value || '').toLowerCase().trim();
   const lvl = document.getElementById('secLevelFilter')?.value || 'ALL';
   const targetMap = { 'I': 'L', 'L': 'U', 'U': 'O', 'O': 'O' };
+  const records = getStoredRecords();
 
-  const secNorm = currentActiveSection.toLowerCase().replace(/\s+/g, ' ').trim();
-  const totalInSec = EMPLOYEES.filter(e => {
-    const s = (e.section || '').toLowerCase().replace(/\s+/g, ' ').trim();
-    return s.includes(secNorm) || secNorm.includes(s);
-  }).length;
+  let baseEmps = getSectionScopeEmployees(currentActiveSection);
+  if (baseEmps.length === 0) {
+    const secNorm = normalizeSectionName(currentActiveSection);
+    baseEmps = EMPLOYEES.filter(e => {
+      if (e.isLeft || e.status === 'LEFT') return false;
+      const s = normalizeSectionName(e.section || '');
+      return s === secNorm || s.includes(secNorm) || secNorm.includes(s);
+    });
+  }
 
-  const emps = EMPLOYEES.filter(e => {
-    const s = (e.section || '').toLowerCase().replace(/\s+/g, ' ').trim();
-    if (!s.includes(secNorm) && !secNorm.includes(s)) return false;
+  let completedTotal = 0;
+  baseEmps.forEach(e => {
+    if (records[e.empNo] && records[e.empNo].isCompleted) completedTotal++;
+  });
+  const notFinishedTotal = Math.max(0, baseEmps.length - completedTotal);
+
+  const emps = baseEmps.filter(e => {
+    const rec = records[e.empNo];
+    const isCompleted = Boolean(rec && rec.isCompleted);
+    if (currentSectionStatusFilter === 'COMPLETED' && !isCompleted) return false;
+    if (currentSectionStatusFilter === 'NOT_FINISHED' && isCompleted) return false;
+
     if (lvl !== 'ALL') {
       const curLvl = (e.currentLevel || 'I').toUpperCase();
       const tgtLvl = targetMap[curLvl] || 'L';
@@ -8588,9 +9533,9 @@ function filterSectionTable() {
     return true;
   });
 
-  const countLabel = document.getElementById('secShowingCountLabel');
-  if (countLabel) {
-    countLabel.textContent = `Showing ${emps.length} of ${totalInSec} employees`;
+  const summaryEl = document.getElementById('secRosterSummaryLine');
+  if (summaryEl) {
+    summaryEl.textContent = `Showing ${emps.length} of ${baseEmps.length} associates · ${completedTotal} Completed · ${notFinishedTotal} Not Finished`;
   }
 
   renderSectionEmployeesTable(emps);
@@ -8635,12 +9580,7 @@ function renderSectionTrainingRequirements(emps) {
           <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 8px;">Current: Level ${t.emp.currentLevel || 'L'}</span>
           <div style="font-size: 0.8rem; color: #475569; margin-top: 2px;">${t.reason}</div>
         </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="background: ${badgeColor}15; color: ${badgeColor}; font-weight: 700; font-size: 0.75rem; padding: 3px 8px; border-radius: 4px; border: 1px solid ${badgeColor}40;">${t.priority} Priority</span>
-          <button type="button" class="btn-primary" style="font-size: 0.78rem; padding: 4px 10px; background: #B91C1C; border-color: #B91C1C; border-radius: 6px; font-weight: 700;" onclick="scheduleTrainingActionPlan('${t.emp.empNo}')">
-            Assign Plan &raquo;
-          </button>
-        </div>
+        <span style="background: ${badgeColor}15; color: ${badgeColor}; font-weight: 700; font-size: 0.75rem; padding: 3px 8px; border-radius: 4px; border: 1px solid ${badgeColor}40;">${t.priority} Priority</span>
       </div>
     `;
   });
@@ -8682,6 +9622,16 @@ async function handleDeptLogin(e) {
       if (dashWrapper) dashWrapper.style.display = 'block';
 
       renderDepartmentDashboard(selectedDept);
+      Promise.allSettled([
+        typeof syncCloudEmployees === 'function' ? syncCloudEmployees() : Promise.resolve(),
+        typeof syncCloudRecords === 'function' ? syncCloudRecords() : Promise.resolve(),
+        typeof syncCloudOjtEvaluations === 'function' ? syncCloudOjtEvaluations() : Promise.resolve()
+      ]).then(() => {
+        const dw = document.getElementById('deptDashboardWrapper');
+        if (dw && dw.style.display !== 'none') {
+          renderDepartmentDashboard(selectedDept);
+        }
+      });
       showToast(`Welcome to ${selectedDept === 'ALL' ? 'Plant-Wide' : selectedDept} HOD Dashboard`);
       if (pwdInput) pwdInput.value = '';
     } else {
@@ -8696,13 +9646,16 @@ async function handleDeptLogin(e) {
   }
 }
 
-function logoutDept() {
+async function logoutDept() {
   sessionStorage.removeItem('iluo_dept_session');
   sessionStorage.removeItem('iluo_dept_token');
+  try { await fetch('/api/auth/logout', { method: 'POST', headers: getAuthHeaders(), credentials: 'include' }); } catch (e) {}
+  updateUserBadge(null);
   const loginWrapper = document.getElementById('deptLoginWrapper');
   const dashWrapper = document.getElementById('deptDashboardWrapper');
   if (loginWrapper) loginWrapper.style.display = 'flex';
   if (dashWrapper) dashWrapper.style.display = 'none';
+  showToast('Signed out of HOD Dashboard');
 }
 
 function changeActiveDepartment(newDept) {
@@ -8715,14 +9668,13 @@ function changeActiveDepartment(newDept) {
 function renderDepartmentDashboard(deptOverride) {
   const activeDept = (deptOverride || sessionStorage.getItem('iluo_dept_session') || 'PRODUCTION').toUpperCase().trim();
 
-  // Sync quick switcher dropdown if present
   const quickSwitch = document.getElementById('deptQuickSwitch');
   if (quickSwitch && quickSwitch.value !== activeDept) {
     quickSwitch.value = activeDept;
   }
 
-  // Filter department employees
-  const allEmployees = (typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES)) ? EMPLOYEES : [];
+  const allEmployees = ((typeof EMPLOYEES !== 'undefined' && Array.isArray(EMPLOYEES)) ? EMPLOYEES : [])
+    .filter(e => !e.isLeft && e.status !== 'LEFT');
   let deptEmps = [];
   if (activeDept === 'ALL') {
     deptEmps = allEmployees;
@@ -8743,41 +9695,29 @@ function renderDepartmentDashboard(deptOverride) {
     });
   }
 
-  // Extract distinct sections for this department
   const sectionsList = [...new Set(deptEmps.map(e => (e.section || '').trim()).filter(Boolean))].sort();
 
-  // Update Dashboard titles and labels
   const titleEl = document.getElementById('deptDashboardTitle');
   if (titleEl) {
-    if (activeDept === 'PRODUCTION') {
-      titleEl.innerText = 'Production Department - HOD Executive Dashboard';
-    } else if (activeDept === 'QUALITY CONTROL' || activeDept === 'QUALITY') {
-      titleEl.innerText = 'Quality Control Department - HOD Executive Dashboard';
-    } else if (activeDept === 'ALL') {
-      titleEl.innerText = 'All Plant Departments - HOD Executive Dashboard';
-    } else {
-      titleEl.innerText = `${activeDept} Department - HOD Executive Dashboard`;
-    }
+    if (activeDept === 'PRODUCTION') titleEl.innerText = 'Production Department - HOD Executive Dashboard';
+    else if (activeDept === 'QUALITY CONTROL' || activeDept === 'QUALITY') titleEl.innerText = 'Quality Control Department - HOD Executive Dashboard';
+    else if (activeDept === 'ALL') titleEl.innerText = 'All Plant Departments - HOD Executive Dashboard';
+    else titleEl.innerText = `${activeDept} Department - HOD Executive Dashboard`;
   }
 
   const subTitleEl = document.getElementById('deptDashboardSubtitle');
   if (subTitleEl) {
-    const deptDisplayName = activeDept === 'ALL' ? 'Plant-Wide' : (activeDept === 'PRODUCTION' ? 'Production' : 'Quality Control');
-    subTitleEl.innerHTML = `ATC Tires &bull; ${deptDisplayName} (${deptEmps.length} Associates &bull; ${sectionsList.length} Sections) &bull; ILUO Skill Matrices &amp; Section Analytics`;
+    const deptDisplayName = activeDept === 'ALL' ? 'Plant-Wide' : (activeDept === 'PRODUCTION' ? 'Production' : (activeDept === 'QUALITY CONTROL' ? 'Quality Control' : activeDept));
+    subTitleEl.innerHTML = `ATC Tires &bull; ${escapeHtml(deptDisplayName)} (${deptEmps.length} Associates &bull; ${sectionsList.length} Sections) &bull; ILUO Skill Matrices &amp; Section Analytics`;
   }
 
   const staffLabelEl = document.getElementById('deptStaffLabel');
   if (staffLabelEl) {
-    if (activeDept === 'PRODUCTION') {
-      staffLabelEl.innerText = 'Total Production Headcount';
-    } else if (activeDept === 'QUALITY CONTROL' || activeDept === 'QUALITY') {
-      staffLabelEl.innerText = 'Total QA Headcount';
-    } else {
-      staffLabelEl.innerText = 'Total Plant Headcount';
-    }
+    if (activeDept === 'PRODUCTION') staffLabelEl.innerText = 'Total Production Headcount';
+    else if (activeDept === 'QUALITY CONTROL' || activeDept === 'QUALITY') staffLabelEl.innerText = 'Total QA Headcount';
+    else staffLabelEl.innerText = 'Total Plant Headcount';
   }
 
-  // Calculate department totals
   let totalStaff = deptEmps.length;
   let countI = 0, countL = 0, countU = 0, countO = 0;
   deptEmps.forEach(e => {
@@ -8799,19 +9739,16 @@ function renderDepartmentDashboard(deptOverride) {
   const elO = document.getElementById('deptCountO');
   if (elO) elO.innerText = countO;
 
-  // Render Section-Wise Summary Table
   const tbody = document.getElementById('deptSectionTableBody');
   if (tbody) {
     const records = (typeof getStoredRecords === 'function') ? getStoredRecords() : {};
     const ojtRecords = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
+    const examPassPct = getExamPassThreshold();
 
     let rowsHtml = '';
     sectionsList.forEach(sec => {
       const secNorm = sec.toLowerCase().trim();
-      const secEmps = deptEmps.filter(e => {
-        const s = (e.section || '').toLowerCase().trim();
-        return s === secNorm;
-      });
+      const secEmps = deptEmps.filter(e => (e.section || '').toLowerCase().trim() === secNorm);
 
       let sI = 0, sL = 0, sU = 0, sO = 0;
       let sKnowDone = 0, sOjtDone = 0, sTrainNeeded = 0;
@@ -8828,25 +9765,28 @@ function renderDepartmentDashboard(deptOverride) {
 
         if (rec && rec.isCompleted) sKnowDone++;
         if (ojt && ojt.isCompleted) sOjtDone++;
-        if (!rec || !rec.isCompleted || (rec.totalMark !== undefined && rec.totalMark < 14) || !ojt || !ojt.isCompleted) {
+        const qCount = (rec && rec.submittedQuestions && rec.submittedQuestions.length) || 20;
+        const minPass = Math.ceil(qCount * (examPassPct / 100));
+        const failedExam = rec && rec.isCompleted && (rec.status === 'Failed' || (rec.markPct !== undefined ? rec.markPct < examPassPct : (rec.totalMark !== undefined && rec.totalMark < minPass)));
+        if (!rec || !rec.isCompleted || failedExam || !ojt || !ojt.isCompleted) {
           sTrainNeeded++;
         }
       });
 
-      const safeSec = sec.replace(/'/g, "\\'");
+      const safeSecJs = sec.replace(/'/g, "\\'");
       rowsHtml += `
         <tr>
-          <td><strong style="color: var(--primary-dark);">${sec}</strong></td>
-          <td><strong>${secEmps.length}</strong></td>
-          <td><span class="iluo-badge iluo-badge-i" style="width: 22px; height: 22px; font-size: 0.72rem;">${sI}</span></td>
-          <td><span class="iluo-badge iluo-badge-l" style="width: 22px; height: 22px; font-size: 0.72rem;">${sL}</span></td>
-          <td><span class="iluo-badge iluo-badge-u" style="width: 22px; height: 22px; font-size: 0.72rem;">${sU}</span></td>
-          <td><span class="iluo-badge iluo-badge-o" style="width: 22px; height: 22px; font-size: 0.72rem;">${sO}</span></td>
-          <td><span style="color: #059669; font-weight: 700;">${sKnowDone} / ${secEmps.length}</span></td>
-          <td><span style="color: #0284C7; font-weight: 700;">${sOjtDone} / ${secEmps.length}</span></td>
-          <td><span style="color: ${sTrainNeeded > 0 ? '#DC2626' : '#059669'}; font-weight: 700;">${sTrainNeeded}</span></td>
-          <td>
-            <button class="btn-sm" style="background: #005B9E; color: white; border: none; padding: 4px 10px; border-radius: 4px; font-weight: 600; font-size: 0.75rem; cursor: pointer;" onclick="jumpToSectionView('${safeSec}')">
+          <td data-label="Section"><strong style="color: var(--primary-dark);">${escapeHtml(sec)}</strong></td>
+          <td data-label="Headcount"><strong>${secEmps.length}</strong></td>
+          <td data-label="I"><span class="iluo-badge iluo-badge-i" style="width: 22px; height: 22px; font-size: 0.72rem;">${sI}</span></td>
+          <td data-label="L"><span class="iluo-badge iluo-badge-l" style="width: 22px; height: 22px; font-size: 0.72rem;">${sL}</span></td>
+          <td data-label="U"><span class="iluo-badge iluo-badge-u" style="width: 22px; height: 22px; font-size: 0.72rem;">${sU}</span></td>
+          <td data-label="O"><span class="iluo-badge iluo-badge-o" style="width: 22px; height: 22px; font-size: 0.72rem;">${sO}</span></td>
+          <td data-label="Knowledge"><span style="color: #059669; font-weight: 700;">${sKnowDone} / ${secEmps.length}</span></td>
+          <td data-label="OJT"><span style="color: #0284C7; font-weight: 700;">${sOjtDone} / ${secEmps.length}</span></td>
+          <td data-label="Gaps"><span style="color: ${sTrainNeeded > 0 ? '#DC2626' : '#059669'}; font-weight: 700;">${sTrainNeeded}</span></td>
+          <td data-label="View">
+            <button class="btn-sm" style="background: #005B9E; color: white; border: none; padding: 4px 10px; border-radius: 4px; font-weight: 600; font-size: 0.75rem; cursor: pointer;" onclick="jumpToSectionView('${safeSecJs}')">
               View &raquo;
             </button>
           </td>
@@ -8854,17 +9794,16 @@ function renderDepartmentDashboard(deptOverride) {
       `;
     });
 
-    tbody.innerHTML = rowsHtml;
+    tbody.innerHTML = rowsHtml || `<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--text-muted);">No sections found for ${escapeHtml(activeDept)}.</td></tr>`;
   }
 
-  // Department Training Plan / Skill Gap summary
   const planContainer = document.getElementById('deptTrainingPlanContainer');
   if (planContainer) {
-    const deptLabel = activeDept === 'PRODUCTION' ? 'Production' : (activeDept === 'QUALITY CONTROL' ? 'Quality Control' : 'Plant-Wide');
+    const deptLabel = activeDept === 'PRODUCTION' ? 'Production' : (activeDept === 'QUALITY CONTROL' ? 'Quality Control' : (activeDept === 'ALL' ? 'Plant-Wide' : activeDept));
     const scopeDesc = activeDept === 'PRODUCTION' ? 'manufacturing and machine operations' : (activeDept === 'QUALITY CONTROL' ? 'QA inspection and testing' : 'all plant operations');
     planContainer.innerHTML = `
       <div style="font-size: 0.88rem; color: #475569; line-height: 1.6;">
-        <p><strong>${deptLabel} Training Priorities:</strong></p>
+        <p><strong>${escapeHtml(deptLabel)} Training Priorities:</strong></p>
         <ul style="padding-left: 20px; margin-top: 6px;">
           <li><strong>Level I to L Transition:</strong> Focus on ${countI} beginner associates across ${sectionsList.length} sections for standard induction completion.</li>
           <li><strong>Level L to U Promotion:</strong> Accelerate practical OJT checkpoints for ${countL} learners across ${scopeDesc}.</li>
@@ -8872,6 +9811,400 @@ function renderDepartmentDashboard(deptOverride) {
         </ul>
       </div>
     `;
+  }
+
+  if (typeof renderDeptExecAnalytics === 'function') renderDeptExecAnalytics(deptEmps, activeDept, sectionsList);
+  if (typeof renderDeptSkillTrendChart === 'function') renderDeptSkillTrendChart(deptEmps, activeDept, sectionsList);
+  if (typeof renderHodInsights === 'function') renderHodInsights(deptEmps, activeDept, sectionsList);
+}
+
+let deptSkillTrendChartInstance = null;
+let deptSkillTrendState = {
+  mode: 'count', // 'count' | 'percent'
+  section: 'ALL',
+  lastDept: '',
+  lastFilterKey: '',
+  lastEmps: [],
+  lastSections: []
+};
+
+function triggerDeptTrendFadeIn() {
+  const wrap = document.querySelector('#hodSkillTrendCard .hod-trend-canvas-wrap');
+  const summary = document.getElementById('deptSkillTrendSummary');
+  [wrap, summary].forEach((el) => {
+    if (!el) return;
+    el.classList.remove('hod-trend-fade-in');
+    void el.offsetWidth;
+    el.classList.add('hod-trend-fade-in');
+    el.addEventListener('animationend', () => {
+      el.classList.remove('hod-trend-fade-in');
+    }, { once: true });
+  });
+}
+
+function parseFlexibleDateClient(raw) {
+  if (!raw) return null;
+  if (raw instanceof Date) return isNaN(raw.getTime()) ? null : raw;
+  const s = String(raw).trim();
+  if (!s) return null;
+  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (dmy) {
+    let year = parseInt(dmy[3], 10);
+    if (year < 100) year += 2000;
+    const month = parseInt(dmy[2], 10) - 1;
+    const day = parseInt(dmy[1], 10);
+    const parsed = new Date(year, month, day);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
+  const iso = new Date(s);
+  return isNaN(iso.getTime()) ? null : iso;
+}
+
+function computeSixMonthSkillTrend(emps, records, ojtRecords) {
+  const now = new Date();
+  const months = [];
+  for (let i = 5; i >= 0; i--) {
+    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59);
+    months.push({
+      label: end.toLocaleString('en-US', { month: 'short', year: '2-digit' }),
+      end,
+      isCurrent: i === 0
+    });
+  }
+
+  const RANK = { I: 0, L: 1, U: 2, O: 3 };
+  const BY_RANK = ['I', 'L', 'U', 'O'];
+
+  const points = months.map(m => {
+    const counts = { I: 0, L: 0, U: 0, O: 0 };
+    (emps || []).forEach(e => {
+      const rawLive = String(e.currentLevel || 'L').trim().toUpperCase();
+      const liveLvl = BY_RANK.includes(rawLive) ? rawLive : 'L';
+      if (m.isCurrent) {
+        counts[liveLvl]++;
+        return;
+      }
+
+      const doj = parseFlexibleDateClient(e.doj);
+      if (doj && doj > m.end) {
+        return; // Associate joined after this month-end snapshot
+      }
+
+      let lvl = liveLvl;
+      const rec = records ? records[e.empNo] : null;
+      const ojt = ojtRecords ? ojtRecords[e.empNo] : null;
+      const assessDate = (rec && parseFlexibleDateClient(rec.attemptDate || rec.submittedAt || rec.completedAt))
+        || (ojt && parseFlexibleDateClient(ojt.evalDate || ojt.evaluatedAt || ojt.updatedAt));
+
+      if (rec && rec.isCompleted && assessDate && assessDate > m.end) {
+        const pre2025 = String(e.currentLevel2025 || '').trim().toUpperCase();
+        const recPre = String(rec.currentLevel || '').trim().toUpperCase();
+        const prop = String(rec.proposedLevel || '').trim().toUpperCase();
+        if (BY_RANK.includes(pre2025)) {
+          lvl = pre2025;
+        } else if (BY_RANK.includes(recPre) && recPre !== liveLvl) {
+          lvl = recPre;
+        } else if ((rec.status === 'Passed' || rec.finalStatus === 'Pass') && RANK[liveLvl] > 0) {
+          lvl = BY_RANK[RANK[liveLvl] - 1];
+        } else if (BY_RANK.includes(prop) && prop !== liveLvl && BY_RANK.includes(recPre)) {
+          lvl = recPre;
+        }
+      }
+
+      // Reflect DOJ experience-based ILUO eligibility progression for recent joiners
+      if (doj) {
+        const diffMonths = (m.end.getFullYear() - doj.getFullYear()) * 12 + (m.end.getMonth() - doj.getMonth());
+        const maxExpRank = diffMonths > 48 ? 3 : diffMonths > 24 ? 2 : diffMonths > 3 ? 1 : 0;
+        if (RANK[lvl] > maxExpRank) {
+          lvl = BY_RANK[maxExpRank];
+        }
+      }
+
+      counts[lvl]++;
+    });
+
+    const total = counts.I + counts.L + counts.U + counts.O;
+    const pct = {
+      I: total > 0 ? Number(((counts.I / total) * 100).toFixed(1)) : 0,
+      L: total > 0 ? Number(((counts.L / total) * 100).toFixed(1)) : 0,
+      U: total > 0 ? Number(((counts.U / total) * 100).toFixed(1)) : 0,
+      O: total > 0 ? Number(((counts.O / total) * 100).toFixed(1)) : 0
+    };
+
+    return { label: m.label, counts, pct, total };
+  });
+
+  return points;
+}
+
+function setDeptSkillTrendMode(mode) {
+  deptSkillTrendState.mode = mode === 'percent' ? 'percent' : 'count';
+  const btnCount = document.getElementById('btnDeptTrendCount');
+  const btnPct = document.getElementById('btnDeptTrendPct');
+  if (btnCount) btnCount.classList.toggle('active', deptSkillTrendState.mode === 'count');
+  if (btnPct) btnPct.classList.toggle('active', deptSkillTrendState.mode === 'percent');
+  renderDeptSkillTrendChart(
+    deptSkillTrendState.lastEmps,
+    deptSkillTrendState.lastDept,
+    deptSkillTrendState.lastSections
+  );
+}
+
+function onDeptTrendSectionChange() {
+  const sel = document.getElementById('deptTrendSectionFilter');
+  deptSkillTrendState.section = sel ? sel.value : 'ALL';
+  renderDeptSkillTrendChart(
+    deptSkillTrendState.lastEmps,
+    deptSkillTrendState.lastDept,
+    deptSkillTrendState.lastSections
+  );
+}
+
+function renderDeptSkillTrendChart(deptEmps, activeDept, sectionsList) {
+  const safeEmps = Array.isArray(deptEmps) ? deptEmps : [];
+  const safeSections = Array.isArray(sectionsList) ? sectionsList : [];
+  const deptChanged = deptSkillTrendState.lastDept !== activeDept;
+
+  deptSkillTrendState.lastDept = activeDept;
+  deptSkillTrendState.lastEmps = safeEmps;
+  deptSkillTrendState.lastSections = safeSections;
+  if (deptChanged) {
+    deptSkillTrendState.section = 'ALL';
+  }
+
+  // Sync Section Filter dropdown
+  const secSelect = document.getElementById('deptTrendSectionFilter');
+  if (secSelect) {
+    const targetSec = deptSkillTrendState.section;
+    const optionsHtml = `<option value="ALL">All Sections (${safeSections.length})</option>` +
+      safeSections.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+    secSelect.innerHTML = optionsHtml;
+    secSelect.value = (targetSec !== 'ALL' && safeSections.includes(targetSec)) ? targetSec : 'ALL';
+    deptSkillTrendState.section = secSelect.value;
+  }
+
+  const nextFilterKey = `${activeDept || ''}::${deptSkillTrendState.section || 'ALL'}`;
+  const filterChanged = deptSkillTrendState.lastFilterKey !== nextFilterKey;
+
+  const filteredEmps = deptSkillTrendState.section === 'ALL'
+    ? safeEmps
+    : safeEmps.filter(e => String(e.section || '').trim() === deptSkillTrendState.section);
+
+  const records = (typeof getStoredRecords === 'function') ? getStoredRecords() : {};
+  const ojtRecords = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
+  const series = computeSixMonthSkillTrend(filteredEmps, records, ojtRecords);
+
+  const firstPt = series[0] || { label: '', counts: { I: 0, L: 0, U: 0, O: 0 }, pct: { I: 0, L: 0, U: 0, O: 0 }, total: 0 };
+  const lastPt = series[series.length - 1] || firstPt;
+  const isPctMode = deptSkillTrendState.mode === 'percent';
+
+  // Update metadata kicker (clean unboxed text with typographic separators)
+  const metaEl = document.getElementById('deptSkillTrendMeta');
+  if (metaEl) {
+    const deptLabel = activeDept === 'ALL'
+      ? 'Plant-Wide'
+      : (activeDept === 'PRODUCTION' ? 'Production' : (activeDept === 'QUALITY CONTROL' || activeDept === 'QUALITY' ? 'Quality Control' : activeDept));
+    const scopeText = deptSkillTrendState.section === 'ALL' ? deptLabel : `${deptLabel} / ${deptSkillTrendState.section}`;
+    const unitText = isPctMode ? 'Percentage share' : 'Active headcount';
+    metaEl.textContent = `${firstPt.label} – ${lastPt.label} · ${scopeText} · ${lastPt.total} active associates · ${unitText}`;
+  }
+
+  const canvas = document.getElementById('deptSkillTrendChart');
+  const emptyEl = document.getElementById('deptSkillTrendEmpty');
+  const summaryEl = document.getElementById('deptSkillTrendSummary');
+
+  const LEVELS_META = [
+    { key: 'I', label: 'Level I · Beginner', color: '#64748B', fill: 'rgba(100, 116, 139, 0.08)' },
+    { key: 'L', label: 'Level L · Learner', color: '#D97706', fill: 'rgba(217, 119, 6, 0.08)' },
+    { key: 'U', label: 'Level U · Executor', color: '#005B9E', fill: 'rgba(0, 91, 158, 0.08)' },
+    { key: 'O', label: 'Level O · Expert', color: '#059669', fill: 'rgba(5, 150, 105, 0.09)' }
+  ];
+
+  // Update 4-column 6-month delta summary strip
+  if (summaryEl) {
+    summaryEl.innerHTML = LEVELS_META.map(meta => {
+      const curCount = lastPt.counts[meta.key];
+      const curPct = lastPt.pct[meta.key];
+      const prevCount = firstPt.counts[meta.key];
+      const prevPct = firstPt.pct[meta.key];
+      const deltaVal = isPctMode ? Number((curPct - prevPct).toFixed(1)) : (curCount - prevCount);
+      const primaryDisplay = isPctMode ? `${curPct}%` : `${curCount}`;
+      const secondaryDisplay = isPctMode ? `${curCount} associates` : `${curPct}% share`;
+      let deltaText = `No change vs ${firstPt.label}`;
+      let deltaClass = '';
+      if (deltaVal > 0) {
+        deltaText = `+${deltaVal}${isPctMode ? ' pp' : ''} vs ${firstPt.label}`;
+        deltaClass = 'delta-up';
+      } else if (deltaVal < 0) {
+        deltaText = `${deltaVal}${isPctMode ? ' pp' : ''} vs ${firstPt.label}`;
+        deltaClass = 'delta-down';
+      }
+      return `
+        <div class="hod-trend-delta-item">
+          <div class="hod-trend-delta-label">
+            <span class="hod-trend-swatch" style="background: ${meta.color};"></span>
+            <span>${meta.label}</span>
+          </div>
+          <div class="hod-trend-delta-value">${primaryDisplay} <span style="font-size:0.78rem; font-weight:500; color:var(--text-muted, #64748B);">(${secondaryDisplay})</span></div>
+          <div class="hod-trend-delta-sub ${deltaClass}">${deltaText}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  if (!canvas) return;
+
+  if (filteredEmps.length === 0) {
+    deptSkillTrendState.lastFilterKey = nextFilterKey;
+    if (deptSkillTrendChartInstance) {
+      try { deptSkillTrendChartInstance.destroy(); } catch (e) {}
+      deptSkillTrendChartInstance = null;
+    }
+    canvas.style.display = 'none';
+    if (emptyEl) emptyEl.style.display = 'flex';
+    if (filterChanged) triggerDeptTrendFadeIn();
+    return;
+  }
+
+  canvas.style.display = 'block';
+  if (emptyEl) emptyEl.style.display = 'none';
+
+  // Chart.js is loaded with defer; retry cleanly once loaded if invoked early
+  if (typeof Chart === 'undefined') {
+    if (!window._deptTrendChartRetryBound) {
+      window._deptTrendChartRetryBound = true;
+      window.addEventListener('load', () => {
+        if (deptSkillTrendState.lastEmps.length > 0) {
+          renderDeptSkillTrendChart(
+            deptSkillTrendState.lastEmps,
+            deptSkillTrendState.lastDept,
+            deptSkillTrendState.lastSections
+          );
+        }
+      }, { once: true });
+    }
+    return;
+  }
+
+  deptSkillTrendState.lastFilterKey = nextFilterKey;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  if (deptSkillTrendChartInstance) {
+    try { deptSkillTrendChartInstance.destroy(); } catch (e) {}
+    deptSkillTrendChartInstance = null;
+  }
+
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const gridColor = isDark ? 'rgba(148, 163, 184, 0.16)' : '#E2E8F0';
+  const tickColor = isDark ? '#CBD5E1' : '#475569';
+  const legendColor = isDark ? '#E2E8F0' : '#334155';
+  const pointBorder = isDark ? '#1E293B' : '#FFFFFF';
+
+  const labels = series.map(p => p.label);
+  const datasets = LEVELS_META.map(meta => ({
+    label: meta.label,
+    data: series.map(p => (isPctMode ? p.pct[meta.key] : p.counts[meta.key])),
+    borderColor: meta.color,
+    backgroundColor: meta.fill,
+    borderWidth: 2.5,
+    tension: 0.28,
+    fill: true,
+    pointRadius: 4,
+    pointHoverRadius: 6,
+    pointBackgroundColor: meta.color,
+    pointBorderColor: pointBorder,
+    pointBorderWidth: 1.5
+  }));
+
+  if (filterChanged) {
+    triggerDeptTrendFadeIn();
+  }
+
+  const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  try {
+    deptSkillTrendChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: prefersReducedMotion
+          ? false
+          : {
+              duration: filterChanged ? 480 : 320,
+              easing: 'easeOutCubic'
+            },
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+            align: 'end',
+            labels: {
+              color: legendColor,
+              usePointStyle: true,
+              pointStyle: 'circle',
+              boxWidth: 8,
+              boxHeight: 8,
+              padding: 16,
+              font: { size: 12, weight: '600' }
+            }
+          },
+          tooltip: {
+            backgroundColor: isDark ? '#0F172A' : 'rgba(15, 23, 42, 0.94)',
+            titleColor: '#F8FAFC',
+            bodyColor: '#E2E8F0',
+            borderColor: 'rgba(148, 163, 184, 0.25)',
+            borderWidth: 1,
+            padding: 12,
+            cornerRadius: 8,
+            callbacks: {
+              title: (items) => {
+                if (!items || !items.length) return '';
+                const pt = series[items[0].dataIndex];
+                return `${pt.label}  ·  ${pt.total} Active Associates`;
+              },
+              label: (context) => {
+                const pt = series[context.dataIndex];
+                const meta = LEVELS_META[context.datasetIndex];
+                if (!pt || !meta) return '';
+                const cnt = pt.counts[meta.key];
+                const pct = pt.pct[meta.key];
+                return ` ${meta.label}: ${cnt} (${pct}%)`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            border: { color: gridColor },
+            ticks: {
+              color: tickColor,
+              font: { size: 12, weight: '600' }
+            }
+          },
+          y: {
+            beginAtZero: true,
+            suggestedMax: isPctMode ? 100 : undefined,
+            grid: { color: gridColor },
+            border: { display: false },
+            ticks: {
+              color: tickColor,
+              precision: isPctMode ? 0 : 0,
+              font: { size: 11, weight: '600' },
+              callback: (val) => (isPctMode ? `${val}%` : val)
+            }
+          }
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('HOD skill trend chart render notice:', err.message);
   }
 }
 
@@ -8889,7 +10222,19 @@ window.handleDeptLogin = handleDeptLogin;
 window.logoutDept = logoutDept;
 window.changeActiveDepartment = changeActiveDepartment;
 window.renderDepartmentDashboard = renderDepartmentDashboard;
+window.renderDeptSkillTrendChart = renderDeptSkillTrendChart;
+window.setDeptSkillTrendMode = setDeptSkillTrendMode;
+window.onDeptTrendSectionChange = onDeptTrendSectionChange;
 window.jumpToSectionView = jumpToSectionView;
+
+async function handleHODDeptReset() {
+  const deptName = (typeof activeDepartment !== 'undefined' && activeDepartment) || sessionStorage.getItem('iluo_dept_session') || 'QUALITY CONTROL';
+  await resetDepartmentExams(deptName);
+  if (typeof renderDepartmentDashboard === 'function') {
+    renderDepartmentDashboard(deptName);
+  }
+}
+window.handleHODDeptReset = handleHODDeptReset;
 
 // SOP Modal
 function openSopModal() {
@@ -8902,875 +10247,1297 @@ function closeSopModal() {
   if (modal) modal.style.display = 'none';
 }
 
+// =====================================================================
+// P0/P1/P2/P3 MANAGEMENT PORTAL ENHANCEMENT MODULE
+// =====================================================================
 
-// ==========================================================================
-// YOKOHAMA / ATC TIRES — ENTERPRISE EXTENSIONS (BUG-01 to BUG-18 & FEATURES)
-// ==========================================================================
+// 1. In-App Accessible Confirmation & Typed Phrase Dialogs
+function showInAppConfirm(title, message, okLabel = 'Confirm') {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('inAppConfirmModal');
+    const titleEl = document.getElementById('inAppConfirmTitle');
+    const msgEl = document.getElementById('inAppConfirmMessage');
+    const phraseWrap = document.getElementById('inAppConfirmPhraseWrap');
+    const okBtn = document.getElementById('inAppConfirmOkBtn');
+    const cancelBtn = document.getElementById('inAppConfirmCancelBtn');
+    if (!modal || !okBtn || !cancelBtn) { resolve(false); return; }
 
-// Global Shift & Plant Meta
-function getActivePlantShift() {
-  const now = new Date();
-  const hours = now.getHours();
-  const mins = now.getMinutes();
-  const currentMin = hours * 60 + mins;
+    if (titleEl) titleEl.textContent = title || 'Confirm Action';
+    if (msgEl) msgEl.textContent = message || '';
+    if (phraseWrap) phraseWrap.style.display = 'none';
+    okBtn.textContent = okLabel || 'Confirm';
+    okBtn.disabled = false;
+    modal.style.display = 'flex';
+    okBtn.focus();
 
-  // Shift 1: 06:00 - 14:00 (360 to 840)
-  // Shift 2: 14:00 - 22:00 (840 to 1320)
-  // Shift 3: 22:00 - 06:00 (1320 to 1440, or 0 to 360)
-  if (currentMin >= 360 && currentMin < 840) {
-    return { name: 'Shift 1 (06:00 - 14:00)', code: 'S1' };
-  } else if (currentMin >= 840 && currentMin < 1320) {
-    return { name: 'Shift 2 (14:00 - 22:00)', code: 'S2' };
-  } else {
-    return { name: 'Shift 3 (22:00 - 06:00)', code: 'S3' };
-  }
-}
-
-function updatePlantShiftAndSyncInfo() {
-  const shift = getActivePlantShift();
-  const shiftEl = document.getElementById('footerActiveShift');
-  if (shiftEl) shiftEl.textContent = shift.name;
-
-  const syncEl = document.getElementById('footerLastSyncTime');
-  if (syncEl) {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    syncEl.textContent = `Today, ${timeStr} IST`;
-  }
-}
-
-// Header Breadcrumbs & Dynamic Active Role Pill (BUG-06)
-function updateHeaderBreadcrumbsAndRole(path, session) {
-  const breadcrumbList = document.getElementById('headerBreadcrumbList');
-  if (!breadcrumbList) return;
-
-  const p = path || window.location.hash.slice(1) || '/';
-  let crumbs = [{ label: 'Portal Hub', path: '/' }];
-
-  if (p === '/' || p === '' || p === '/public') {
-    crumbs = [{ label: 'Portal Hub', path: '/' }];
-  } else if (p.startsWith('/employee')) {
-    crumbs.push({ label: 'Employee Portal', path: '/employee' });
-    if (p.includes('/dashboard')) crumbs.push({ label: 'Dashboard', path: '/employee/dashboard' });
-    else if (p.includes('/exams')) crumbs.push({ label: 'Available Exams', path: '/employee/exams' });
-    else if (p.includes('/results')) crumbs.push({ label: 'My Results', path: '/employee/results' });
-    else if (p.includes('/profile')) crumbs.push({ label: 'Skill Profile', path: '/employee/profile' });
-    else if (p.includes('/exam')) crumbs.push({ label: 'Assessment Runner', path: p });
-  } else if (p.startsWith('/section')) {
-    crumbs.push({ label: 'Quality Control', path: '/section' });
-    if (currentActiveSection) crumbs.push({ label: currentActiveSection, path: p });
-  } else if (p.startsWith('/department') || p.startsWith('/hod')) {
-    crumbs.push({ label: 'Department', path: '/department' });
-    crumbs.push({ label: 'Executive HOD Dashboard', path: p });
-  } else if (p.startsWith('/ojt') || p.startsWith('/assessment')) {
-    crumbs.push({ label: 'Practical OJT', path: '/ojt' });
-    crumbs.push({ label: 'Skill Assessment Center', path: p });
-  } else if (p.startsWith('/control-center') || p.startsWith('/secure-control') || p.startsWith('/hr')) {
-    crumbs.push({ label: 'HR Control Center', path: '/control-center/dashboard' });
-    const sub = p.split('/')[2];
-    if (sub) {
-      const subTitle = sub.charAt(0).toUpperCase() + sub.slice(1);
-      crumbs.push({ label: subTitle, path: p });
-    }
-  }
-
-  // Render breadcrumbs
-  breadcrumbList.innerHTML = crumbs.map((c, i) => {
-    const isLast = i === crumbs.length - 1;
-    if (isLast) {
-      return `<li class="breadcrumb-item active" aria-current="page">${c.label}</li>`;
-    }
-    return `<li class="breadcrumb-item"><button type="button" onclick="navigateTo('${c.path}')">${c.label}</button></li>`;
-  }).join('');
-
-  // Update Dynamic User Pill
-  const userBadge = document.getElementById('navUserBadge');
-  const avatar = document.getElementById('navAvatar');
-  const nameSpan = document.getElementById('navUserName');
-  const roleSpan = document.getElementById('navUserRole');
-  const logoutBtn = document.getElementById('btnLogout');
-
-  let activeUser = session || currentUser;
-  if (!activeUser) {
-    try {
-      const s = localStorage.getItem(STORAGE_KEY_SESSION);
-      if (s) activeUser = JSON.parse(s);
-    } catch(e) {}
-  }
-
-  // Check section or dept session if not employee/admin
-  let secUser = sessionStorage.getItem('iluo_section_session');
-  let deptUser = sessionStorage.getItem('iluo_dept_session');
-  let ojtUser = sessionStorage.getItem('iluo_ojt_session');
-
-  if (activeUser && activeUser.name) {
-    if (userBadge) userBadge.style.display = 'flex';
-    if (logoutBtn) logoutBtn.style.display = 'inline-flex';
-    if (avatar) avatar.textContent = activeUser.name.charAt(0).toUpperCase();
-    if (nameSpan) nameSpan.textContent = activeUser.name;
-    if (roleSpan) {
-      const claim = activeUser.roleClaim || activeUser.role;
-      roleSpan.textContent = claim === 'hr_admin' || claim === 'admin' ? 'HR Admin' :
-                             claim === 'dept_hod' ? 'HOD' :
-                             claim === 'section_head' ? 'Section Head' :
-                             claim === 'evaluator' ? 'Safety Evaluator' : 'Employee';
-    }
-  } else if (secUser) {
-    if (userBadge) userBadge.style.display = 'flex';
-    if (logoutBtn) logoutBtn.style.display = 'inline-flex';
-    if (avatar) avatar.textContent = 'S';
-    if (nameSpan) nameSpan.textContent = secUser;
-    if (roleSpan) roleSpan.textContent = 'Section Head';
-  } else if (deptUser) {
-    if (userBadge) userBadge.style.display = 'flex';
-    if (logoutBtn) logoutBtn.style.display = 'inline-flex';
-    if (avatar) avatar.textContent = 'D';
-    if (nameSpan) nameSpan.textContent = deptUser + ' HOD';
-    if (roleSpan) roleSpan.textContent = 'Department HOD';
-  } else if (ojtUser) {
-    if (userBadge) userBadge.style.display = 'flex';
-    if (logoutBtn) logoutBtn.style.display = 'inline-flex';
-    if (avatar) avatar.textContent = 'E';
-    if (nameSpan) nameSpan.textContent = ojtUser + ' Evaluator';
-    if (roleSpan) roleSpan.textContent = 'Safety Evaluator';
-  } else {
-    if (userBadge) userBadge.style.display = 'none';
-    if (logoutBtn) logoutBtn.style.display = 'none';
-  }
-}
-
-// Password Show/Hide Toggle & Caps Lock Indicator (BUG-14)
-function togglePasswordVisibility(inputId, btn) {
-  const input = document.getElementById(inputId);
-  if (!input) return;
-
-  const isPassword = input.type === 'password';
-  input.type = isPassword ? 'text' : 'password';
-
-  if (btn) {
-    btn.innerHTML = isPassword ?
-      `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>` :
-      `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
-    btn.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
-  }
-}
-
-function setupCapsLockListeners() {
-  const pwInputs = document.querySelectorAll('input[type="password"]');
-  pwInputs.forEach(input => {
-    input.addEventListener('keyup', (e) => {
-      const isCaps = e.getModifierState && e.getModifierState('CapsLock');
-      const form = input.closest('form') || input.parentElement;
-      const warn = form ? form.querySelector('.caps-lock-warning') : null;
-      if (warn) warn.style.display = isCaps ? 'inline-flex' : 'none';
-    });
+    const cleanup = (result) => {
+      modal.style.display = 'none';
+      okBtn.onclick = null;
+      cancelBtn.onclick = null;
+      resolve(result);
+    };
+    okBtn.onclick = () => cleanup(true);
+    cancelBtn.onclick = () => cleanup(false);
   });
 }
 
-// Empty State Table Cell Helper (BUG-07)
-function renderTableEmptyState(colspan, message, resetFnName) {
-  return `
-    <tr>
-      <td colspan="${colspan || 10}" class="table-empty-state-cell">
-        <div class="empty-state-content">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-          <div class="empty-state-title">No matching records found</div>
-          <div class="empty-state-subtitle">${message || 'Try clearing filters or search terms to display employee records.'}</div>
-          <button type="button" class="btn-reset-filters" onclick="${resetFnName || 'resetActiveFilters()'}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><polyline points="3 3 3 8 8 8"/></svg>
-            Reset All Filters
-          </button>
-        </div>
-      </td>
-    </tr>
-  `;
+function showTypedConfirmModal(title, message, expectedPhrase) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('inAppConfirmModal');
+    const titleEl = document.getElementById('inAppConfirmTitle');
+    const msgEl = document.getElementById('inAppConfirmMessage');
+    const phraseWrap = document.getElementById('inAppConfirmPhraseWrap');
+    const expectedEl = document.getElementById('inAppConfirmPhraseExpected');
+    const inputEl = document.getElementById('inAppConfirmPhraseInput');
+    const okBtn = document.getElementById('inAppConfirmOkBtn');
+    const cancelBtn = document.getElementById('inAppConfirmCancelBtn');
+    if (!modal || !okBtn || !cancelBtn || !inputEl) { resolve(false); return; }
+
+    if (titleEl) titleEl.textContent = title || 'Critical Confirmation Required';
+    if (msgEl) msgEl.textContent = message || '';
+    if (phraseWrap) phraseWrap.style.display = 'block';
+    if (expectedEl) expectedEl.textContent = expectedPhrase;
+    inputEl.value = '';
+    okBtn.textContent = 'Execute Action';
+    okBtn.disabled = true;
+
+    const onInput = () => {
+      okBtn.disabled = inputEl.value.trim() !== expectedPhrase;
+    };
+    inputEl.addEventListener('input', onInput);
+
+    modal.style.display = 'flex';
+    inputEl.focus();
+
+    const cleanup = (result) => {
+      inputEl.removeEventListener('input', onInput);
+      okBtn.disabled = false;
+      modal.style.display = 'none';
+      okBtn.onclick = null;
+      cancelBtn.onclick = null;
+      resolve(result);
+    };
+    okBtn.onclick = () => cleanup(inputEl.value.trim() === expectedPhrase);
+    cancelBtn.onclick = () => cleanup(false);
+  });
 }
 
-function resetActiveFilters() {
-  const ojtSearch = document.getElementById('ojtEmpSearchInput');
-  if (ojtSearch) ojtSearch.value = '';
-  const ojtSec = document.getElementById('ojtQcSectionFilter');
-  if (ojtSec) ojtSec.value = 'ALL';
-  const ojtLvl = document.getElementById('ojtLevelFilter');
-  if (ojtLvl) ojtLvl.value = 'ALL';
-  if (typeof renderOjtDashboardTable === 'function') renderOjtDashboardTable();
-
-  const secSearch = document.getElementById('secEmpSearchInput');
-  if (secSearch) secSearch.value = '';
-  const secLvl = document.getElementById('secLevelFilter');
-  if (secLvl) secLvl.value = 'ALL';
-  if (typeof filterSectionTable === 'function') filterSectionTable();
-
-  showToast('Filters cleared');
-}
-
-// --------------------------------------------------------------------------
-// HIGH-IMPACT FEATURE 3: Digital Practical OJT Rubric Drawer
-// --------------------------------------------------------------------------
-let activeRubricEmpNo = null;
-
-function openOjtRubricDrawer(empNo) {
-  activeRubricEmpNo = empNo;
-  const emp = (typeof EMPLOYEES !== 'undefined') ? EMPLOYEES.find(e => String(e.empNo) === String(empNo)) : null;
-  const backdrop = document.getElementById('rubricDrawerBackdrop');
-  if (!backdrop) return;
-
-  const subtitle = document.getElementById('rubricDrawerSubtitle');
-  if (subtitle && emp) {
-    subtitle.textContent = `Candidate: ${emp.name} (${emp.empNo}) | Section: ${emp.section || emp.dept || 'QA'}`;
+// 2. Bilingual Tamil / English Language Toggle & Dark Mode Toggle
+const PORTAL_I18N = {
+  en: {
+    systemTitle: 'ILUO Skill Assessment & Analytics Portal',
+    signOut: 'Sign Out',
+    langBtn: 'தமிழ் / EN'
+  },
+  ta: {
+    systemTitle: 'ILUO திறன் மதிப்பீடு & பகுப்பாய்வு தளம்',
+    signOut: 'வெளியேறு',
+    langBtn: 'EN / தமிழ்'
   }
+};
 
-  // Load existing rubric data if stored
-  const allOjt = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
-  const existing = allOjt[empNo];
-
-  if (existing && existing.checkpoints) {
-    document.getElementById('rubricSafetyScore').value = existing.checkpoints.safety || 20;
-    document.getElementById('rubricSopScore').value = existing.checkpoints.sop || 18;
-    document.getElementById('rubricDefectScore').value = existing.checkpoints.defect || 19;
-    document.getElementById('rubricCycleScore').value = existing.checkpoints.cycle || 18;
-    document.getElementById('rubricEvaluatorRemarks').value = existing.remarks || '';
-  } else {
-    document.getElementById('rubricSafetyScore').value = 20;
-    document.getElementById('rubricSopScore').value = 18;
-    document.getElementById('rubricDefectScore').value = 19;
-    document.getElementById('rubricCycleScore').value = 18;
-    document.getElementById('rubricEvaluatorRemarks').value = '';
-  }
-
-  updateRubricCalculations();
-  backdrop.classList.add('active');
-  document.body.style.overflow = 'hidden';
+function applySavedLanguagePreference() {
+  const lang = localStorage.getItem('iluo_portal_lang') || 'en';
+  document.documentElement.lang = lang;
+  const t = PORTAL_I18N[lang] || PORTAL_I18N.en;
+  const sysTitle = document.getElementById('navbarSystemTitle');
+  if (sysTitle) sysTitle.textContent = t.systemTitle;
+  const btnLogout = document.getElementById('btnLogout');
+  if (btnLogout) btnLogout.textContent = t.signOut;
+  const btnLang = document.getElementById('btnToggleLang');
+  if (btnLang) btnLang.textContent = t.langBtn;
 }
 
-function closeRubricDrawerDirect() {
-  const backdrop = document.getElementById('rubricDrawerBackdrop');
-  if (backdrop) backdrop.classList.remove('active');
-  document.body.style.overflow = '';
-  activeRubricEmpNo = null;
+function togglePortalLanguage() {
+  const cur = localStorage.getItem('iluo_portal_lang') || 'en';
+  const next = cur === 'en' ? 'ta' : 'en';
+  localStorage.setItem('iluo_portal_lang', next);
+  applySavedLanguagePreference();
+  showToast(next === 'ta' ? 'தமிழ் மொழி செயல்படுத்தப்பட்டது' : 'Switched interface language to English');
 }
 
-function closeRubricDrawer(e) {
-  if (e.target.id === 'rubricDrawerBackdrop') {
-    closeRubricDrawerDirect();
-  }
+function applySavedThemePreference() {
+  const theme = localStorage.getItem('iluo_portal_theme') || 'light';
+  document.documentElement.setAttribute('data-theme', theme);
+  const btn = document.getElementById('btnToggleTheme');
+  if (btn) btn.textContent = theme === 'dark' ? '☀️ Light' : '🌙 Dark';
 }
 
-function updateRubricCalculations() {
-  const safety = parseInt(document.getElementById('rubricSafetyScore').value, 10) || 0;
-  const sop = parseInt(document.getElementById('rubricSopScore').value, 10) || 0;
-  const defect = parseInt(document.getElementById('rubricDefectScore').value, 10) || 0;
-  const cycle = parseInt(document.getElementById('rubricCycleScore').value, 10) || 0;
-
-  document.getElementById('rubricSafetyVal').textContent = `${safety} / 25`;
-  document.getElementById('rubricSopVal').textContent = `${sop} / 25`;
-  document.getElementById('rubricDefectVal').textContent = `${defect} / 25`;
-  document.getElementById('rubricCycleVal').textContent = `${cycle} / 25`;
-
-  const total = safety + sop + defect + cycle;
-  const display = document.getElementById('rubricTotalDisplay');
-  if (display) display.textContent = `${total}%`;
-
-  const pill = document.getElementById('rubricStatusPill');
-  if (pill) {
-    if (total >= 70) {
-      pill.textContent = 'QUALIFIED (≥ 70%)';
-      pill.className = 'rubric-pass-pill pass';
-    } else {
-      pill.textContent = 'NEEDS REFOCUS (< 70%)';
-      pill.className = 'rubric-pass-pill fail';
+function togglePortalTheme() {
+  const cur = document.documentElement.getAttribute('data-theme') || 'light';
+  const next = cur === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('iluo_portal_theme', next);
+  applySavedThemePreference();
+  const dw = document.getElementById('deptDashboardWrapper');
+  if (dw && dw.style.display !== 'none') {
+    if (typeof renderDeptSkillTrendChart === 'function' && deptSkillTrendState.lastEmps.length > 0) {
+      renderDeptSkillTrendChart(
+        deptSkillTrendState.lastEmps,
+        deptSkillTrendState.lastDept,
+        deptSkillTrendState.lastSections
+      );
+    }
+    if (typeof renderDeptExecAnalytics === 'function' && execAnalyticsState.dept.lastEmps.length > 0) {
+      renderDeptExecAnalytics(
+        execAnalyticsState.dept.lastEmps,
+        execAnalyticsState.dept.lastDept,
+        execAnalyticsState.dept.lastSections
+      );
     }
   }
+  const ctrlDash = document.getElementById('ctrlSubDashboard');
+  if (ctrlDash && ctrlDash.style.display !== 'none' && typeof renderAdminExecAnalytics === 'function') {
+    renderAdminExecAnalytics();
+  }
+  const secDash = document.getElementById('sectionDashboardWrapper');
+  if (secDash && secDash.style.display !== 'none' && typeof renderSectionExecAnalytics === 'function' && execAnalyticsState.section.lastEmps.length > 0) {
+    renderSectionExecAnalytics(execAnalyticsState.section.lastEmps, execAnalyticsState.section.lastSecName);
+  }
 }
 
-function saveRubricEvaluation() {
-  if (!activeRubricEmpNo) return;
-  const empNo = activeRubricEmpNo;
-
-  const safety = parseInt(document.getElementById('rubricSafetyScore').value, 10) || 0;
-  const sop = parseInt(document.getElementById('rubricSopScore').value, 10) || 0;
-  const defect = parseInt(document.getElementById('rubricDefectScore').value, 10) || 0;
-  const cycle = parseInt(document.getElementById('rubricCycleScore').value, 10) || 0;
-  const total = safety + sop + defect + cycle;
-  const remarks = document.getElementById('rubricEvaluatorRemarks').value.trim();
-
-  const allOjt = (typeof getStoredOjtRecords === 'function') ? getStoredOjtRecords() : {};
-  allOjt[empNo] = {
-    empNo: empNo,
-    totalScore: Math.round(total / 2), // Normalized to 50 max marks
-    maxScore: 50,
-    percentage: total,
-    isQualified: total >= 70,
-    remarks: remarks,
-    checkpoints: { safety, sop, defect, cycle },
-    evaluatedAt: new Date().toISOString(),
-    evaluator: (currentUser && currentUser.name) ? currentUser.name : 'Section Evaluator'
-  };
-
-  localStorage.setItem('iluo_ojt_records', JSON.stringify(allOjt));
-
-  // Queue offline sync mutation
-  queueOfflineMutation('SAVE_OJT_RUBRIC', allOjt[empNo]);
-
-  showToast(`✅ Practical OJT Rubric saved for ${empNo}: ${total}% (${total >= 70 ? 'Qualified' : 'Needs Refocus'})`);
-  closeRubricDrawerDirect();
-
-  if (typeof renderOjtDashboardTable === 'function') renderOjtDashboardTable();
+// 3. Server-Side Export Audit Logging
+function logExportAudit(exportType, target, summary) {
+  try {
+    fetch('/api/audit-export', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify({ exportType, target, summary })
+    }).catch(() => {});
+  } catch (e) {}
 }
 
-// --------------------------------------------------------------------------
-// HIGH-IMPACT FEATURE 1: Visual ILUO Competency Matrix Heatmap
-// --------------------------------------------------------------------------
-function openCompetencyHeatmap(sectionName) {
-  const modal = document.getElementById('competencyHeatmapModal');
-  const container = document.getElementById('heatmapContentContainer');
-  if (!modal || !container) return;
+// 5. Soft-Delete Backups & Audit Logs Center
+async function refreshUndoBanner() {
+  const container = document.getElementById('undoBackupBannerContainer');
+  if (!container) return;
+  try {
+    const res = await fetch('/api/admin/backups', { headers: getAuthHeaders(), credentials: 'include' });
+    if (!res.ok) { container.innerHTML = ''; return; }
+    const data = await res.json();
+    const backups = Array.isArray(data.backups) ? data.backups : [];
+    const activeListEl = document.getElementById('activeBackupsList');
+    const dbListEl = document.getElementById('dbActiveBackupsList');
+    const listHtml = backups.length === 0
+      ? '<div style="font-size:0.84rem;color:var(--text-muted);">No active 30-minute undo backups available.</div>'
+      : backups.map((b) => `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 12px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;margin-bottom:8px;">
+            <div>
+              <strong style="color:#0F172A;">${escapeHtml(b.label || b.backupType || 'Backup')}</strong>
+              <span style="font-size:0.78rem;color:#92400E;display:block;">Created by ${escapeHtml(b.createdBy || 'Admin')} &bull; Expires ${escapeHtml(new Date(b.expiresAt).toLocaleTimeString())}</span>
+            </div>
+            <button type="button" class="btn-primary" style="padding:5px 12px;font-size:0.78rem;background:#D97706;border-color:#D97706;" onclick="undoSoftBackup('${escapeHtml(b.backupId)}')">Undo &amp; Restore</button>
+          </div>
+        `).join('');
+    if (activeListEl) activeListEl.innerHTML = listHtml;
+    if (dbListEl) dbListEl.innerHTML = listHtml;
 
-  const sec = sectionName || currentActiveSection || 'Tire Building QA';
-  const emps = (typeof EMPLOYEES !== 'undefined') ? EMPLOYEES.filter(e => {
-    const s = (e.section || '').toLowerCase();
-    return s.includes(sec.toLowerCase()) || sec.toLowerCase().includes(s);
-  }) : [];
+    if (backups.length > 0) {
+      const latest = backups[0];
+      container.innerHTML = `
+        <div class="undo-backup-banner" role="status">
+          <span><strong>Recent Backup Available:</strong> ${escapeHtml(latest.label || latest.backupType)}</span>
+          <button type="button" class="btn-primary" style="padding:5px 12px;font-size:0.78rem;background:#D97706;border-color:#D97706;" onclick="undoSoftBackup('${escapeHtml(latest.backupId)}')">Undo Action</button>
+        </div>
+      `;
+    } else {
+      container.innerHTML = '';
+    }
+  } catch (e) {
+    container.innerHTML = '';
+  }
+}
 
-  // Plant Workstations for this section
-  const workstations = [
-    { id: 'st1', name: 'Raw Material & Setup Station' },
-    { id: 'st2', name: 'Primary Assembly & Core Machine Bay' },
-    { id: 'st3', name: 'In-Process Precision Inspection Bay' },
-    { id: 'st4', name: 'High-Speed Testing & Dynamic Rig' },
-    { id: 'st5', name: 'Final Certification & Containment Dock' }
-  ];
+async function undoSoftBackup(backupId) {
+  const ok = await showInAppConfirm('Restore Soft-Deleted Backup', 'Restore data from this 15-minute undo snapshot? Current conflicting entries will be overwritten by the backup.', 'Restore Backup');
+  if (!ok) return;
+  try {
+    const res = await fetch('/api/admin/backups/' + encodeURIComponent(backupId) + '/undo', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message || 'Backup restored cleanly!');
+      localStorage.removeItem(STORAGE_KEY_RECORDS);
+      localStorage.removeItem(STORAGE_KEY_OJT);
+      if (typeof syncCloudEmployees === 'function') await syncCloudEmployees();
+      refreshUndoBanner();
+      if (typeof loadAuditLogsView === 'function') loadAuditLogsView();
+      if (document.getElementById('adminTableBody')) renderAdminTable('');
+      if (document.getElementById('empDirectoryTbody')) renderEmployeeDirectory();
+    } else {
+      showToast((data && data.message) || 'Could not restore backup');
+    }
+  } catch (err) {
+    showToast('Backup restore error: ' + err.message);
+  }
+}
 
-  let rowsHtml = '';
-  workstations.forEach((ws, idx) => {
-    // Distribute operators across workstations
-    const wsEmps = emps.filter((_, i) => (i % workstations.length) === idx);
-    const uAndOCount = wsEmps.filter(e => e.currentLevel === 'U' || e.currentLevel === 'O').length;
-    const isSpof = uAndOCount < 2;
+async function loadAuditLogsView() {
+  refreshUndoBanner();
+  const tbody = document.getElementById('auditLogsTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">Loading immutable audit logs...</td></tr>';
 
-    const opBadges = wsEmps.map(e => `
-      <span class="iluo-badge iluo-badge-${(e.currentLevel || 'I').toLowerCase()}" style="margin: 2px;" title="${e.name} (${e.empNo}) - Level ${e.currentLevel}">
-        ${e.currentLevel || 'I'}
-      </span>
-    `).join('') || '<span style="color: var(--text-subtle); font-size: 0.8rem;">No assigned operators</span>';
+  const q = (document.getElementById('auditLogSearchInput')?.value || '').toLowerCase().trim();
+  const actFilter = (document.getElementById('auditLogActionFilter')?.value || 'ALL').toUpperCase();
 
-    rowsHtml += `
+  try {
+    const res = await fetch('/api/admin/audit-logs?limit=200', { headers: getAuthHeaders(), credentials: 'include' });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:#DC2626;">${escapeHtml((data && data.message) || 'Failed to load audit logs')}</td></tr>`;
+      return;
+    }
+    const logs = (data.logs || []).filter((log) => {
+      const action = String(log.action || '').toUpperCase();
+      if (actFilter !== 'ALL' && !action.includes(actFilter)) return false;
+      if (q) {
+        const hay = `${log.actor || ''} ${log.action || ''} ${log.target || ''} ${log.details || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    if (logs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">No matching audit log events recorded.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = logs.map((l) => `
       <tr>
-        <td class="heatmap-station-th">
-          <strong>${ws.name}</strong>
-          ${isSpof ? '<br><span class="spof-warning-badge">⚠️ SPOF Alert: &lt; 2 Level U/O Certified</span>' : ''}
+        <td data-label="Timestamp" style="font-size:0.78rem;white-space:nowrap;">${escapeHtml(new Date(l.timestamp).toLocaleString())}</td>
+        <td data-label="Actor"><strong>${escapeHtml(l.actor || 'System')}</strong></td>
+        <td data-label="Action"><span style="background:#EFF6FF;color:#005B9E;padding:2px 8px;border-radius:4px;font-weight:700;font-size:0.74rem;">${escapeHtml(l.action)}</span></td>
+        <td data-label="Target">${escapeHtml(l.target || '-')}</td>
+        <td data-label="Details" style="font-size:0.82rem;">${escapeHtml(l.details || '')}</td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:24px;color:#DC2626;">Error loading audit logs: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+// 6. Staff User Accounts & Role Management (Aligned RBAC Form + Full Edit Mode)
+let STAFF_USERS_CACHE = [];
+
+function formatStaffScope(u) {
+  if (!u) return 'ALL';
+  const dept = String(u.department || '').trim();
+  const sec = String(u.section || '').trim();
+  if (dept && sec && dept !== 'ALL' && dept.toLowerCase() !== sec.toLowerCase()) {
+    return `${dept} / ${sec}`;
+  }
+  return sec || dept || 'ALL';
+}
+
+function getStaffRoleBadgeClass(role) {
+  switch (String(role || '').toUpperCase()) {
+    case 'SUPERADMIN': return 'role-superadmin';
+    case 'ADMIN': return 'role-admin';
+    case 'DEPT_HEAD': return 'role-dept';
+    case 'SECTION_HEAD': return 'role-section';
+    case 'EVALUATOR': return 'role-evaluator';
+    default: return 'role-admin';
+  }
+}
+
+function toggleStaffPasswordVisibility() {
+  const input = document.getElementById('staffUserPassword');
+  const eyeShow = document.getElementById('staffPwEyeShow');
+  const eyeHide = document.getElementById('staffPwEyeHide');
+  if (!input) return;
+  const reveal = input.type === 'password';
+  input.type = reveal ? 'text' : 'password';
+  if (eyeShow) eyeShow.style.display = reveal ? 'none' : 'block';
+  if (eyeHide) eyeHide.style.display = reveal ? 'block' : 'none';
+}
+
+function resetStaffUserForm(focusField = false) {
+  const card = document.getElementById('staffUserFormCard');
+  const editIdEl = document.getElementById('staffUserEditId');
+  const userEl = document.getElementById('staffUserUsername');
+  const nameEl = document.getElementById('staffUserDisplayName');
+  const emailEl = document.getElementById('staffUserEmail');
+  const roleEl = document.getElementById('staffUserRole');
+  const scopeEl = document.getElementById('staffUserScope');
+  const pwEl = document.getElementById('staffUserPassword');
+  const statusEl = document.getElementById('staffUserStatus');
+  const titleEl = document.getElementById('staffFormTitle');
+  const badgeEl = document.getElementById('staffFormModeBadge');
+  const cancelBtn = document.getElementById('btnCancelStaffEdit');
+  const resetBtn = document.getElementById('btnResetStaffForm');
+  const saveBtn = document.getElementById('btnSaveStaffUser');
+  const pwHintEl = document.getElementById('staffUserPasswordHint');
+  const footerHintEl = document.getElementById('staffFormFooterHint');
+  const eyeShow = document.getElementById('staffPwEyeShow');
+  const eyeHide = document.getElementById('staffPwEyeHide');
+
+  if (card) card.classList.remove('rbac-card-editing');
+  if (editIdEl) editIdEl.value = '';
+  if (userEl) userEl.value = '';
+  if (nameEl) nameEl.value = '';
+  if (emailEl) emailEl.value = '';
+  if (roleEl) roleEl.value = 'ADMIN';
+  if (scopeEl) scopeEl.value = '';
+  if (pwEl) {
+    pwEl.value = '';
+    pwEl.type = 'password';
+    pwEl.placeholder = 'Min 6 chars (required)';
+  }
+  if (eyeShow) eyeShow.style.display = 'block';
+  if (eyeHide) eyeHide.style.display = 'none';
+  if (statusEl) statusEl.value = 'true';
+  if (titleEl) titleEl.textContent = 'Create Staff Account';
+  if (badgeEl) {
+    badgeEl.textContent = 'NEW ACCOUNT';
+    badgeEl.classList.remove('editing');
+  }
+  if (cancelBtn) cancelBtn.style.display = 'none';
+  if (resetBtn) resetBtn.textContent = 'Clear';
+  if (saveBtn) {
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Create Account';
+  }
+  if (pwHintEl) pwHintEl.textContent = 'Required when creating a new account (min 6 chars)';
+  if (footerHintEl) footerHintEl.textContent = 'Click Edit on any row below to modify Username, Name, Email, Password, Role, or Status';
+
+  renderStaffUsersTable();
+  if (focusField && userEl) {
+    card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    userEl.focus();
+  }
+}
+
+function editStaffUser(userId) {
+  const user = STAFF_USERS_CACHE.find((u) => String(u.id) === String(userId));
+  if (!user) {
+    showToast('Staff account record could not be loaded.');
+    return;
+  }
+
+  const card = document.getElementById('staffUserFormCard');
+  const editIdEl = document.getElementById('staffUserEditId');
+  const userEl = document.getElementById('staffUserUsername');
+  const nameEl = document.getElementById('staffUserDisplayName');
+  const emailEl = document.getElementById('staffUserEmail');
+  const roleEl = document.getElementById('staffUserRole');
+  const scopeEl = document.getElementById('staffUserScope');
+  const pwEl = document.getElementById('staffUserPassword');
+  const statusEl = document.getElementById('staffUserStatus');
+  const titleEl = document.getElementById('staffFormTitle');
+  const badgeEl = document.getElementById('staffFormModeBadge');
+  const cancelBtn = document.getElementById('btnCancelStaffEdit');
+  const resetBtn = document.getElementById('btnResetStaffForm');
+  const saveBtn = document.getElementById('btnSaveStaffUser');
+  const pwHintEl = document.getElementById('staffUserPasswordHint');
+  const footerHintEl = document.getElementById('staffFormFooterHint');
+  const eyeShow = document.getElementById('staffPwEyeShow');
+  const eyeHide = document.getElementById('staffPwEyeHide');
+
+  if (card) card.classList.add('rbac-card-editing');
+  if (editIdEl) editIdEl.value = String(user.id);
+  if (userEl) userEl.value = user.username || '';
+  if (nameEl) nameEl.value = user.displayName || '';
+  if (emailEl) emailEl.value = user.email || '';
+  if (roleEl) roleEl.value = user.role || 'ADMIN';
+  if (scopeEl) scopeEl.value = formatStaffScope(user);
+  if (pwEl) {
+    pwEl.value = '';
+    pwEl.type = 'password';
+    pwEl.placeholder = 'Leave blank to keep current password';
+  }
+  if (eyeShow) eyeShow.style.display = 'block';
+  if (eyeHide) eyeHide.style.display = 'none';
+  if (statusEl) statusEl.value = user.isActive !== false ? 'true' : 'false';
+  if (titleEl) titleEl.textContent = 'Edit Staff Account';
+  if (badgeEl) {
+    badgeEl.textContent = `EDIT MODE • @${user.username || user.id}`;
+    badgeEl.classList.add('editing');
+  }
+  if (cancelBtn) cancelBtn.style.display = 'inline-flex';
+  if (resetBtn) resetBtn.textContent = 'Cancel';
+  if (saveBtn) {
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save Changes';
+  }
+  if (pwHintEl) pwHintEl.textContent = 'Leave blank to preserve current password, or enter 6+ chars to reset it';
+  if (footerHintEl) footerHintEl.textContent = `Editing account ID #${user.id} (${user.username || '-'})`;
+
+  renderStaffUsersTable();
+  card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  if (nameEl) nameEl.focus();
+}
+
+function renderStaffUsersTable() {
+  const tbody = document.getElementById('staffUsersTableBody');
+  const countBadge = document.getElementById('staffUsersCountBadge');
+  if (!tbody) return;
+
+  const q = (document.getElementById('staffUsersSearchInput')?.value || '').trim().toLowerCase();
+  const roleFilter = (document.getElementById('staffUsersRoleFilter')?.value || 'ALL').toUpperCase();
+  const activeEditId = document.getElementById('staffUserEditId')?.value || '';
+
+  const filtered = STAFF_USERS_CACHE.filter((u) => {
+    if (roleFilter !== 'ALL' && String(u.role || '').toUpperCase() !== roleFilter) return false;
+    if (!q) return true;
+    const scopeStr = formatStaffScope(u).toLowerCase();
+    return (
+      String(u.username || '').toLowerCase().includes(q) ||
+      String(u.displayName || '').toLowerCase().includes(q) ||
+      String(u.email || '').toLowerCase().includes(q) ||
+      String(u.role || '').toLowerCase().includes(q) ||
+      scopeStr.includes(q)
+    );
+  });
+
+  if (countBadge) {
+    countBadge.textContent = filtered.length === STAFF_USERS_CACHE.length
+      ? `${STAFF_USERS_CACHE.length} account${STAFF_USERS_CACHE.length === 1 ? '' : 's'}`
+      : `${filtered.length} of ${STAFF_USERS_CACHE.length} accounts`;
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">No matching staff accounts found.</td></tr>';
+    return;
+  }
+
+  const editIconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.0303301 2.96966991c1.3974627 1.39746272 1.3974627 3.66319746.0 5.06066018L9.06200371 19.9986565C8.78512854 20.2755316 8.44079112 20.4753584 8.06302761 20.5783848L2.94733805 21.9735729C2.38746387 22.1262658 1.87373417 21.6125361 2.02642713 21.0526619L3.4216152 15.9369724c.10302641-.3777635.30285317-.722100900000001.57972834-.9989761L15.9696699 2.96966991c1.3974627-1.39746271 3.6631975-1.39746271 5.0606602.0zM15.0001717 6.06057288 5.06200371 15.9986565C4.96971199 16.0909482 4.90310306 16.2057273 4.86876093 16.3316485l-1.04984647 3.849437L7.6683515 19.1312391C7.79427267 19.0968969 7.90905181 19.030288 8.00134354 18.9379963L17.9391717 8.99957288l-2.939-2.939zm2.0301584-2.03024279L16.0601717 4.99957288l2.939 2.94L19.9696699 6.96966991C20.7813462 6.15799363 20.7813462 4.84200637 19.9696699 4.03033009c-.811676299999999-.81167628-2.1276635-.81167628-2.9393398.0z"/></svg>';
+
+  tbody.innerHTML = filtered.map((u) => {
+    const isEditingRow = activeEditId && String(u.id) === String(activeEditId);
+    const scopeText = formatStaffScope(u);
+    const roleCls = getStaffRoleBadgeClass(u.role);
+    return `
+      <tr class="${isEditingRow ? 'rbac-row-editing' : ''}">
+        <td data-label="Username"><span class="rbac-username-pill">${escapeHtml(u.username || '-')}</span></td>
+        <td data-label="Name"><strong>${escapeHtml(u.displayName || '-')}</strong></td>
+        <td data-label="Email">${escapeHtml(u.email || '-')}</td>
+        <td data-label="Role"><span class="rbac-role-pill ${roleCls}">${escapeHtml(u.role || '-')}</span></td>
+        <td data-label="Department / Section">${escapeHtml(scopeText)}</td>
+        <td data-label="Status"><span class="${u.isActive !== false ? 'badge-pass' : 'badge-fail'}">${u.isActive !== false ? 'Active' : 'Disabled'}</span></td>
+        <td data-label="Actions" style="text-align: center;">
+          <button type="button" class="rbac-edit-btn" onclick="editStaffUser(${Number(u.id)})" aria-label="Edit ${escapeHtml(u.username || 'staff user')}">
+            ${editIconSvg}
+            <span>Edit</span>
+          </button>
         </td>
-        <td><strong class="tabular-nums" style="font-size: 1rem; color: var(--text-main);">${wsEmps.length}</strong></td>
-        <td><span class="tabular-nums" style="color: var(--level-i-color); font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'I').length}</span></td>
-        <td><span class="tabular-nums" style="color: var(--level-l-color); font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'L').length}</span></td>
-        <td><span class="tabular-nums" style="color: var(--level-u-color); font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'U').length}</span></td>
-        <td><span class="tabular-nums" style="color: var(--level-o-color); font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'O').length}</span></td>
-        <td style="text-align: left; padding: 10px 14px;">${opBadges}</td>
       </tr>
     `;
-  });
-
-  container.innerHTML = `
-    <div style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-      <div style="font-size: 0.95rem; font-weight: 700; color: #0F172A;">
-        Section: <span style="color: #005B9E;">${sec}</span> (${emps.length} Active Operators)
-      </div>
-      <div style="display: flex; gap: 10px; align-items: center;">
-        <span class="iluo-badge iluo-badge-i">I: Induction</span>
-        <span class="iluo-badge iluo-badge-l">L: Learner</span>
-        <span class="iluo-badge iluo-badge-u">U: Executor</span>
-        <span class="iluo-badge iluo-badge-o">O: Expert</span>
-      </div>
-    </div>
-
-    <div class="competency-heatmap-container">
-      <table class="heatmap-table">
-        <thead>
-          <tr style="background: #F8FAFC;">
-            <th style="text-align: left;">Workstation / Line Process</th>
-            <th>Total Ops</th>
-            <th>Level I</th>
-            <th>Level L</th>
-            <th>Level U</th>
-            <th>Level O</th>
-            <th style="text-align: left;">Certified Operator Quadrants</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rowsHtml}
-        </tbody>
-      </table>
-    </div>
-  `;
-
-  modal.style.display = 'flex';
+  }).join('');
 }
 
-function closeCompetencyHeatmapModal() {
-  const modal = document.getElementById('competencyHeatmapModal');
+function filterStaffUsersTable() {
+  renderStaffUsersTable();
+}
+
+async function loadStaffUsersView() {
+  const tbody = document.getElementById('staffUsersTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">Loading authorized accounts...</td></tr>';
+
+  try {
+    const res = await fetch('/api/admin/users', { headers: getAuthHeaders(), credentials: 'include' });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      STAFF_USERS_CACHE = [];
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:24px;color:#DC2626;">${escapeHtml((data && data.message) || 'Unable to fetch staff accounts')}</td></tr>`;
+      return;
+    }
+    STAFF_USERS_CACHE = Array.isArray(data.users) ? data.users : [];
+    renderStaffUsersTable();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:24px;color:#DC2626;">Error: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+async function saveStaffUserAccount(e) {
+  if (e) e.preventDefault();
+  const editId = document.getElementById('staffUserEditId')?.value.trim();
+  const username = document.getElementById('staffUserUsername')?.value.trim();
+  const displayName = document.getElementById('staffUserDisplayName')?.value.trim();
+  const email = document.getElementById('staffUserEmail')?.value.trim();
+  const role = document.getElementById('staffUserRole')?.value;
+  const scope = document.getElementById('staffUserScope')?.value.trim();
+  const password = document.getElementById('staffUserPassword')?.value.trim();
+  const statusVal = document.getElementById('staffUserStatus')?.value;
+  const saveBtn = document.getElementById('btnSaveStaffUser');
+
+  if (!username || !displayName || !email) {
+    showToast('Username, Name, and Email are required.');
+    return;
+  }
+  if (!editId && (!password || password.length < 6)) {
+    showToast('Password (minimum 6 characters) is required when creating a new account.');
+    document.getElementById('staffUserPassword')?.focus();
+    return;
+  }
+  if (editId && password && password.length < 6) {
+    showToast('New password must be at least 6 characters.');
+    document.getElementById('staffUserPassword')?.focus();
+    return;
+  }
+
+  let department = null;
+  let section = null;
+  if (scope && scope.includes(' / ')) {
+    const parts = scope.split(/\s+\/\s+/);
+    department = parts[0] ? parts[0].trim() : null;
+    section = parts.slice(1).join(' / ').trim() || null;
+  } else if (role === 'DEPT_HEAD') {
+    department = scope || 'PRODUCTION';
+    section = null;
+  } else if (role === 'SECTION_HEAD' || role === 'EVALUATOR') {
+    section = scope || 'Tire Building QA';
+    department = null;
+  } else {
+    department = scope || 'ALL';
+    section = null;
+  }
+
+  const payload = {
+    ...(editId ? { id: Number(editId) } : {}),
+    username,
+    displayName,
+    email,
+    role,
+    department,
+    section,
+    isActive: statusVal !== 'false'
+  };
+  if (password) payload.password = password;
+
+  const originalBtnText = saveBtn ? saveBtn.textContent : 'Save';
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = editId ? 'Updating...' : 'Creating...';
+  }
+
+  let savedOk = false;
+  try {
+    const url = editId ? `/api/admin/users/${encodeURIComponent(editId)}` : '/api/admin/users';
+    const method = editId ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method,
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      savedOk = true;
+      showToast(editId
+        ? `Updated staff account @${data.user?.username || username}!`
+        : `Created new staff account @${data.user?.username || username}!`
+      );
+      resetStaffUserForm(false);
+      await loadStaffUsersView();
+    } else {
+      showToast((data && data.message) || 'Failed to save staff account');
+    }
+  } catch (err) {
+    showToast('Error saving staff account: ' + err.message);
+  } finally {
+    if (!savedOk && saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = originalBtnText;
+    }
+  }
+}
+
+// 7. DOJ Eligibility Alerts & Automated Email/WhatsApp Reminders
+function loadRemindersView() {
+  const container = document.getElementById('remindersSummaryContainer');
+  if (!container) return;
+  const calc = (typeof ILUO_CONSTANTS !== 'undefined' && ILUO_CONSTANTS.calculateDojEligibility) ? ILUO_CONSTANTS.calculateDojEligibility : null;
+
+  const dueList = [];
+  EMPLOYEES.forEach((emp) => {
+    const elig = calc ? calc(emp.doj, emp.currentLevel) : { isDueForUpgrade: false, eligibleLevel: emp.currentLevel, label: 'Check DOJ' };
+    if (elig.isDueForUpgrade) {
+      dueList.push({ emp, elig });
+    }
+  });
+
+  if (dueList.length === 0) {
+    container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">All associates are currently up to date relative to their Date of Joining milestones.</div>';
+    return;
+  }
+
+  window._dueEligibilityEmpNos = dueList.map((d) => d.emp.empNo);
+  container.innerHTML = `
+    <div style="margin-bottom:12px;font-weight:700;color:#0F172A;">
+      ${dueList.length} Associates Eligible for Next ILUO Level Based on DOJ Tenure
+    </div>
+    <div style="max-height:420px;overflow-y:auto;display:grid;gap:8px;">
+      ${dueList.slice(0, 60).map(({ emp, elig }) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;background:var(--bg-surface,#F8FAFC);border:1px solid var(--border-color,#E2E8F0);border-radius:8px;flex-wrap:wrap;">
+          <div>
+            <strong>${escapeHtml(emp.name)} (${escapeHtml(emp.empNo)})</strong> &bull;
+            <span style="color:var(--text-muted);font-size:0.84rem;">${escapeHtml(emp.section || emp.dept)}</span>
+            <div style="font-size:0.8rem;color:#B45309;font-weight:600;">Current: ${escapeHtml(emp.currentLevel || 'I')} &rarr; ${escapeHtml(elig.label)}</div>
+          </div>
+          <button type="button" class="btn-secondary" style="padding:4px 10px;font-size:0.76rem;" onclick="sendBulkEligibilityReminders('both', ['${escapeHtml(emp.empNo)}'])">Send Reminder</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+async function sendBulkEligibilityReminders(channel, singleList) {
+  const empNos = Array.isArray(singleList) && singleList.length > 0 ? singleList : (window._dueEligibilityEmpNos || []);
+  if (empNos.length === 0) {
+    showToast('No due associates selected for reminders.');
+    return;
+  }
+  showToast(`Sending ${channel} eligibility reminders to ${empNos.length} associate(s)...`);
+  try {
+    const res = await fetch('/api/reminders/send', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify({ empNos: empNos.slice(0, 100), channel })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message || `Reminders dispatched (${data.sentCount || empNos.length})!`);
+    } else {
+      showToast((data && data.message) || 'Failed to send reminders');
+    }
+  } catch (err) {
+    showToast('Reminder dispatch error: ' + err.message);
+  }
+}
+
+// 8. Question Failure Analytics
+async function loadQuestionFailureStats() {
+  const card = document.getElementById('questionAnalyticsCard');
+  const tbody = document.getElementById('questionAnalyticsBody');
+  if (!card || !tbody) return;
+  card.style.display = 'block';
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">Calculating question failure rates...</td></tr>';
+
+  try {
+    const res = await fetch('/api/analytics/questions', { headers: getAuthHeaders(), credentials: 'include' });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:#DC2626;">${escapeHtml((data && data.message) || 'Unable to load question analytics')}</td></tr>`;
+      return;
+    }
+    const stats = data.stats || [];
+    if (stats.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">No completed exam responses yet to compute failure rates.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = stats.slice(0, 30).map((st) => `
+      <tr>
+        <td data-label="Section">${escapeHtml(st.section || '-')}</td>
+        <td data-label="Level"><span class="iluo-badge iluo-badge-${String(st.level || 'L').toLowerCase()}">${escapeHtml(st.level || '-')}</span></td>
+        <td data-label="Question">${escapeHtml(st.question || st.questionId)}</td>
+        <td data-label="Attempts">${st.attempts || 0}</td>
+        <td data-label="Wrong">${st.wrong || 0}</td>
+        <td data-label="Fail Rate"><strong style="color:${(st.failRatePct || 0) >= 50 ? '#DC2626' : '#D97706'};">${st.failRatePct || 0}%</strong></td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:#DC2626;">Error: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+// 9. Bulk Import with Validation Preview Modal (Employees & Questions)
+let _bulkImportState = { mode: 'employees', validItems: [] };
+
+function openBulkImportModal(mode) {
+  _bulkImportState = { mode: mode || 'employees', validItems: [] };
+  const modal = document.getElementById('bulkImportModal');
+  const titleEl = document.getElementById('bulkImportTitle');
+  const fileEl = document.getElementById('bulkImportFileInput');
+  const sumEl = document.getElementById('bulkImportPreviewSummary');
+  const tblEl = document.getElementById('bulkImportPreviewTable');
+  const btnEl = document.getElementById('btnCommitBulkImport');
+
+  if (titleEl) titleEl.textContent = mode === 'questions' ? 'Bulk Import Questions (Validation Preview)' : 'Bulk Import Employees (Validation Preview)';
+  if (fileEl) fileEl.value = '';
+  if (sumEl) sumEl.textContent = 'Select a .xlsx, .csv, or .json file to validate rows before importing.';
+  if (tblEl) tblEl.innerHTML = '';
+  if (btnEl) btnEl.disabled = true;
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeBulkImportModal() {
+  const modal = document.getElementById('bulkImportModal');
   if (modal) modal.style.display = 'none';
 }
 
-// --------------------------------------------------------------------------
-// HIGH-IMPACT FEATURE 6: Shop-Floor Tablet Offline Mutation Queue
-// --------------------------------------------------------------------------
-const OFFLINE_QUEUE_KEY = 'iluo_offline_sync_queue';
+async function previewBulkImportFile(event) {
+  const file = event?.target?.files?.[0];
+  if (!file) return;
+  const sumEl = document.getElementById('bulkImportPreviewSummary');
+  const tblEl = document.getElementById('bulkImportPreviewTable');
+  const btnEl = document.getElementById('btnCommitBulkImport');
 
-function getOfflineQueue() {
   try {
-    const raw = localStorage.getItem(OFFLINE_QUEUE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    return [];
-  }
-}
-
-function queueOfflineMutation(action, payload) {
-  const queue = getOfflineQueue();
-  queue.push({
-    id: 'mut_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-    action: action,
-    payload: payload,
-    timestamp: Date.now()
-  });
-  localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
-  updateOnlineStatusIndicator();
-}
-
-async function syncPendingQueue() {
-  if (!navigator.onLine) {
-    updateOnlineStatusIndicator();
-    return;
-  }
-
-  const queue = getOfflineQueue();
-  if (!queue || queue.length === 0) {
-    updateOnlineStatusIndicator();
-    return;
-  }
-
-  const syncDot = document.getElementById('syncDot');
-  const syncText = document.getElementById('syncText');
-  if (syncDot) syncDot.className = 'sync-dot syncing';
-  if (syncText) syncText.textContent = `Syncing (${queue.length})...`;
-
-  // Process mutations in batch or sequence
-  const remaining = [];
-  for (const item of queue) {
-    try {
-      if (item.action === 'SAVE_OJT_RUBRIC') {
-        // Post to server if online
-        await fetch('/api/ojt/sync', {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify(item.payload)
-        }).catch(() => {});
-      }
-    } catch (e) {
-      remaining.push(item);
-    }
-  }
-
-  localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(remaining));
-  updateOnlineStatusIndicator();
-  if (queue.length > remaining.length) {
-    showToast(`✅ Synced ${queue.length - remaining.length} offline evaluation updates.`);
-  }
-}
-
-function updateOnlineStatusIndicator() {
-  const syncDot = document.getElementById('syncDot');
-  const syncText = document.getElementById('syncText');
-  const queue = getOfflineQueue();
-
-  if (!syncDot || !syncText) return;
-
-  if (!navigator.onLine) {
-    syncDot.className = 'sync-dot offline';
-    syncText.textContent = queue.length > 0 ? `Offline (${queue.length} pending)` : 'Offline';
-  } else if (queue.length > 0) {
-    syncDot.className = 'sync-dot syncing';
-    syncText.textContent = `Pending (${queue.length})`;
-  } else {
-    syncDot.className = 'sync-dot online';
-    syncText.textContent = 'Online';
-  }
-}
-
-function initOfflineSyncQueue() {
-  window.addEventListener('online', () => {
-    updateOnlineStatusIndicator();
-    syncPendingQueue();
-  });
-  window.addEventListener('offline', updateOnlineStatusIndicator);
-  setInterval(updateOnlineStatusIndicator, 15000);
-  updateOnlineStatusIndicator();
-}
-
-// --------------------------------------------------------------------------
-// HIGH-IMPACT FEATURE 5: ISO/IATF 16949 Audit-Ready Print & Export
-// --------------------------------------------------------------------------
-function printAuditReport() {
-  window.print();
-}
-
-// Global Exposes
-window.getActivePlantShift = getActivePlantShift;
-window.updatePlantShiftAndSyncInfo = updatePlantShiftAndSyncInfo;
-window.updateHeaderBreadcrumbsAndRole = updateHeaderBreadcrumbsAndRole;
-window.togglePasswordVisibility = togglePasswordVisibility;
-window.renderTableEmptyState = renderTableEmptyState;
-window.resetActiveFilters = resetActiveFilters;
-window.openOjtRubricDrawer = openOjtRubricDrawer;
-window.closeRubricDrawerDirect = closeRubricDrawerDirect;
-window.closeRubricDrawer = closeRubricDrawer;
-window.updateRubricCalculations = updateRubricCalculations;
-window.saveRubricEvaluation = saveRubricEvaluation;
-window.openCompetencyHeatmap = openCompetencyHeatmap;
-window.closeCompetencyHeatmapModal = closeCompetencyHeatmapModal;
-window.queueOfflineMutation = queueOfflineMutation;
-window.syncPendingQueue = syncPendingQueue;
-window.printAuditReport = printAuditReport;
-
-
-
-function renderInAppQuestionPalette() {
-  const grid = document.getElementById('questionPaletteGrid');
-  if (!grid || !activeExam || !activeExam.questions) return;
-
-  const total = activeExam.questions.length;
-  let buttonsHtml = '';
-
-  for (let i = 0; i < total; i++) {
-    const q = activeExam.questions[i];
-    const isAnswered = activeExam.responses && activeExam.responses[q.id] !== undefined;
-    const isCurrent = i === activeExam.currentIndex;
-
-    let style = 'width: 34px; height: 34px; border-radius: 8px; font-weight: 700; font-size: 0.82rem; cursor: pointer; transition: all 0.15s ease; border: 1.5px solid #CBD5E1;';
-    if (isCurrent) {
-      style += ' background: #005B9E; color: #FFFFFF; border-color: #003D6B; box-shadow: 0 0 0 2px rgba(0,91,158,0.3);';
-    } else if (isAnswered) {
-      style += ' background: #ECFDF5; color: #065F46; border-color: #10B981;';
+    let rows = [];
+    if (file.name.toLowerCase().endsWith('.json')) {
+      const txt = await file.text();
+      const parsed = JSON.parse(txt);
+      rows = Array.isArray(parsed) ? parsed : (parsed.employees || parsed.questions || parsed.items || []);
+    } else if (typeof XLSX !== 'undefined') {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
     } else {
-      style += ' background: #F8FAFC; color: #64748B; border-color: #E2E8F0;';
+      showToast('Spreadsheet parser library is still loading.');
+      return;
     }
 
-    buttonsHtml += `<button type="button" class="palette-btn" style="${style}" onclick="jumpToInAppQuestion(${i})" aria-label="Jump to Question ${i + 1}">${i + 1}</button>`;
-  }
+    const validItems = [];
+    const invalidRows = [];
+    if (_bulkImportState.mode === 'questions') {
+      rows.forEach((r, i) => {
+        const question = String(r.question || r['Question Text'] || r.Question || '').trim();
+        const optA = String(r.optA || r['Option A'] || r.A || '').trim();
+        const optB = String(r.optB || r['Option B'] || r.B || '').trim();
+        if (!question || !optA || !optB) {
+          invalidRows.push(`Row ${i + 2}: missing question or options A/B`);
+        } else {
+          validItems.push({
+            level: String(r.level || r.Level || 'L').toUpperCase(),
+            section: String(r.section || r.Section || 'Tire Building QA').trim(),
+            category: String(r.category || r.Category || 'Quality').trim(),
+            question,
+            options: [
+              { key: 'A', text: optA },
+              { key: 'B', text: optB },
+              { key: 'C', text: String(r.optC || r['Option C'] || r.C || '').trim() },
+              { key: 'D', text: String(r.optD || r['Option D'] || r.D || '').trim() }
+            ],
+            correctAnswer: String(r.correctAnswer || r['Correct Answer'] || 'A').toUpperCase().slice(0, 1)
+          });
+        }
+      });
+    } else {
+      rows.forEach((r, i) => {
+        const empNo = String(r.empNo || r['Employee No'] || r['Emp No'] || r['Emp ID'] || '').trim();
+        const name = String(r.name || r.Name || r['Employee Name'] || '').trim();
+        if (!empNo || !name) {
+          invalidRows.push(`Row ${i + 2}: missing Employee No or Name`);
+        } else {
+          validItems.push({
+            empNo,
+            name,
+            dept: String(r.dept || r.Department || 'QUALITY CONTROL').trim(),
+            section: String(r.section || r.Section || 'Tire Building QA').trim(),
+            doj: String(r.doj || r.DOJ || '').trim(),
+            currentLevel: String(r.currentLevel || r['Skill Level'] || r.Level || 'I').toUpperCase().slice(0, 1),
+            email: String(r.email || r.Email || '').trim(),
+            phone: String(r.phone || r.Phone || '').trim()
+          });
+        }
+      });
+    }
 
-  grid.innerHTML = buttonsHtml;
-}
-
-function jumpToInAppQuestion(idx) {
-  if (!activeExam || idx < 0 || idx >= activeExam.questions.length) return;
-  activeExam.currentIndex = idx;
-  renderCurrentQuestion();
-}
-window.jumpToInAppQuestion = jumpToInAppQuestion;
-window.renderInAppQuestionPalette = renderInAppQuestionPalette;
-
-
-
-// --------------------------------------------------------------------------
-// SECTION ROSTER PAGINATION & SELECTION (BUG-18)
-// --------------------------------------------------------------------------
-let secRosterPage = 1;
-let secRosterPageSize = 25;
-let currentFilteredSecEmps = [];
-
-function changeSecPageSize(newSize) {
-  secRosterPageSize = parseInt(newSize, 10) || 25;
-  secRosterPage = 1;
-  renderSectionEmployeesTable(currentFilteredSecEmps);
-}
-
-function changeSecPage(delta) {
-  secRosterPage += delta;
-  renderSectionEmployeesTable(currentFilteredSecEmps);
-}
-
-function toggleSelectAllSecEmps(masterCheckbox) {
-  const checkboxes = document.querySelectorAll('.sec-emp-checkbox');
-  checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
-}
-
-function getSelectedSecEmpNos() {
-  const checkboxes = document.querySelectorAll('.sec-emp-checkbox:checked');
-  return Array.from(checkboxes).map(cb => cb.value);
-}
-
-function scheduleTrainingActionPlan(empNo) {
-  const emp = (typeof EMPLOYEES !== 'undefined') ? EMPLOYEES.find(e => String(e.empNo) === String(empNo)) : null;
-  if (!emp) return;
-
-  // Find Level O experts in same section
-  const experts = EMPLOYEES.filter(e => {
-    const s = (e.section || '').toLowerCase();
-    const empS = (emp.section || '').toLowerCase();
-    return (s.includes(empS) || empS.includes(s)) && e.currentLevel === 'O';
-  });
-  const mentorName = experts.length > 0 ? experts[0].name + ' (Level O Expert)' : 'Section Head / Shift Lead';
-
-  const planDate = new Date();
-  planDate.setDate(planDate.getDate() + 14);
-  const targetDateStr = planDate.toISOString().split('T')[0];
-
-  const plan = {
-    empNo: emp.empNo,
-    name: emp.name,
-    section: emp.section,
-    assignedMentor: mentorName,
-    retestDate: targetDateStr,
-    focusArea: 'SOP Adherence, Quality Verification & Defect Tagging',
-    status: 'Scheduled',
-    createdAt: new Date().toISOString()
-  };
-
-  const reqs = JSON.parse(localStorage.getItem('iluo_training_action_plans') || '[]');
-  reqs.push(plan);
-  localStorage.setItem('iluo_training_action_plans', JSON.stringify(reqs));
-
-  showToast(`✅ Training Action Plan assigned for ${emp.name}: Mentor ${mentorName}, Retest Target: ${targetDateStr}`);
-}
-
-window.changeSecPageSize = changeSecPageSize;
-window.changeSecPage = changeSecPage;
-window.toggleSelectAllSecEmps = toggleSelectAllSecEmps;
-window.getSelectedSecEmpNos = getSelectedSecEmpNos;
-window.scheduleTrainingActionPlan = scheduleTrainingActionPlan;
-
-
-// --------------------------------------------------------------------------
-// HR CONTROL CENTER MOBILE DRAWER (Phase 2, Task 5)
-// --------------------------------------------------------------------------
-function toggleAdminSidebar() {
-  const sidebar = document.getElementById('adminSidebar');
-  const backdrop = document.getElementById('adminSidebarBackdrop');
-  const toggleBtn = document.getElementById('btnAdminMobileToggle');
-  if (!sidebar) return;
-  const isOpen = sidebar.classList.contains('mobile-open');
-  if (isOpen) {
-    closeAdminSidebar();
-  } else {
-    sidebar.classList.add('mobile-open');
-    if (backdrop) backdrop.classList.add('open');
-    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
+    _bulkImportState.validItems = validItems;
+    if (sumEl) {
+      sumEl.innerHTML = `<span style="color:#059669;font-weight:700;">✔ ${validItems.length} valid row(s)</span> &bull; <span style="color:${invalidRows.length > 0 ? '#DC2626' : '#64748B'};font-weight:700;">${invalidRows.length} rejected row(s)</span>`;
+    }
+    if (tblEl) {
+      tblEl.innerHTML = validItems.slice(0, 20).map((it) => `
+        <div style="padding:6px 10px;border-bottom:1px solid #E2E8F0;font-size:0.8rem;">
+          ${_bulkImportState.mode === 'questions'
+            ? `<strong>[${escapeHtml(it.level)}] ${escapeHtml(it.section)}:</strong> ${escapeHtml(it.question)}`
+            : `<strong>${escapeHtml(it.empNo)}</strong> — ${escapeHtml(it.name)} (${escapeHtml(it.dept)} / ${escapeHtml(it.section)})`}
+        </div>
+      `).join('');
+    }
+    if (btnEl) btnEl.disabled = validItems.length === 0;
+  } catch (err) {
+    showToast('Failed to parse file: ' + err.message);
   }
 }
 
-function closeAdminSidebar() {
-  const sidebar = document.getElementById('adminSidebar');
-  const backdrop = document.getElementById('adminSidebarBackdrop');
-  const toggleBtn = document.getElementById('btnAdminMobileToggle');
-  if (sidebar) sidebar.classList.remove('mobile-open');
-  if (backdrop) backdrop.classList.remove('open');
-  if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
-}
-
-// --------------------------------------------------------------------------
-// INLINE COMPETENCY MATRIX & SEGMENTED VIEW TOGGLES (Phase 3, Task 1)
-// --------------------------------------------------------------------------
-function generateCompetencyHeatmapTableOnly(sectionName) {
-  const sec = sectionName || currentActiveSection || 'Tire Building QA';
-  const emps = (typeof EMPLOYEES !== 'undefined') ? EMPLOYEES.filter(e => {
-    const s = (e.section || '').toLowerCase();
-    return s.includes(sec.toLowerCase()) || sec.toLowerCase().includes(s);
-  }) : [];
-
-  const workstations = [
-    { id: 'st1', name: 'Raw Material & Setup Station' },
-    { id: 'st2', name: 'Primary Assembly & Core Machine Bay' },
-    { id: 'st3', name: 'In-Process Precision Inspection Bay' },
-    { id: 'st4', name: 'High-Speed Testing & Dynamic Rig' },
-    { id: 'st5', name: 'Final Certification & Containment Dock' }
-  ];
-
-  let rowsHtml = '';
-  workstations.forEach((ws, idx) => {
-    const wsEmps = emps.filter((_, i) => (i % workstations.length) === idx);
-    const uAndOCount = wsEmps.filter(e => e.currentLevel === 'U' || e.currentLevel === 'O').length;
-    const isSpof = uAndOCount < 2;
-
-    const opBadges = wsEmps.map(e => `
-      <span class="iluo-badge iluo-badge-${(e.currentLevel || 'I').toLowerCase()}" style="margin: 2px;" title="${e.name} (${e.empNo}) - Level ${e.currentLevel}">
-        ${e.currentLevel || 'I'}
-      </span>
-    `).join('') || '<span style="color: var(--text-subtle); font-size: 0.8rem;">No assigned operators</span>';
-
-    rowsHtml += `
-      <tr>
-        <td class="heatmap-station-th">
-          <strong>${ws.name}</strong>
-          ${isSpof ? '<br><span class="spof-warning-badge"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 3px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> SPOF Alert: &lt; 2 Level U/O Certified</span>' : ''}
-        </td>
-        <td><strong class="tabular-nums" style="font-size: 1rem; color: var(--text-main);">${wsEmps.length}</strong></td>
-        <td><span class="tabular-nums" style="color: var(--level-i-color); font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'I').length}</span></td>
-        <td><span class="tabular-nums" style="color: var(--level-l-color); font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'L').length}</span></td>
-        <td><span class="tabular-nums" style="color: var(--level-u-color); font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'U').length}</span></td>
-        <td><span class="tabular-nums" style="color: var(--level-o-color); font-weight: 700;">${wsEmps.filter(e => e.currentLevel === 'O').length}</span></td>
-        <td style="text-align: left; padding: 10px 14px;">${opBadges}</td>
-      </tr>
-    `;
-  });
-
-  return `
-    <div class="competency-heatmap-container">
-      <table class="heatmap-table">
-        <thead>
-          <tr style="background: #F8FAFC;">
-            <th style="text-align: left;">Workstation / Line Process</th>
-            <th>Total Ops</th>
-            <th>Level I</th>
-            <th>Level L</th>
-            <th>Level U</th>
-            <th>Level O</th>
-            <th style="text-align: left;">Certified Operator Quadrants</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rowsHtml}
-        </tbody>
-      </table>
-    </div>
-  `;
-}
-
-function generateCompetencyHeatmapHtml(sectionName) {
-  const sec = sectionName || currentActiveSection || 'Tire Building QA';
-  const emps = (typeof EMPLOYEES !== 'undefined') ? EMPLOYEES.filter(e => {
-    const s = (e.section || '').toLowerCase();
-    return s.includes(sec.toLowerCase()) || sec.toLowerCase().includes(s);
-  }) : [];
-
-  return `
-    <div style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-      <div style="font-size: 0.95rem; font-weight: 700; color: #0F172A;">
-        Section: <span style="color: #005B9E;">${sec}</span> (${emps.length} Active Operators)
-      </div>
-      <div style="display: flex; gap: 10px; align-items: center;">
-        <span class="iluo-badge iluo-badge-i">I: Induction</span>
-        <span class="iluo-badge iluo-badge-l">L: Learner</span>
-        <span class="iluo-badge iluo-badge-u">U: Executor</span>
-        <span class="iluo-badge iluo-badge-o">O: Expert</span>
-      </div>
-    </div>
-    ${generateCompetencyHeatmapTableOnly(sec)}
-  `;
-}
-
-function setSectionViewMode(mode) {
-  const tableCont = document.getElementById('secTableContainer');
-  const matrixCont = document.getElementById('secMatrixContainer');
-  const btnTable = document.getElementById('btnSecViewTable');
-  const btnMatrix = document.getElementById('btnSecViewMatrix');
-
-  if (mode === 'matrix') {
-    if (tableCont) tableCont.style.display = 'none';
-    if (matrixCont) {
-      matrixCont.style.display = 'block';
-      renderInlineSectionMatrix(currentActiveSection);
-    }
-    if (btnTable) { btnTable.classList.remove('active'); btnTable.setAttribute('aria-pressed', 'false'); }
-    if (btnMatrix) { btnMatrix.classList.add('active'); btnMatrix.setAttribute('aria-pressed', 'true'); }
-  } else {
-    if (tableCont) tableCont.style.display = 'block';
-    if (matrixCont) matrixCont.style.display = 'none';
-    if (btnTable) { btnTable.classList.add('active'); btnTable.setAttribute('aria-pressed', 'true'); }
-    if (btnMatrix) { btnMatrix.classList.remove('active'); btnMatrix.setAttribute('aria-pressed', 'false'); }
-  }
-}
-
-function renderInlineSectionMatrix(sectionName) {
-  const container = document.getElementById('secMatrixContainer');
-  if (!container) return;
-  const sec = sectionName || currentActiveSection || 'Tire Building QA';
-  container.innerHTML = generateCompetencyHeatmapHtml(sec);
-}
-
-function setDeptViewMode(mode) {
-  const tableCont = document.getElementById('deptTableContainer');
-  const matrixCont = document.getElementById('deptMatrixContainer');
-  const btnTable = document.getElementById('btnDeptViewTable');
-  const btnMatrix = document.getElementById('btnDeptViewMatrix');
-
-  if (mode === 'matrix') {
-    if (tableCont) tableCont.style.display = 'none';
-    if (matrixCont) {
-      matrixCont.style.display = 'block';
-      renderInlineDeptMatrix();
-    }
-    if (btnTable) { btnTable.classList.remove('active'); btnTable.setAttribute('aria-pressed', 'false'); }
-    if (btnMatrix) { btnMatrix.classList.add('active'); btnMatrix.setAttribute('aria-pressed', 'true'); }
-  } else {
-    if (tableCont) tableCont.style.display = 'block';
-    if (matrixCont) matrixCont.style.display = 'none';
-    if (btnTable) { btnTable.classList.add('active'); btnTable.setAttribute('aria-pressed', 'true'); }
-    if (btnMatrix) { btnMatrix.classList.remove('active'); btnMatrix.setAttribute('aria-pressed', 'false'); }
-  }
-}
-
-function renderInlineDeptMatrix() {
-  const container = document.getElementById('deptMatrixContainer');
-  if (!container) return;
-  const dept = currentActiveDept || 'QUALITY CONTROL';
-  const sections = (typeof QA_SECTIONS_LIST !== 'undefined') ? QA_SECTIONS_LIST.filter(s => {
-    if (dept === 'PRODUCTION') return (s.dept || s.department || '').toUpperCase() === 'PRODUCTION';
-    return (s.dept || s.department || '').toUpperCase() === 'QUALITY CONTROL' || !s.dept;
-  }) : [];
-
-  let deptMatrixHtml = `
-    <div style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-      <div style="font-size: 0.95rem; font-weight: 700; color: #0F172A;">
-        Department: <span style="color: #6D28D9;">${dept}</span> (${sections.length} Plant Sections Monitored)
-      </div>
-      <div style="display: flex; gap: 10px; align-items: center;">
-        <span class="iluo-badge iluo-badge-i">I: Induction</span>
-        <span class="iluo-badge iluo-badge-l">L: Learner</span>
-        <span class="iluo-badge iluo-badge-u">U: Executor</span>
-        <span class="iluo-badge iluo-badge-o">O: Expert</span>
-      </div>
-    </div>
-  `;
-
-  sections.forEach(secObj => {
-    deptMatrixHtml += `
-      <div style="margin-top: 16px; margin-bottom: 20px; border: 1px solid #E2E8F0; border-radius: 8px; padding: 16px; background: #FAFAFA;">
-        <h4 style="margin: 0 0 10px 0; color: #003D6B; font-size: 1rem; font-weight: 800;">Section: ${secObj.name}</h4>
-        ${generateCompetencyHeatmapTableOnly(secObj.name)}
-      </div>
-    `;
-  });
-
-  container.innerHTML = deptMatrixHtml;
-}
-
-// --------------------------------------------------------------------------
-// GLOBAL ESCAPE KEY DISMISSAL HANDLER (Acceptance Criteria)
-// --------------------------------------------------------------------------
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    // 1. Mobile admin sidebar
-    if (typeof closeAdminSidebar === 'function') closeAdminSidebar();
-    // 2. OJT rubric drawer
-    const rubricDrawer = document.getElementById('ojtRubricDrawer');
-    if (rubricDrawer && rubricDrawer.classList.contains('open')) {
-      if (typeof closeRubricDrawerDirect === 'function') closeRubricDrawerDirect();
-    }
-    // 3. Modals
-    const modalsToClose = [
-      'competencyHeatmapModal',
-      'auditExportModal',
-      'examReviewModal',
-      'sopModal',
-      'questionModal',
-      'employeeModal',
-      'clearQuestionsModal'
-    ];
-    modalsToClose.forEach(id => {
-      const m = document.getElementById(id);
-      if (m && m.style.display !== 'none') {
-        m.style.display = 'none';
-      }
+async function commitBulkImport() {
+  if (!_bulkImportState.validItems || _bulkImportState.validItems.length === 0) return;
+  const endpoint = _bulkImportState.mode === 'questions' ? '/api/questions/import' : '/api/employees/import';
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify({ items: _bulkImportState.validItems })
     });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message || `Imported ${_bulkImportState.validItems.length} records!`);
+      closeBulkImportModal();
+      if (_bulkImportState.mode === 'questions') {
+        if (typeof syncCloudQuestions === 'function') await syncCloudQuestions();
+        renderQuestionsManager();
+      } else {
+        if (typeof syncCloudEmployees === 'function') await syncCloudEmployees();
+        renderEmployeeDirectory();
+      }
+    } else {
+      showToast((data && data.message) || 'Bulk import rejected by server');
+    }
+  } catch (err) {
+    showToast('Import error: ' + err.message);
   }
-});
+}
+
+// 10. Official QR Certificate Modal (Admin View)
+async function openEmployeeCertificateModal(empNo) {
+  const modal = document.getElementById('adminCertificateModal');
+  const body = document.getElementById('adminCertificateBody');
+  if (!modal || !body) return;
+  body.innerHTML = '<div style="padding:30px;text-align:center;">Generating official certificate...</div>';
+  modal.style.display = 'flex';
+
+  try {
+    const res = await fetch('/api/certificate/' + encodeURIComponent(empNo), { headers: getAuthHeaders(), credentials: 'include' });
+    const data = await res.json();
+    if (!res.ok || !data.success || !data.certificate) {
+      body.innerHTML = `<div style="padding:24px;color:#DC2626;text-align:center;">${escapeHtml((data && data.message) || 'Certificate data unavailable')}</div>`;
+      return;
+    }
+    const c = data.certificate;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(c.verifyUrl || (`CERT:${c.certificateId}|EMP:${c.empNo}`))}`;
+    body.innerHTML = `
+      <div class="certificate-card" id="printableAdminCert">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #005B9E;padding-bottom:12px;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+          <div>
+            <div style="font-size:0.75rem;font-weight:700;color:#005B9E;letter-spacing:1px;">ATC TIRES • YOKOHAMA GROUP</div>
+            <h3 style="margin:4px 0 0;color:#0F172A;">ILUO Skill Qualification Certificate</h3>
+          </div>
+          <span class="iluo-badge iluo-badge-${String(c.certifiedLevel || 'I').toLowerCase()}" style="width:44px;height:44px;font-size:1.2rem;">${escapeHtml(c.certifiedLevel)}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;">
+          <div style="font-size:0.9rem;line-height:1.8;">
+            <div><strong>Certificate No:</strong> ${escapeHtml(c.certificateId)}</div>
+            <div><strong>Associate:</strong> ${escapeHtml(c.name)} (${escapeHtml(c.empNo)})</div>
+            <div><strong>Department / Section:</strong> ${escapeHtml(c.dept)} / ${escapeHtml(c.section)}</div>
+            <div><strong>Exam / OJT Score:</strong> ${escapeHtml(c.examScore || '-')} &bull; ${escapeHtml(c.ojtScore || '-')}</div>
+            <div><strong>Issued:</strong> ${escapeHtml(c.issuedAt ? new Date(c.issuedAt).toLocaleDateString() : '-')}</div>
+          </div>
+          <div style="text-align:center;">
+            <img src="${qrUrl}" alt="Certificate QR Verification" style="width:118px;height:118px;border:1px solid #CBD5E1;border-radius:8px;padding:4px;background:#fff;">
+            <div style="font-size:0.7rem;color:#64748B;margin-top:4px;">Scan to verify</div>
+          </div>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end;">
+          <button type="button" class="btn-primary" onclick="if(window.html2pdf){window.html2pdf().from(document.getElementById('printableAdminCert')).save('Certificate_${escapeHtml(c.empNo)}.pdf');}else{window.print();}">Download Certificate PDF</button>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    body.innerHTML = `<div style="padding:24px;color:#DC2626;">Failed to load certificate: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function closeAdminCertificateModal() {
+  const modal = document.getElementById('adminCertificateModal');
+  if (modal) modal.style.display = 'none';
+}
+
+// 11. HOD Insights (Heatmap, ILUO Funnel, Overdue List) & Section Insights
+function renderHodInsights(deptEmps, activeDept, sectionsList) {
+  const heatmapEl = document.getElementById('hodHeatmapContainer');
+  const funnelEl = document.getElementById('hodFunnelContainer');
+  const overdueEl = document.getElementById('hodOverdueContainer');
+  const records = getStoredRecords();
+  const calc = (typeof ILUO_CONSTANTS !== 'undefined' && ILUO_CONSTANTS.calculateDojEligibility) ? ILUO_CONSTANTS.calculateDojEligibility : null;
+
+  if (heatmapEl) {
+    if (!sectionsList || sectionsList.length === 0) {
+      heatmapEl.innerHTML = '<div style="color:var(--text-muted);font-size:0.86rem;">No section data available.</div>';
+    } else {
+      heatmapEl.innerHTML = `<div class="hod-heatmap-grid">${sectionsList.slice(0, 12).map((sec) => {
+        const emps = deptEmps.filter((e) => (e.section || '').trim() === sec);
+        const done = emps.filter((e) => records[e.empNo] && records[e.empNo].isCompleted).length;
+        const pct = emps.length > 0 ? Math.round((done / emps.length) * 100) : 0;
+        const bg = pct >= 80 ? '#ECFDF5' : (pct >= 40 ? '#FFFBEB' : '#FEF2F2');
+        const bd = pct >= 80 ? '#6EE7B7' : (pct >= 40 ? '#FCD34D' : '#FCA5A5');
+        return `<div class="hod-heatmap-cell" style="background:${bg};border-color:${bd};"><strong>${escapeHtml(sec)}</strong><div>${done}/${emps.length} (${pct}%)</div></div>`;
+      }).join('')}</div>`;
+    }
+  }
+
+  if (funnelEl) {
+    const total = Math.max(1, deptEmps.length);
+    const counts = { I: 0, L: 0, U: 0, O: 0 };
+    deptEmps.forEach((e) => {
+      const k = String(e.currentLevel || 'I').toUpperCase();
+      if (counts[k] !== undefined) counts[k]++;
+    });
+    const colors = { I: '#64748B', L: '#F59E0B', U: '#005B9E', O: '#10B981' };
+    funnelEl.innerHTML = ['I', 'L', 'U', 'O'].map((lvl) => {
+      const c = counts[lvl];
+      const w = Math.round((c / total) * 100);
+      return `
+        <div class="funnel-row">
+          <span class="iluo-badge iluo-badge-${lvl.toLowerCase()}">${lvl}</span>
+          <div class="funnel-track"><div class="funnel-fill" style="width:${Math.max(4, w)}%;background:${colors[lvl]};"></div></div>
+          <strong>${c} (${w}%)</strong>
+        </div>
+      `;
+    }).join('');
+  }
+
+  if (overdueEl) {
+    const overdue = [];
+    deptEmps.forEach((e) => {
+      const elig = calc ? calc(e.doj, e.currentLevel) : { isDueForUpgrade: false };
+      if (elig.isDueForUpgrade) overdue.push({ emp: e, elig });
+    });
+    if (overdue.length === 0) {
+      overdueEl.innerHTML = '<div style="color:#059669;font-size:0.86rem;font-weight:600;">No overdue upgrades in this department.</div>';
+    } else {
+      overdueEl.innerHTML = overdue.slice(0, 12).map(({ emp, elig }) => `
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #E2E8F0;font-size:0.82rem;">
+          <span><strong>${escapeHtml(emp.name)}</strong> (${escapeHtml(emp.empNo)}) &bull; ${escapeHtml(emp.section)}</span>
+          <span style="color:#DC2626;font-weight:700;">${escapeHtml(elig.label)}</span>
+        </div>
+      `).join('');
+    }
+  }
+}
+
+function renderSectionInsights(emps) {
+  const dueEl = document.getElementById('secDueThisWeekContainer');
+  const calEl = document.getElementById('secCalendarContainer');
+  const training = getStoredTrainingRecords();
+  const calc = (typeof ILUO_CONSTANTS !== 'undefined' && ILUO_CONSTANTS.calculateDojEligibility) ? ILUO_CONSTANTS.calculateDojEligibility : null;
+
+  if (dueEl) {
+    const due = emps.filter((e) => calc && calc(e.doj, e.currentLevel).isDueForUpgrade);
+    dueEl.innerHTML = due.length === 0
+      ? '<div style="font-size:0.85rem;color:var(--text-muted);">No associates overdue for upgrade this week.</div>'
+      : due.slice(0, 10).map((e) => {
+          const el = calc(e.doj, e.currentLevel);
+          return `<div style="padding:6px 0;border-bottom:1px solid #E2E8F0;font-size:0.82rem;"><strong>${escapeHtml(e.name)}</strong> (${escapeHtml(e.empNo)}) — <span style="color:#B45309;font-weight:600;">${escapeHtml(el.label)}</span></div>`;
+        }).join('');
+  }
+
+  if (calEl) {
+    const scheduled = emps.map((e) => ({ e, tr: training[e.empNo] })).filter((x) => x.tr && x.tr.status === 'SCHEDULED');
+    calEl.innerHTML = scheduled.length === 0
+      ? '<div style="font-size:0.85rem;color:var(--text-muted);">No upcoming scheduled exams in this section.</div>'
+      : scheduled.slice(0, 10).map(({ e, tr }) => `
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #E2E8F0;font-size:0.82rem;">
+          <span><strong>${escapeHtml(e.name)}</strong> (${escapeHtml(e.empNo)})</span>
+          <span style="color:#005B9E;font-weight:700;">${escapeHtml(tr.date || 'Scheduled')} (Lvl ${escapeHtml(tr.targetLevel || 'L')})</span>
+        </div>
+      `).join('');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// MASTER EXCEL SYNC (PRODUCTION & QA) & EXACT TEMPLATE-CLONING EXPORTS
+// ---------------------------------------------------------------------------
+let _masterExcelSyncState = {
+  fileBase64: null,
+  filename: '',
+  fileType: 'auto',
+  preview: null
+};
+
+async function triggerAuthenticatedExcelDownload(endpoint, fallbackFilename, label) {
+  showToast(`Generating exact template-matched ${label}...`);
+  try {
+    const headers = typeof getAuthHeaders === 'function' ? getAuthHeaders() : {};
+    delete headers['Content-Type'];
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      headers,
+      credentials: 'include'
+    });
+    if (!res.ok) {
+      let errMsg = `Failed to export ${label}`;
+      try {
+        const errData = await res.json();
+        if (errData && errData.message) errMsg = errData.message;
+      } catch (e) {}
+      showToast(errMsg);
+      return;
+    }
+    const blob = await res.blob();
+    const disp = res.headers.get('content-disposition') || '';
+    const match = disp.match(/filename="?([^"]+)"?/i);
+    const filename = match ? match[1] : fallbackFilename;
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    showToast(`${label} downloaded (${filename})`);
+  } catch (err) {
+    console.error(`[EXPORT ${label} ERROR]`, err);
+    showToast(`Could not download ${label}: ${err.message || 'Network error'}`);
+  }
+}
+
+async function exportExactProductionExcel() {
+  const dateStamp = new Date().toISOString().slice(0, 10);
+  return triggerAuthenticatedExcelDownload(
+    '/api/export/production-excel',
+    `1. PRODUCTION SKILL ASSESSMENT DATA ${dateStamp}.xlsx`,
+    'Production Master Excel'
+  );
+}
+
+async function exportExactQaExcel() {
+  const dateStamp = new Date().toISOString().slice(0, 10);
+  return triggerAuthenticatedExcelDownload(
+    '/api/export/qa-excel',
+    `QA_Workman_name_list_${dateStamp}.xlsx`,
+    'QA Master Excel'
+  );
+}
+
+function openMasterExcelSyncModal() {
+  _masterExcelSyncState = { fileBase64: null, filename: '', fileType: 'auto', preview: null };
+  const modal = document.getElementById('masterExcelSyncModal');
+  const fileInput = document.getElementById('masterExcelSyncFileInput');
+  const typeSel = document.getElementById('masterExcelSyncTypeSelect');
+  const statusEl = document.getElementById('masterExcelSyncStatus');
+  const summaryEl = document.getElementById('masterExcelSyncSummaryGrid');
+  const warnEl = document.getElementById('masterExcelSyncWarnings');
+  const tableEl = document.getElementById('masterExcelSyncPreviewTable');
+  const commitBtn = document.getElementById('btnCommitMasterExcelSync');
+
+  if (fileInput) fileInput.value = '';
+  if (typeSel) typeSel.value = 'auto';
+  if (statusEl) statusEl.innerHTML = 'Select a Production (<code>1. PRODUCTION SKILL ASSESSMENT DATA ...xlsx</code>) or QA (<code>QA_Workman name list_...xlsx</code>) workbook to preview updates before committing.';
+  if (summaryEl) { summaryEl.style.display = 'none'; summaryEl.innerHTML = ''; }
+  if (warnEl) { warnEl.style.display = 'none'; warnEl.innerHTML = ''; }
+  if (tableEl) { tableEl.style.display = 'none'; tableEl.innerHTML = ''; }
+  if (commitBtn) { commitBtn.disabled = true; commitBtn.textContent = 'Commit Sync to Database'; }
+  if (modal) modal.classList.add('open');
+}
+
+function closeMasterExcelSyncModal() {
+  const modal = document.getElementById('masterExcelSyncModal');
+  if (modal) modal.classList.remove('open');
+}
+
+function renderMasterExcelSyncPreview(preview, filename) {
+  const statusEl = document.getElementById('masterExcelSyncStatus');
+  const summaryEl = document.getElementById('masterExcelSyncSummaryGrid');
+  const warnEl = document.getElementById('masterExcelSyncWarnings');
+  const tableEl = document.getElementById('masterExcelSyncPreviewTable');
+  const commitBtn = document.getElementById('btnCommitMasterExcelSync');
+
+  const label = preview.fileType === 'production' ? 'Production Master Workbook (6-sheet format)' : 'QA Workman Workbook (5-sheet format)';
+  if (statusEl) {
+    statusEl.innerHTML = `<strong style="color:#059669;">Validated:</strong> ${escapeHtml(filename)} — detected as <strong>${escapeHtml(label)}</strong> (Sheets: ${escapeHtml((preview.sheetsFound || []).join(', '))})`;
+  }
+
+  if (summaryEl) {
+    const cards = [
+      { label: 'Matched & Updated', val: preview.matchedUpdated, color: '#005B9E' },
+      { label: 'New Added', val: preview.newEmployeesAdded, color: '#059669' },
+      { label: 'Left (Inactive)', val: preview.leftMarkedInactive, color: '#B45309' },
+      { label: 'Marks Synced', val: preview.marksUpdatedCount, color: '#7C3AED' },
+      { label: 'Levels Updated', val: preview.skillLevelsUpdatedCount, color: '#0D9488' },
+      { label: 'Active Headcount', val: preview.activeHeadcount, color: '#1E293B' }
+    ];
+    summaryEl.style.display = 'grid';
+    summaryEl.innerHTML = cards.map(c => `
+      <div style="background: var(--bg-subtle, #F8FAFC); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px;">
+        <div style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); font-weight: 700;">${c.label}</div>
+        <div style="font-size: 1.3rem; font-weight: 800; color: ${c.color}; font-variant-numeric: tabular-nums; margin-top: 2px;">${c.val}</div>
+      </div>
+    `).join('');
+  }
+
+  if (warnEl) {
+    const warns = preview.warnings || [];
+    if (warns.length > 0) {
+      warnEl.style.display = 'block';
+      warnEl.innerHTML = `<strong>Validation Notes (${warns.length}):</strong><ul style="margin: 4px 0 0 18px; padding: 0;">${warns.slice(0, 12).map(w => `<li>${escapeHtml(w)}</li>`).join('')}${warns.length > 12 ? `<li>...and ${warns.length - 12} more notes</li>` : ''}</ul>`;
+    } else {
+      warnEl.style.display = 'none';
+      warnEl.innerHTML = '';
+    }
+  }
+
+  if (tableEl) {
+    const rows = preview.sampleChanges || [];
+    tableEl.style.display = 'block';
+    if (rows.length === 0) {
+      tableEl.innerHTML = '<div style="padding: 14px; font-size: 0.85rem; color: var(--text-muted);">No changes detected.</div>';
+    } else {
+      tableEl.innerHTML = `
+        <table class="data-table" style="margin: 0; font-size: 0.8rem;">
+          <thead>
+            <tr>
+              <th>Emp No</th>
+              <th>Name</th>
+              <th>Section</th>
+              <th>Action</th>
+              <th>Skill Level</th>
+              <th>Quest</th>
+              <th>Gemba</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr>
+                <td><strong>${escapeHtml(r.empNo)}</strong></td>
+                <td>${escapeHtml(r.name)}</td>
+                <td>${escapeHtml(r.section)}</td>
+                <td><span style="font-weight:700;color:${r.action === 'NEW' ? '#059669' : '#005B9E'};">${escapeHtml(r.action)}</span></td>
+                <td>${escapeHtml(r.levelChange)}</td>
+                <td>${escapeHtml(r.questTotal)}</td>
+                <td>${escapeHtml(r.gembaTotal)}</td>
+                <td>${escapeHtml(r.overallResult)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+  }
+
+  if (commitBtn) {
+    commitBtn.disabled = false;
+    commitBtn.textContent = `Commit Sync (${preview.matchedUpdated + preview.newEmployeesAdded} Active${preview.leftMarkedInactive ? ` + ${preview.leftMarkedInactive} Left` : ''})`;
+  }
+}
+
+async function previewMasterExcelSyncFile(event) {
+  const file = event && event.target && event.target.files ? event.target.files[0] : null;
+  if (!file) return;
+  const statusEl = document.getElementById('masterExcelSyncStatus');
+  const commitBtn = document.getElementById('btnCommitMasterExcelSync');
+  const typeSel = document.getElementById('masterExcelSyncTypeSelect');
+
+  if (commitBtn) commitBtn.disabled = true;
+  if (statusEl) statusEl.innerHTML = `Parsing and validating <strong>${escapeHtml(file.name)}</strong>...`;
+
+  try {
+    const fileBase64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const res = String(reader.result || '');
+        resolve(res.includes(',') ? res.split(',').pop() : res);
+      };
+      reader.onerror = () => reject(new Error('Failed to read selected file'));
+      reader.readAsDataURL(file);
+    });
+
+    const fileType = typeSel ? typeSel.value : 'auto';
+    const res = await fetch('/api/excel-sync/preview', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify({ filename: file.name, fileBase64, fileType })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      if (statusEl) statusEl.innerHTML = `<span style="color:#DC2626;font-weight:700;">Validation Error:</span> ${escapeHtml(data.message || 'Unable to parse workbook')}`;
+      return;
+    }
+
+    _masterExcelSyncState = {
+      fileBase64,
+      filename: file.name,
+      fileType,
+      preview: data.preview
+    };
+    renderMasterExcelSyncPreview(data.preview, file.name);
+  } catch (err) {
+    if (statusEl) statusEl.innerHTML = `<span style="color:#DC2626;font-weight:700;">Error:</span> ${escapeHtml(err.message || 'Failed to read workbook')}`;
+  }
+}
+
+async function commitMasterExcelSync() {
+  if (!_masterExcelSyncState.fileBase64) return;
+  const commitBtn = document.getElementById('btnCommitMasterExcelSync');
+  const statusEl = document.getElementById('masterExcelSyncStatus');
+  if (commitBtn) {
+    commitBtn.disabled = true;
+    commitBtn.textContent = 'Syncing to Database...';
+  }
+  try {
+    const res = await fetch('/api/excel-sync/commit', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify({
+        filename: _masterExcelSyncState.filename,
+        fileBase64: _masterExcelSyncState.fileBase64,
+        fileType: _masterExcelSyncState.fileType
+      })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      if (statusEl) statusEl.innerHTML = `<span style="color:#DC2626;font-weight:700;">Commit Failed:</span> ${escapeHtml(data.message || 'Server error')}`;
+      if (commitBtn) {
+        commitBtn.disabled = false;
+        commitBtn.textContent = 'Retry Commit Sync';
+      }
+      return;
+    }
+
+    const s = data.summary || {};
+    showToast(`Master Excel synced: ${s.matchedUpdated || 0} updated, ${s.newEmployeesAdded || 0} added, ${s.leftMarkedInactive || 0} left marked inactive.`);
+    closeMasterExcelSyncModal();
+
+    // Refresh live portal state from server
+    if (typeof syncCloudEmployees === 'function') await syncCloudEmployees();
+    if (typeof syncCloudRecords === 'function') await syncCloudRecords();
+    if (typeof syncCloudOjtRecords === 'function') await syncCloudOjtRecords();
+    if (typeof renderEmployeeDirectory === 'function') renderEmployeeDirectory();
+    if (typeof renderAdminDashboard === 'function') renderAdminDashboard();
+    if (typeof refreshUndoBanner === 'function') refreshUndoBanner();
+  } catch (err) {
+    if (statusEl) statusEl.innerHTML = `<span style="color:#DC2626;font-weight:700;">Error:</span> ${escapeHtml(err.message || 'Network error')}`;
+    if (commitBtn) {
+      commitBtn.disabled = false;
+      commitBtn.textContent = 'Retry Commit Sync';
+    }
+  }
+}
+
+window.showInAppConfirm = showInAppConfirm;
+window.showTypedConfirmModal = showTypedConfirmModal;
+window.togglePortalLanguage = togglePortalLanguage;
+window.togglePortalTheme = togglePortalTheme;
+window.logExportAudit = logExportAudit;
+window.refreshUndoBanner = refreshUndoBanner;
+window.undoSoftBackup = undoSoftBackup;
+window.loadAuditLogsView = loadAuditLogsView;
+window.loadStaffUsersView = loadStaffUsersView;
+window.saveStaffUserAccount = saveStaffUserAccount;
+window.editStaffUser = editStaffUser;
+window.resetStaffUserForm = resetStaffUserForm;
+window.filterStaffUsersTable = filterStaffUsersTable;
+window.toggleStaffPasswordVisibility = toggleStaffPasswordVisibility;
+window.loadRemindersView = loadRemindersView;
+window.sendBulkEligibilityReminders = sendBulkEligibilityReminders;
+window.loadQuestionFailureStats = loadQuestionFailureStats;
+window.openBulkImportModal = openBulkImportModal;
+window.closeBulkImportModal = closeBulkImportModal;
+window.previewBulkImportFile = previewBulkImportFile;
+window.commitBulkImport = commitBulkImport;
+window.openEmployeeCertificateModal = openEmployeeCertificateModal;
+window.closeAdminCertificateModal = closeAdminCertificateModal;
+window.renderHodInsights = renderHodInsights;
+window.renderSectionInsights = renderSectionInsights;
+window.exportExactProductionExcel = exportExactProductionExcel;
+window.exportExactQaExcel = exportExactQaExcel;
+window.openMasterExcelSyncModal = openMasterExcelSyncModal;
+window.closeMasterExcelSyncModal = closeMasterExcelSyncModal;
+window.previewMasterExcelSyncFile = previewMasterExcelSyncFile;
+window.commitMasterExcelSync = commitMasterExcelSync;
+
+

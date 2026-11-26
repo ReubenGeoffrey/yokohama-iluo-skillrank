@@ -3,32 +3,74 @@ const express = require('express');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
+const zlib = require('zlib');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
 const Tokens = require('csrf');
+const bcrypt = require('bcryptjs');
+const QRCode = require('qrcode');
 const csrfTokens = new Tokens();
+const {
+  DEPARTMENTS,
+  QA_SECTIONS,
+  PRODUCTION_SECTIONS,
+  ILUO_LEVELS,
+  DEFAULT_SETTINGS,
+  normalizeQaSectionKey,
+  canonicalQaSectionName,
+  normalizeDepartmentName,
+  calculateDojEligibility,
+  escapeHtml
+} = require('./shared_constants.js');
+let _excelSyncEngine = null;
+function getExcelSyncEngine() {
+  if (!_excelSyncEngine) {
+    _excelSyncEngine = require('./excel_sync_engine.js');
+  }
+  return _excelSyncEngine;
+}
+
+const PROD_SECTION_KEYS = new Set((PRODUCTION_SECTIONS || []).map(s => String(s).trim().toLowerCase()));
 
 const app = express();
+app.set('trust proxy', 1);
 
-// Security Headers (OWASP Hardening)
+// Zero-I/O liveness/readiness endpoint for Cloud Run / ai.studio health probes
+app.get('/healthz', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
+// Security Headers (OWASP Hardening; allow iframe embedding in AI Studio preview)
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://yokohama-iluo-portal.vercel.app https://*.vercel.app; frame-ancestors 'self';");
   if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
   next();
 });
-const PORT = process.env.PORT || 5000;
+const PORT = Number(process.env.PORT) || 3000;
 let SESSION_SECRET = process.env.SESSION_SECRET;
 if (!SESSION_SECRET) {
-  if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+  if (process.env.STRICT_SESSION_SECRET === 'true') {
     throw new Error('FATAL: SESSION_SECRET environment variable is required in production environment. A consistent secret across all instances is mandatory.');
   }
-  SESSION_SECRET = 'dev_ephemeral_session_secret_for_local_testing_only';
+  if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+    // Derive a stable 64-char secret per Cloud Run service when SESSION_SECRET is not injected (e.g. ai.studio publish)
+    const serviceSeed = [
+      process.env.K_SERVICE || 'iluo-skill-portal',
+      process.env.UPSTASH_REDIS_REST_TOKEN || '',
+      process.env.ADMIN_PASSWORD || '',
+      'yokohama-iluo-session-v1'
+    ].join(':');
+    SESSION_SECRET = crypto.createHash('sha256').update(serviceSeed).digest('hex');
+    console.warn('⚠️ WARNING: SESSION_SECRET env var not set in production; using derived fallback secret. Set SESSION_SECRET for multi-revision persistence.');
+  } else {
+    SESSION_SECRET = 'dev_ephemeral_session_secret_for_local_testing_only';
+  }
+  process.env.SESSION_SECRET = SESSION_SECRET;
 }
 const isProduction = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
 
@@ -43,10 +85,11 @@ let rawKvToken = (process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_AP
 if (rawKvToken.includes('\t')) {
   rawKvToken = rawKvToken.split('\t').pop().trim();
 }
+rawKvToken = rawKvToken.replace(/^(?:UPSTASH_REDIS_REST_TOKEN|KV_REST_API_TOKEN)\s*=\s*/i, '').trim();
 const kvToken = rawKvToken.replace(/^(?:REST_)?TOKEN[\s\t]+/, '').replace(/[\r\n\t\s]/g, '');
 
 if (isProduction && (!kvUrl || !kvToken)) {
-  console.warn('⚠️ WARNING: Upstash Redis (UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN) is not configured in production. Authoritative data writes will fail safely.');
+  console.warn('⚠️ WARNING: Upstash Redis (UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN) is not configured in production.');
 }
 
 // =========================================================================
@@ -151,16 +194,11 @@ async function isRateKeyLocked(key) {
     redisError = new Error('Redis not configured');
   }
 
-  // Fail-closed in production only if Redis write/check is explicitly forbidden (test simulation) or strict fail-closed mode requested
+  // Fail-closed in production only when Redis write is explicitly forbidden or strict auth fail-closed is enabled
   if (process.env.NODE_ENV === 'production' && (isKvWriteForbidden || process.env.FAIL_CLOSED_AUTH === 'true')) {
     if (redisCheckFailed) {
       throw redisError || new Error('Production rate limiter check unavailable');
     }
-    return 0;
-  }
-
-  // If Redis check succeeded in production (redisCheckFailed is false), return 0
-  if (process.env.NODE_ENV === 'production' && !redisCheckFailed) {
     return 0;
   }
 
@@ -258,6 +296,10 @@ async function handleAuthFailure(req, res, defaultStatus = 401, defaultMessage =
       }
     }
   }
+  const actor = (req.body && (req.body.empNo || req.body.username || req.body.email || req.body.section || req.body.department)) || 'anonymous';
+  try {
+    await logAuditEvent('LOGIN_FAILED', String(actor), `Failed authentication on ${req.path}`, req);
+  } catch (e) {}
   return res.status(defaultStatus).json({ success: false, message: defaultMessage });
 }
 
@@ -310,7 +352,7 @@ function authRateLimiter(options = {}) {
         }
       }
     } catch (err) {
-      if (process.env.NODE_ENV === 'production' && (isKvWriteForbidden || process.env.FAIL_CLOSED_AUTH === 'true')) {
+      if (process.env.NODE_ENV === 'production') {
         console.error(`[SECURITY ERROR] Production rate limit pre-check failed: ${err.message}`);
         return res.status(503).json({
           success: false,
@@ -318,7 +360,6 @@ function authRateLimiter(options = {}) {
           code: 'AUTH_RATE_LIMIT_UNAVAILABLE'
         });
       }
-      console.warn(`[RateLimiter] Rate check warning, falling back to memory: ${err.message}`);
     }
 
     req.recordAuthFailure = async () => {
@@ -380,26 +421,29 @@ const CONFIGURED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
   .filter(Boolean);
 
 const ALLOWED_ORIGINS = [
-  'https://yokohama-iluo-portal.vercel.app',
-  'https://yokohama-iluo-employee.vercel.app',
-  'https://management.yourdomain.in',
-  'https://employee.yourdomain.in',
-  'http://localhost:5000',
   'http://localhost:3000',
-  'http://127.0.0.1:5000',
+  'http://localhost:8080',
+  'http://localhost:5000',
   'http://127.0.0.1:3000',
+  'http://127.0.0.1:8080',
+  'http://127.0.0.1:5000',
   ...CONFIGURED_ORIGINS
 ];
 
 if (process.env.MANAGEMENT_PORTAL_URL) ALLOWED_ORIGINS.push(process.env.MANAGEMENT_PORTAL_URL.trim());
 if (process.env.EMPLOYEE_PORTAL_URL) ALLOWED_ORIGINS.push(process.env.EMPLOYEE_PORTAL_URL.trim());
 
-function isOriginAllowed(origin) {
-  if (!origin) return false;
+function isOriginAllowed(origin, req = null) {
+  if (!origin) return true; // Same-origin direct requests (no Origin header) are always permitted
   try {
     const u = new URL(origin);
-    const hostOrigin = u.origin;
-    if (ALLOWED_ORIGINS.includes(hostOrigin)) return true;
+    const hostOrigin = u.origin.toLowerCase();
+    if (ALLOWED_ORIGINS.some(o => o.toLowerCase() === hostOrigin)) return true;
+    if (req) {
+      const reqHost = (req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim().toLowerCase();
+      if (reqHost && u.host.toLowerCase() === reqHost) return true;
+    }
+    if (hostOrigin.endsWith('.run.app')) return true;
     if (hostOrigin.endsWith('.vercel.app') && (hostOrigin.includes('yokohama-iluo') || hostOrigin.includes('iluo-employee') || hostOrigin.includes('iluo-management'))) return true;
     if (hostOrigin.endsWith('.yourdomain.in')) return true;
     if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(hostOrigin)) return true;
@@ -409,16 +453,18 @@ function isOriginAllowed(origin) {
   }
 }
 
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    if (isOriginAllowed(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Blocked by CORS policy'));
-    }
-  },
-  credentials: true
+function isHttpsRequest(req) {
+  if (!req) return false;
+  return !!(req.secure || String(req.headers['x-forwarded-proto'] || '').toLowerCase().includes('https'));
+}
+
+app.use(cors((req, callback) => {
+  const origin = req.headers.origin;
+  if (!origin || isOriginAllowed(origin, req)) {
+    callback(null, { origin: true, credentials: true });
+  } else {
+    callback(new Error('Blocked by CORS policy'));
+  }
 }));
 
 app.use(express.json({ limit: '50mb' }));
@@ -426,11 +472,12 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser(SESSION_SECRET));
 
 // Standard Secure Cookie Options Helper
-function getCookieOptions(maxAgeMs = 8 * 60 * 60 * 1000) {
+function getCookieOptions(maxAgeMs = 8 * 60 * 60 * 1000, req = null) {
+  const isHttps = isHttpsRequest(req);
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production' || !!process.env.VERCEL,
-    sameSite: 'lax',
+    secure: isProduction || isHttps,
+    sameSite: isHttps ? 'none' : 'lax',
     maxAge: maxAgeMs,
     path: '/',
     signed: true
@@ -439,6 +486,7 @@ function getCookieOptions(maxAgeMs = 8 * 60 * 60 * 1000) {
 
 // CSRF & Untrusted Origin Blocker - STRICT FAIL-CLOSED (OWASP A01 / CSRF Defense)
 app.use((req, res, next) => {
+  const isHttps = isHttpsRequest(req);
   // Safe read requests (GET, HEAD, OPTIONS): initialize or refresh double-submit CSRF cookies
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
     let secret = req.cookies ? req.cookies['_csrf_secret'] : null;
@@ -449,8 +497,8 @@ app.use((req, res, next) => {
         secret = csrfTokens.secretSync();
         res.cookie('_csrf_secret', secret, {
           httpOnly: true,
-          sameSite: 'lax',
-          secure: isProduction,
+          sameSite: isHttps ? 'none' : 'lax',
+          secure: isProduction || isHttps,
           path: '/'
         });
       } catch (err) {
@@ -463,8 +511,8 @@ app.use((req, res, next) => {
         token = csrfTokens.create(secret);
         res.cookie('XSRF-TOKEN', token, {
           httpOnly: false, // Must be readable by client JavaScript for double-submit header
-          sameSite: 'lax',
-          secure: isProduction,
+          sameSite: isHttps ? 'none' : 'lax',
+          secure: isProduction || isHttps,
           path: '/'
         });
       } catch (err) {
@@ -480,11 +528,11 @@ app.use((req, res, next) => {
   const referer = req.headers['referer'];
 
   if (origin) {
-    if (!isOriginAllowed(origin)) {
+    if (!isOriginAllowed(origin, req)) {
       return res.status(403).json({ success: false, message: 'Forbidden: CSRF check failed (Untrusted Origin)' });
     }
   } else if (referer) {
-    if (!isOriginAllowed(referer)) {
+    if (!isOriginAllowed(referer, req)) {
       return res.status(403).json({ success: false, message: 'Forbidden: CSRF check failed (Untrusted Referer)' });
     }
   }
@@ -495,10 +543,8 @@ app.use((req, res, next) => {
   // Note: Initial login/password setup endpoints are unauthenticated credential submissions.
   const isAuthLoginRoute = req.path.startsWith('/api/auth/') && (
     req.path.includes('/login') ||
-    req.path.includes('/send-otp') ||
-    req.path.includes('/verify-otp') ||
-    req.path.includes('/setup-password') ||
-    req.path.includes('/reset-password')
+    req.path.includes('/admin/send-otp') ||
+    req.path.includes('/admin/verify-otp')
   );
 
   const hasCookieSession = hasAuthenticatedSessionCookie(req);
@@ -523,27 +569,78 @@ app.use((req, res, next) => {
 
 // Dedicated endpoint to fetch fresh CSRF token
 app.get('/api/csrf-token', (req, res) => {
+  const isHttps = isHttpsRequest(req);
   let secret = req.cookies ? req.cookies['_csrf_secret'] : null;
   if (!secret) {
     secret = csrfTokens.secretSync();
     res.cookie('_csrf_secret', secret, {
       httpOnly: true,
-      sameSite: 'lax',
-      secure: isProduction,
+      sameSite: isHttps ? 'none' : 'lax',
+      secure: isProduction || isHttps,
       path: '/'
     });
   }
   const token = csrfTokens.create(secret);
   res.cookie('XSRF-TOKEN', token, {
     httpOnly: false,
-    sameSite: 'lax',
-    secure: isProduction,
+    sameSite: isHttps ? 'none' : 'lax',
+    secure: isProduction || isHttps,
     path: '/'
   });
   res.json({ success: true, csrfToken: token });
 });
 
-// Strict Allowlist of Public Static Assets (Excludes data.js, seed_data.js, and raw data workbooks)
+// Health & Upstash Redis Database Connectivity Check (never exposes secrets)
+app.get('/api/health', async (req, res) => {
+  const configured = Boolean(kvUrl && kvToken);
+  if (!configured) {
+    return res.json({
+      ok: true,
+      database: {
+        provider: 'local-memory',
+        configured: false,
+        connected: false
+      }
+    });
+  }
+  const startedAt = Date.now();
+  try {
+    const pingRes = await callCloudKvCommand(['PING']);
+    const latencyMs = Date.now() - startedAt;
+    const connected = pingRes === 'PONG';
+    if (connected && !upstashSeedCompleted && !upstashReadOnlyDetected) {
+      ensureUpstashInitialSeed().catch(() => {});
+    }
+    const writable = connected && !upstashReadOnlyDetected;
+    return res.json({
+      ok: true,
+      database: {
+        provider: 'upstash-redis',
+        configured: true,
+        connected,
+        writable,
+        latencyMs,
+        seeded: upstashSeedCompleted,
+        ...(upstashSeedRetryTimer && !upstashSeedCompleted ? { seedRetrying: true, seedAttempts: upstashSeedAttempts } : {}),
+        ...(upstashReadOnlyDetected ? { warning: 'Read-only Upstash token detected (NOPERM). Configure the primary Read-Write UPSTASH_REDIS_REST_TOKEN.' } : {}),
+        ...(!upstashSeedCompleted && upstashLastSeedError ? { seedError: upstashLastSeedError } : {})
+      }
+    });
+  } catch (err) {
+    return res.status(200).json({
+      ok: true,
+      database: {
+        provider: 'upstash-redis',
+        configured: true,
+        connected: false,
+        latencyMs: Date.now() - startedAt,
+        error: err ? err.message : 'Redis ping failed'
+      }
+    });
+  }
+});
+
+// Strict Allowlist of Public Static Assets
 const ALLOWED_STATIC_FILES = new Set([
   '/',
   '/index.html',
@@ -554,9 +651,11 @@ const ALLOWED_STATIC_FILES = new Set([
   '/management',
   '/management/',
   '/app.js',
+  '/data.js',
+  '/shared_constants.js',
   '/styles.css',
-  '/public_operators.js',
   '/ojt_templates_data.js',
+  '/seed_data.js',
   '/docx_generator.js',
   '/report_html_generator.js',
   '/docx-preview.min.js',
@@ -572,32 +671,54 @@ const ALLOWED_STATIC_FILES = new Set([
   '/manifest.json'
 ]);
 
-// Static Security Middleware: Allowlist Only (Blocks /server.js, .env, .json, test files, configs)
+const STATIC_DIR = fs.existsSync(path.join(__dirname, 'dist'))
+  ? path.join(__dirname, 'dist')
+  : __dirname;
+
+// Regex matching explicitly forbidden internal/source files (returns 403 Forbidden)
+const FORBIDDEN_FILE_PATTERN = /^(?:\/\.env|\/tests\/|\/docs\/|\/\.superpowers\/|.*(?:\.(?:json|lock|md|ps1|bat|sh|py|yaml|yml|log|dockerignore)|Dockerfile|Procfile|package\.json|package-lock\.json|server\.js|excel_sync_engine\.js|build\.js)$)/i;
+
+// Static Security Middleware
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) {
     return next();
   }
 
-  // Allow official Word templates in QC_templates
+  const decodedPath = decodeURIComponent(req.path);
+
+  // 1. Explicitly block sensitive backend code, data stores, tests, configs, and env files
+  if (FORBIDDEN_FILE_PATTERN.test(req.path) || FORBIDDEN_FILE_PATTERN.test(decodedPath)) {
+    return res.status(403).json({
+      success: false,
+      error: 'Forbidden: Direct access to this resource is restricted by static security policy'
+    });
+  }
+
+  // 2. Allow official Word templates in QC_templates
   if (req.path.startsWith('/QC_templates/') && req.path.endsWith('.docx')) {
     return next();
   }
 
-  // Allow static images in /assets/
+  // 3. Allow static images in /assets/
   if (req.path.startsWith('/assets/') && /\.(png|jpe?g|svg|ico|webp)$/i.test(req.path)) {
     return next();
   }
 
-  const decodedPath = decodeURIComponent(req.path);
+  // 4. Allow public static assets from allowlist
   if (ALLOWED_STATIC_FILES.has(req.path) || ALLOWED_STATIC_FILES.has(decodedPath)) {
     return next();
   }
 
-  // Reject all other direct file access attempts
-  return res.status(403).json({
-    success: false,
-    error: 'Forbidden: Direct access to this resource is restricted by static security policy'
-  });
+  // 5. If it looks like a file with an extension, reject with 404 (not found)
+  if (/\.[a-zA-Z0-9]+$/i.test(req.path)) {
+    return res.status(404).json({
+      success: false,
+      error: 'Not Found'
+    });
+  }
+
+  // 6. Otherwise it is an SPA navigation path (e.g. /secure-control/dashboard, /section, /ojt-login)
+  return next();
 });
 
 // Portal routing resolver: Determines whether to serve Employee Portal vs Management Portal
@@ -618,23 +739,317 @@ function isEmployeePortalRequest(req) {
 // Explicit root and portal routes
 app.get(['/', '/index.html'], (req, res) => {
   if (isEmployeePortalRequest(req)) {
-    return res.sendFile(path.join(__dirname, 'employee.html'));
+    return res.sendFile(path.join(STATIC_DIR, 'employee.html'));
   }
-  return res.sendFile(path.join(__dirname, 'index.html'));
+  return res.sendFile(path.join(STATIC_DIR, 'index.html'));
 });
 
 app.get(['/employee', '/employee.html'], (req, res) => {
-  res.sendFile(path.join(__dirname, 'employee.html'));
+  res.sendFile(path.join(STATIC_DIR, 'employee.html'));
 });
 
 app.get(['/management', '/management.html'], (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(path.join(STATIC_DIR, 'index.html'));
+});
+
+// Auth-protected Master Excel route BEFORE express.static so direct XLSX filename cannot bypass RBAC
+app.get(['/api/download-master-excel', '/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx', encodeURI('/1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx')], async (req, res) => {
+  const user = await getAuthUser(req);
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Unauthorized: Authentication required for master workbook export' });
+  }
+  if (!['SUPERADMIN', 'ADMIN', 'DEPT_HEAD', 'SECTION_HEAD'].includes(user.role)) {
+    return res.status(403).json({ success: false, message: 'Forbidden: Management privileges required for master Excel export' });
+  }
+  await logAuditEvent('EXPORT_MASTER_EXCEL', user, 'Downloaded template-cloned Master Production & QA Excel workbook', req);
+
+  const dateStamp = new Date().toISOString().slice(0, 10);
+  res.setHeader('Content-Disposition', `attachment; filename="1. PRODUCTION SKILL ASSESSMENT DATA ${dateStamp}.xlsx"`);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+  try {
+    const [employees, records, ojtRecords] = await Promise.all([
+      getAuthoritativeEmployees(),
+      getAuthoritativeRecords(),
+      getAuthoritativeOjtEvaluations()
+    ]);
+    const outBuf = await getExcelSyncEngine().exportProductionWorkbookBuffer(employees, records, ojtRecords);
+    res.setHeader('Content-Length', outBuf.length);
+    return res.end(outBuf);
+  } catch (err) {
+    console.error('[EXPORT MASTER EXCEL ERROR]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to generate master Production Excel workbook' });
+  }
+});
+
+// Exact Template-Matching Production Excel Export (All 6 sheets, formulas, chart, styles preserved)
+app.get('/api/export/production-excel', async (req, res) => {
+  const user = await getAuthUser(req);
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Unauthorized: Authentication required for Production Excel export' });
+  }
+  if (!['SUPERADMIN', 'ADMIN', 'DEPT_HEAD', 'SECTION_HEAD'].includes(user.role)) {
+    return res.status(403).json({ success: false, message: 'Forbidden: Management privileges required for Production Excel export' });
+  }
+
+  try {
+    const [employees, records, ojtRecords] = await Promise.all([
+      getAuthoritativeEmployees(),
+      getAuthoritativeRecords(),
+      getAuthoritativeOjtEvaluations()
+    ]);
+    const outBuf = await getExcelSyncEngine().exportProductionWorkbookBuffer(employees, records, ojtRecords);
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    await logAuditEvent('EXPORT_PRODUCTION_EXCEL', user, `Exported template-cloned Production Excel workbook (${dateStamp})`, req);
+    res.setHeader('Content-Disposition', `attachment; filename="1. PRODUCTION SKILL ASSESSMENT DATA ${dateStamp}.xlsx"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Length', outBuf.length);
+    return res.end(outBuf);
+  } catch (err) {
+    console.error('[EXPORT PRODUCTION EXCEL ERROR]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to export Production Excel workbook' });
+  }
+});
+
+// Exact Template-Matching QA Excel Export (All 5 sheets, hidden states, formulas, styles preserved)
+app.get('/api/export/qa-excel', async (req, res) => {
+  const user = await getAuthUser(req);
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Unauthorized: Authentication required for QA Excel export' });
+  }
+  if (!['SUPERADMIN', 'ADMIN', 'DEPT_HEAD', 'SECTION_HEAD'].includes(user.role)) {
+    return res.status(403).json({ success: false, message: 'Forbidden: Management privileges required for QA Excel export' });
+  }
+
+  try {
+    const [employees, records, ojtRecords] = await Promise.all([
+      getAuthoritativeEmployees(),
+      getAuthoritativeRecords(),
+      getAuthoritativeOjtEvaluations()
+    ]);
+    const outBuf = await getExcelSyncEngine().exportQaWorkbookBuffer(employees, records, ojtRecords);
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    await logAuditEvent('EXPORT_QA_EXCEL', user, `Exported template-cloned QA Excel workbook (${dateStamp})`, req);
+    res.setHeader('Content-Disposition', `attachment; filename="QA_Workman_name_list_${dateStamp}.xlsx"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Length', outBuf.length);
+    return res.end(outBuf);
+  } catch (err) {
+    console.error('[EXPORT QA EXCEL ERROR]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to export QA Excel workbook' });
+  }
+});
+
+// Section-Wise Completion Summary Builder & Executive PDF Export (Production / QA / All)
+function buildSectionSummaryReportData(employees, records, ojtRecords, rawScope = 'PRODUCTION') {
+  const scopeNorm = String(rawScope || 'PRODUCTION').trim().toUpperCase();
+  const scope = (scopeNorm === 'QA' || scopeNorm === 'QUALITY CONTROL' || scopeNorm === 'QC')
+    ? 'QA'
+    : (scopeNorm === 'ALL' || scopeNorm === 'PLANT')
+      ? 'ALL'
+      : 'PRODUCTION';
+
+  const allEmps = Array.isArray(employees) ? employees : [];
+  const recMap = records && typeof records === 'object' ? records : {};
+  const ojtMap = ojtRecords && typeof ojtRecords === 'object' ? ojtRecords : {};
+
+  let leftCount = 0;
+  const activeEmps = [];
+  allEmps.forEach((emp) => {
+    const isLeft = Boolean(emp && (emp.isLeft || emp.status === 'LEFT'));
+    const empDept = normalizeDepartmentName(emp && emp.dept);
+    const matchesScope =
+      scope === 'ALL' ||
+      (scope === 'PRODUCTION' && empDept === 'PRODUCTION') ||
+      (scope === 'QA' && empDept !== 'PRODUCTION');
+    if (isLeft) {
+      if (matchesScope) leftCount++;
+      return;
+    }
+    if (matchesScope) activeEmps.push(emp);
+  });
+
+  const sectionsList = [];
+  const pushSectionStats = (name, deptGroup, empsInSec) => {
+    let examDone = 0;
+    let examPassed = 0;
+    let ojtDone = 0;
+    let ojtPassed = 0;
+    let bothDone = 0;
+    let bothPassed = 0;
+
+    empsInSec.forEach((emp) => {
+      const rec = recMap[emp.empNo];
+      const ojt = ojtMap[emp.empNo];
+      const hasExam = Boolean(rec && rec.isCompleted);
+      const isExamPass = hasExam && (
+        rec.status === 'Passed' ||
+        rec.questStatus === 'Pass' ||
+        (rec.markPct !== undefined && Number(rec.markPct) >= 50)
+      );
+      const hasOjt = Boolean(ojt && (ojt.totalScore !== undefined || ojt.scorePct !== undefined));
+      const isOjtPass = hasOjt && (
+        ojt.qualificationStatus === 'Qualified' ||
+        ojt.result === 'Pass' ||
+        ojt.status === 'Pass' ||
+        (ojt.scorePct !== undefined && Number(ojt.scorePct) >= 70)
+      );
+
+      if (hasExam) {
+        examDone++;
+        if (isExamPass) examPassed++;
+      }
+      if (hasOjt) {
+        ojtDone++;
+        if (isOjtPass) ojtPassed++;
+      }
+      if (hasExam && hasOjt) {
+        bothDone++;
+        if (isExamPass && isOjtPass) bothPassed++;
+      }
+    });
+
+    const total = empsInSec.length;
+    sectionsList.push({
+      name,
+      deptGroup,
+      total,
+      examDone,
+      examPassed,
+      ojtDone,
+      ojtPassed,
+      bothDone,
+      bothPassed,
+      pending: Math.max(0, total - bothDone),
+      completionPct: total > 0 ? Math.round((bothDone / total) * 100) : 0
+    });
+  };
+
+  if (scope === 'PRODUCTION' || scope === 'ALL') {
+    const prodEmps = activeEmps.filter((e) => normalizeDepartmentName(e.dept) === 'PRODUCTION');
+    const byProdSec = new Map();
+    prodEmps.forEach((emp) => {
+      const rawName = String(emp.section || 'UNASSIGNED').trim().replace(/\s+/g, ' ').toUpperCase();
+      if (!byProdSec.has(rawName)) byProdSec.set(rawName, []);
+      byProdSec.get(rawName).push(emp);
+    });
+
+    const orderedNames = [];
+    const seen = new Set();
+    (PRODUCTION_SECTIONS || []).forEach((sName) => {
+      const key = String(sName).trim().toUpperCase();
+      orderedNames.push(key);
+      seen.add(key);
+    });
+    Array.from(byProdSec.keys()).sort().forEach((k) => {
+      if (!seen.has(k)) orderedNames.push(k);
+    });
+
+    orderedNames.forEach((secName) => {
+      const list = byProdSec.get(secName) || [];
+      if (list.length > 0 || PROD_SECTION_KEYS.has(secName.toLowerCase())) {
+        pushSectionStats(secName, 'PRODUCTION', list);
+      }
+    });
+  }
+
+  if (scope === 'QA' || scope === 'ALL') {
+    const qaEmps = activeEmps.filter((e) => normalizeDepartmentName(e.dept) !== 'PRODUCTION');
+    (QA_SECTIONS || []).forEach((qaSec) => {
+      const normKey = normalizeQaSectionKey(qaSec.name);
+      const list = qaEmps.filter((e) => normalizeQaSectionKey(e.section) === normKey);
+      pushSectionStats(qaSec.name, 'QUALITY CONTROL', list);
+    });
+  }
+
+  const levelBreakdown = { I: 0, L: 0, U: 0, O: 0 };
+  activeEmps.forEach((emp) => {
+    const lvl = String(emp.currentLevel || 'I').trim().toUpperCase();
+    if (Object.prototype.hasOwnProperty.call(levelBreakdown, lvl)) {
+      levelBreakdown[lvl]++;
+    } else {
+      levelBreakdown.I++;
+    }
+  });
+
+  const totals = sectionsList.reduce((acc, s) => {
+    acc.total += s.total;
+    acc.examDone += s.examDone;
+    acc.examPassed += s.examPassed;
+    acc.ojtDone += s.ojtDone;
+    acc.ojtPassed += s.ojtPassed;
+    acc.bothDone += s.bothDone;
+    acc.bothPassed += s.bothPassed;
+    acc.pending += s.pending;
+    return acc;
+  }, { total: 0, examDone: 0, examPassed: 0, ojtDone: 0, ojtPassed: 0, bothDone: 0, bothPassed: 0, pending: 0, completionPct: 0 });
+  totals.completionPct = totals.total > 0 ? Math.round((totals.bothDone / totals.total) * 100) : 0;
+
+  const departmentLabel = scope === 'QA'
+    ? 'Quality Control (8 QA Sections)'
+    : scope === 'ALL'
+      ? 'Plant-Wide Summary (Production & Quality Control)'
+      : `Production Department (${sectionsList.length} Sections)`;
+
+  return {
+    scope,
+    departmentLabel,
+    sections: sectionsList,
+    totals,
+    levelBreakdown,
+    leftCount
+  };
+}
+
+app.get('/api/export/section-summary-pdf', async (req, res) => {
+  const user = await getAuthUser(req);
+  if (!user) {
+    return res.status(401).json({ success: false, message: 'Unauthorized: Authentication required for Summary PDF export' });
+  }
+  if (!['SUPERADMIN', 'ADMIN', 'DEPT_HEAD', 'SECTION_HEAD'].includes(user.role)) {
+    return res.status(403).json({ success: false, message: 'Forbidden: Management privileges required for Summary PDF export' });
+  }
+
+  let requestedScope = String(req.query.scope || req.query.dept || 'PRODUCTION').toUpperCase();
+  if (user.role === 'DEPT_HEAD' && user.department) {
+    requestedScope = normalizeDepartmentName(user.department) === 'PRODUCTION' ? 'PRODUCTION' : 'QA';
+  } else if (user.role === 'SECTION_HEAD') {
+    requestedScope = 'QA';
+  }
+
+  try {
+    const [employees, records, ojtRecords] = await Promise.all([
+      getAuthoritativeEmployees(),
+      getAuthoritativeRecords(),
+      getAuthoritativeOjtEvaluations()
+    ]);
+
+    const summaryData = buildSectionSummaryReportData(employees, records, ojtRecords, requestedScope);
+    const html = generateSectionSummaryReportHtml({
+      ...summaryData,
+      logoBase64: getLogoBase64()
+    });
+    const pdfBuf = await renderHtmlToPdf(html);
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    const fileScopeSlug = summaryData.scope === 'QA' ? 'QA' : summaryData.scope === 'ALL' ? 'Plant_Wide' : 'Production';
+    const fileName = `Yokohama_${fileScopeSlug}_Section_Summary_${dateStamp}.pdf`;
+
+    await logAuditEvent('EXPORT_SECTION_SUMMARY_PDF', user, `Exported ${fileScopeSlug} Section Summary PDF (${dateStamp})`, req, fileScopeSlug);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', pdfBuf.length);
+    return res.send(pdfBuf);
+  } catch (err) {
+    console.error('[EXPORT SECTION SUMMARY PDF ERROR]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to export Section Completion Summary PDF' });
+  }
 });
 
 // Explicit static route for QC_templates Word files & assets
-app.use('/QC_templates', express.static(path.join(__dirname, 'QC_templates')));
-app.use('/assets', express.static(path.join(__dirname, 'assets')));
-app.use(express.static(path.join(__dirname), { dotfiles: 'ignore', index: false }));
+app.use('/QC_templates', express.static(path.join(STATIC_DIR, 'QC_templates')));
+app.use('/assets', express.static(path.join(STATIC_DIR, 'assets')));
+app.use('/public', express.static(path.join(STATIC_DIR, 'public')));
+app.use(express.static(STATIC_DIR, { dotfiles: 'ignore', index: false }));
 
 // Explicit logo & favicon handlers
 app.get(['/atg_logo.png', '/assets/atg_logo.png'], (req, res) => {
@@ -658,9 +1073,9 @@ app.get(['/favicon.ico', '/favicon.png'], (req, res) => {
 app.get('/manifest.json', (req, res) => {
   res.setHeader('Content-Type', 'application/manifest+json');
   res.json({
-    name: "ATC Tires ILUO Skill Assessment",
-    short_name: "ATC Tires ILUO",
-    description: "Official Plant Skill Qualification & Analytics Portal for ATC Tires",
+    name: "Yokohama ILUO Skill Assessment",
+    short_name: "Yokohama ILUO",
+    description: "Official Plant Skill Qualification & Analytics Portal for Yokohama ATC Tires",
     start_url: "/",
     display: "standalone",
     background_color: "#0B1120",
@@ -682,16 +1097,6 @@ app.get('/manifest.json', (req, res) => {
     ]
   });
 });
-
-// Formula Injection Defense (CWE-1236)
-function sanitizeFormulaInjection(value) {
-  if (value === null || value === undefined) return '';
-  const str = String(value);
-  if (/^[=+@\-\t\r]/.test(str)) {
-    return "'" + str;
-  }
-  return str;
-}
 
 // Function to update Master Excel workbook with live candidate exam marks & OJT records
 function updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees) {
@@ -760,7 +1165,7 @@ function updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees) {
       if (marks.ci !== null) nl['M' + r] = { t: 'n', v: marks.ci };
       if (rec.totalMark !== undefined) nl['O' + r] = { t: 'n', v: rec.totalMark, f: `SUM(J${r}:N${r})` };
       if (rec.markPct !== undefined) nl['P' + r] = { t: 'n', v: rec.markPct / 100, z: '0%' };
-      if (rec.status) nl['Q' + r] = { t: 's', v: sanitizeFormulaInjection(rec.status) };
+      if (rec.status) nl['Q' + r] = { t: 's', v: rec.status };
 
       const ojt = ojtMap.get(empNoKey);
       if (ojt && ojt.totalScore !== undefined) {
@@ -768,7 +1173,7 @@ function updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees) {
         nl['T' + r] = { t: 'n', v: parseInt(ojt.sopScore || 15, 10) };
         nl['U' + r] = { t: 'n', v: ojt.totalScore, f: `SUM(S${r}:T${r})` };
         nl['V' + r] = { t: 'n', v: (ojt.scorePct || 0) / 100, z: '0%' };
-        nl['W' + r] = { t: 's', v: sanitizeFormulaInjection(ojt.qualificationStatus || 'Qualified') };
+        nl['W' + r] = { t: 's', v: ojt.qualificationStatus || 'Qualified' };
       }
     }
   }
@@ -782,10 +1187,10 @@ function updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees) {
       const ojt = ojtMap.get(empNoKey);
 
       es['A' + entryRow] = { t: 'n', v: entryRow - 2 };
-      es['B' + entryRow] = { t: 's', v: sanitizeFormulaInjection(emp ? emp.empNo : rec.empNo) };
-      es['C' + entryRow] = { t: 's', v: sanitizeFormulaInjection(emp ? emp.name : rec.name) };
-      es['D' + entryRow] = { t: 's', v: sanitizeFormulaInjection((emp ? emp.section : rec.section) || '') };
-      es['E' + entryRow] = { t: 's', v: sanitizeFormulaInjection(rec.targetLevel || (emp ? emp.currentLevel : 'L')) };
+      es['B' + entryRow] = { t: 's', v: emp ? emp.empNo : rec.empNo };
+      es['C' + entryRow] = { t: 's', v: emp ? emp.name : rec.name };
+      es['D' + entryRow] = { t: 's', v: (emp ? emp.section : rec.section) || '' };
+      es['E' + entryRow] = { t: 's', v: rec.targetLevel || (emp ? emp.currentLevel : 'L') };
       if (marks.s !== null) es['F' + entryRow] = { t: 'n', v: marks.s };
       if (marks.p !== null) es['G' + entryRow] = { t: 'n', v: marks.p };
       if (marks.q !== null) es['H' + entryRow] = { t: 'n', v: marks.q };
@@ -801,83 +1206,20 @@ function updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees) {
   }
 }
 
-// Authorized handler for official Master Production + QA Assessment Excel workbook (Admin Only)
-app.get('/api/download-master-excel', requireAdminAuth, async (req, res) => {
-  res.setHeader('Content-Disposition', 'attachment; filename="1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx"');
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-
-  const xlsxPath = path.join(__dirname, '1. PRODUCTION SKILL ASSESSMENT DATA 30.06.2026.xlsx');
-  if (fs.existsSync(xlsxPath)) {
-    try {
-      const XLSX = require('./xlsx.full.min.js');
-      const buf = fs.readFileSync(xlsxPath);
-      const wb = XLSX.read(buf, { type: 'buffer', cellStyles: true });
-      const records = await getAuthoritativeRecords();
-      const ojtRecords = await getAuthoritativeOjtEvaluations();
-      const employees = await getAuthoritativeEmployees();
-
-      updateMasterWorkbookWithRecords(wb, records, ojtRecords, employees);
-
-      const outBuf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-      res.setHeader('Content-Length', outBuf.length);
-      return res.end(outBuf);
-    } catch (err) {
-      console.warn('Error dynamically injecting records into master Excel, streaming base file:', err.message);
-      return res.sendFile(xlsxPath);
-    }
-  }
-
-  try {
-    const b64 = require('./master_excel_b64.js');
-    if (b64) {
-      const buf = Buffer.from(b64, 'base64');
-      res.setHeader('Content-Length', buf.length);
-      return res.end(buf);
-    }
-  } catch (e) {}
-
-  return res.status(404).json({ success: false, message: 'Master Excel file not found on server' });
-});
-
-// Explicit public_operators script handler
-app.get('/public_operators.js', (req, res) => {
-  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, max-age=3600');
-  res.sendFile(path.join(__dirname, 'public_operators.js'));
-});
-
-// Public operator search and directory endpoint for front-page autocomplete
-app.get('/api/public/operators', (req, res) => {
-  try {
-    const q = (req.query.q || '').trim().toLowerCase();
-    const publicOperatorsPath = path.join(__dirname, 'public_operators.js');
-    if (fs.existsSync(publicOperatorsPath)) {
-      const code = fs.readFileSync(publicOperatorsPath, 'utf8');
-      const jsonStart = code.indexOf('[');
-      const jsonEnd = code.lastIndexOf(']');
-      if (jsonStart !== -1 && jsonEnd !== -1) {
-        let operators = JSON.parse(code.substring(jsonStart, jsonEnd + 1));
-        if (q) {
-          operators = operators.filter(o =>
-            (o.empNo && o.empNo.toLowerCase().includes(q)) ||
-            (o.name && o.name.toLowerCase().includes(q)) ||
-            (o.section && o.section.toLowerCase().includes(q))
-          );
-        }
-        return res.json({ success: true, count: operators.length, operators: operators.slice(0, 50) });
-      }
-    }
-    return res.json({ success: true, count: 0, operators: [] });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: 'Failed to query operators' });
-  }
-});
+// Master Excel route moved before express.static above to prevent unauthenticated direct file bypass.
 
 // Explicit OJT Official Templates script handler
 app.get('/ojt_templates_data.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=3600');
   res.sendFile(path.join(__dirname, 'ojt_templates_data.js'));
+});
+
+// Explicit Seed Completed Records script handler
+app.get('/seed_data.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.sendFile(path.join(__dirname, 'seed_data.js'));
 });
 
 // Explicit docx-preview library script handler
@@ -934,32 +1276,152 @@ if (user && pass) {
 // ---------------------------------------------------------------------
 // Cloud-Persisted Upstash Redis Helper (Single Source of Truth)
 // ---------------------------------------------------------------------
-async function syncWithCloudKv(action, key = 'yokohama_records', value = null, ttlSeconds = null) {
+const REDIS_KEYS = {
+  employees: 'yokohama_employees',
+  records: 'yokohama_records',
+  ojt: 'yokohama_ojt',
+  ojtLegacy: 'yokohama_ojt_evaluations',
+  questions: 'yokohama_questions',
+  questionsLegacy: 'yokohama_question_bank',
+  settings: 'yokohama_settings'
+};
+
+let kvWriteDisabled = false;
+let upstashSeedCompleted = false;
+let upstashSeedPromise = null;
+let upstashLastSeedError = null;
+let upstashReadOnlyDetected = false;
+let upstashLastSeedAttemptAt = 0;
+let upstashSeedAttempts = 0;
+let upstashSeedRetryTimer = null;
+
+const UPSTASH_SEED_STEP_RETRIES = 3;
+const UPSTASH_SEED_STARTUP_MAX_RETRIES = 5;
+const UPSTASH_SEED_BASE_DELAY_MS = Number(process.env.UPSTASH_SEED_RETRY_BASE_MS) || 2000;
+
+function isPermanentRedisAuthError(err) {
+  if (!err) return false;
+  const msg = String(err.message || '');
+  return err.status === 401 || err.status === 403 || err.code === 'REDIS_FORBIDDEN' ||
+    msg.includes('401') || msg.includes('403') || msg.includes('NOPERM') || msg.includes('WRONGPASS');
+}
+
+function clearUpstashSeedRetryTimer() {
+  if (upstashSeedRetryTimer) {
+    clearTimeout(upstashSeedRetryTimer);
+    upstashSeedRetryTimer = null;
+  }
+}
+
+async function withUpstashStepRetry(stepName, fn, maxAttempts = UPSTASH_SEED_STEP_RETRIES) {
+  let lastErr = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (isPermanentRedisAuthError(err) || attempt >= maxAttempts) {
+        throw err;
+      }
+      const delayMs = Math.min(3000, 350 * Math.pow(2, attempt - 1));
+      await new Promise((resolve) => {
+        const t = setTimeout(resolve, delayMs);
+        if (typeof t.unref === 'function') t.unref();
+      });
+    }
+  }
+  throw lastErr;
+}
+
+const CLOUD_KV_GZIP_PREFIX = '__gz__:';
+const CLOUD_KV_GZIP_THRESHOLD_BYTES = 65536;
+
+function encodeCloudKvValue(value) {
+  const valStr = JSON.stringify(value);
+  if (Buffer.byteLength(valStr, 'utf8') > CLOUD_KV_GZIP_THRESHOLD_BYTES) {
+    const compressed = zlib.gzipSync(Buffer.from(valStr, 'utf8')).toString('base64');
+    return `${CLOUD_KV_GZIP_PREFIX}${compressed}`;
+  }
+  return valStr;
+}
+
+function decodeCloudKvValue(raw) {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== 'string') return raw;
+  if (raw.startsWith(CLOUD_KV_GZIP_PREFIX)) {
+    const b64 = raw.slice(CLOUD_KV_GZIP_PREFIX.length);
+    const inflated = zlib.gunzipSync(Buffer.from(b64, 'base64')).toString('utf8');
+    return JSON.parse(inflated);
+  }
+  return JSON.parse(raw);
+}
+
+async function readSanitizedHttpError(resp) {
+  let bodySnippet = '';
+  try {
+    const text = await resp.text();
+    if (text) {
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed && parsed.error) bodySnippet = String(parsed.error);
+        else bodySnippet = text;
+      } catch (e) {
+        bodySnippet = text;
+      }
+    }
+  } catch (e) {}
+  bodySnippet = bodySnippet.replace(/\s+/g, ' ').trim().slice(0, 200);
+  return bodySnippet
+    ? `Redis HTTP error: ${resp.status} ${resp.statusText} (${bodySnippet})`
+    : `Redis HTTP error: ${resp.status} ${resp.statusText}`;
+}
+
+function createRedisWriteError(key, cause) {
+  const detail = cause && cause.message ? cause.message : String(cause || 'Unknown Redis write error');
+  const err = new Error(`Cloud database write failed for ${key}: ${detail}`);
+  err.statusCode = 503;
+  err.code = 'REDIS_WRITE_FAILED';
+  err.exposeMessage = true;
+  return err;
+}
+
+async function syncWithCloudKv(action, key = REDIS_KEYS.records, value = null, ttlSeconds = null, options = {}) {
+  const strict = Boolean(options && options.strict);
   if (!kvUrl || !kvToken) {
     if (isProduction && (action === 'SET' || action === 'DEL') && process.env.FAIL_CLOSED_STORAGE === 'true') {
       throw new Error(`Production storage configuration missing: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required to persist ${action} on ${key}`);
     }
     return null;
   }
+  const isWriteAction = action === 'SET' || action === 'DEL';
+  if (isWriteAction && kvWriteDisabled && !strict && !(isProduction && process.env.FAIL_CLOSED_STORAGE === 'true')) {
+    return null;
+  }
+  const kvTimeoutSignal = (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function')
+    ? AbortSignal.timeout(15000)
+    : undefined;
   try {
     let resp;
     if (action === 'GET') {
       resp = await fetch(`${kvUrl}/get/${encodeURIComponent(key)}`, {
-        headers: { Authorization: `Bearer ${kvToken}` }
+        headers: { Authorization: `Bearer ${kvToken}` },
+        signal: kvTimeoutSignal
       });
       if (!resp.ok) {
-        throw new Error(`Redis HTTP error: ${resp.status} ${resp.statusText}`);
+        const err = new Error(await readSanitizedHttpError(resp));
+        err.status = resp.status;
+        throw err;
       }
       const data = await resp.json();
       if (data && data.error) {
         throw new Error(`Redis error: ${data.error}`);
       }
       if (data && data.result !== undefined && data.result !== null) {
-        return typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
+        return decodeCloudKvValue(data.result);
       }
       return null;
     } else if (action === 'SET') {
-      const valStr = JSON.stringify(value);
+      const valStr = encodeCloudKvValue(value);
       const command = ttlSeconds
         ? ['SET', key, valStr, 'EX', String(ttlSeconds)]
         : ['SET', key, valStr];
@@ -969,15 +1431,22 @@ async function syncWithCloudKv(action, key = 'yokohama_records', value = null, t
           Authorization: `Bearer ${kvToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(command)
+        body: JSON.stringify(command),
+        signal: kvTimeoutSignal
       });
       if (!resp.ok) {
-        throw new Error(`Redis HTTP error: ${resp.status} ${resp.statusText}`);
+        const err = new Error(await readSanitizedHttpError(resp));
+        err.status = resp.status;
+        throw err;
       }
       const data = await resp.json();
       if (data && data.error) {
-        throw new Error(`Redis error: ${data.error}`);
+        const err = new Error(`Redis error: ${data.error}`);
+        if (typeof data.error === 'string' && data.error.includes('NOPERM')) err.status = 403;
+        throw err;
       }
+      kvWriteDisabled = false;
+      upstashReadOnlyDetected = false;
       return data;
     } else if (action === 'DEL') {
       resp = await fetch(kvUrl, {
@@ -986,25 +1455,60 @@ async function syncWithCloudKv(action, key = 'yokohama_records', value = null, t
           Authorization: `Bearer ${kvToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(['DEL', key])
+        body: JSON.stringify(['DEL', key]),
+        signal: kvTimeoutSignal
       });
       if (!resp.ok) {
-        throw new Error(`Redis HTTP error: ${resp.status} ${resp.statusText}`);
+        const err = new Error(await readSanitizedHttpError(resp));
+        err.status = resp.status;
+        throw err;
       }
       const data = await resp.json();
       if (data && data.error) {
-        throw new Error(`Redis error: ${data.error}`);
+        const err = new Error(`Redis error: ${data.error}`);
+        if (typeof data.error === 'string' && data.error.includes('NOPERM')) err.status = 403;
+        throw err;
       }
+      kvWriteDisabled = false;
+      upstashReadOnlyDetected = false;
       return data;
     }
   } catch (err) {
-    console.error('Cloud KV sync error:', action, key, err ? err.message : '');
+    const isForbiddenWrite = isWriteAction && (
+      err?.status === 403 ||
+      (typeof err?.message === 'string' && (err.message.includes('403') || err.message.includes('NOPERM')))
+    );
+    if (isForbiddenWrite) {
+      upstashReadOnlyDetected = true;
+    }
+    if (strict && isWriteAction) {
+      if (!options?.silentLog) {
+        console.error('Cloud KV strict write error:', action, key, err ? err.message : '');
+      }
+      throw createRedisWriteError(key, err);
+    }
     if (isProduction && process.env.FAIL_CLOSED_STORAGE === 'true') {
+      if (!options?.silentLog) {
+        console.error('Cloud KV sync error:', action, key, err ? err.message : '');
+      }
       throw err;
     }
+    if (isForbiddenWrite) {
+      if (!kvWriteDisabled) {
+        kvWriteDisabled = true;
+        console.log('[UPSTASH] Read-only Redis token detected (403 NOPERM); cloud write-back disabled until a Read-Write UPSTASH_REDIS_REST_TOKEN is configured.');
+      }
+      return null;
+    }
+    console.warn('Cloud KV sync warning:', action, key, err ? err.message : '');
     return null;
   }
   return null;
+}
+
+async function persistToCloudKvStrict(action, key, value = null, ttlSeconds = null) {
+  if (!kvUrl || !kvToken) return null;
+  return await syncWithCloudKv(action, key, value, ttlSeconds, { strict: true });
 }
 
 async function setCloudOtp(email, record) {
@@ -1034,45 +1538,6 @@ async function delCloudOtp(email) {
   if (kvUrl && kvToken) {
     try {
       await syncWithCloudKv('DEL', `otp:${email}`);
-    } catch (e) {}
-  }
-}
-
-// ---------------------------------------------------------------------
-// Employee Setup Token / OTP Store (Task 2.3)
-// ---------------------------------------------------------------------
-const empSetupTokenStore = new Map();
-
-async function setCloudSetupToken(empNo, tokenData, ttlSeconds = 600) {
-  const normKey = String(empNo).trim().toLowerCase();
-  empSetupTokenStore.set(normKey, tokenData);
-  if (kvUrl && kvToken) {
-    try {
-      await syncWithCloudKv('SET', `setup_token:${normKey}`, tokenData, ttlSeconds);
-    } catch (e) {}
-  }
-}
-
-async function getCloudSetupToken(empNo) {
-  const normKey = String(empNo).trim().toLowerCase();
-  if (kvUrl && kvToken) {
-    try {
-      const cloudRecord = await syncWithCloudKv('GET', `setup_token:${normKey}`);
-      if (cloudRecord && cloudRecord.token) {
-        empSetupTokenStore.set(normKey, cloudRecord);
-        return cloudRecord;
-      }
-    } catch (e) {}
-  }
-  return empSetupTokenStore.get(normKey) || null;
-}
-
-async function delCloudSetupToken(empNo) {
-  const normKey = String(empNo).trim().toLowerCase();
-  empSetupTokenStore.delete(normKey);
-  if (kvUrl && kvToken) {
-    try {
-      await syncWithCloudKv('DEL', `setup_token:${normKey}`);
     } catch (e) {}
   }
 }
@@ -1119,212 +1584,66 @@ async function getCloudSession(token) {
 }
 
 // ---------------------------------------------------------------------
-// Cryptographic Password Engine & Individual Accounts Store (S2)
-// ---------------------------------------------------------------------
-function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return `scrypt:${salt}:${hash}`;
-}
-
-function verifyPassword(password, storedHash) {
-  if (!storedHash || !password) return false;
-  try {
-    if (storedHash.startsWith('scrypt:')) {
-      const parts = storedHash.split(':');
-      if (parts.length !== 3) return false;
-      const salt = parts[1];
-      const expectedHash = parts[2];
-      const actualHash = crypto.scryptSync(password, salt, 64).toString('hex');
-      return crypto.timingSafeEqual(Buffer.from(expectedHash, 'hex'), Buffer.from(actualHash, 'hex'));
-    }
-    // Legacy SHA-256 fallback
-    const sha = crypto.createHash('sha256').update(password).digest('hex');
-    return sha === storedHash;
-  } catch (err) {
-    return false;
-  }
-}
-
-let customAccountsMemory = null;
-
-function getDefaultAccounts() {
-  return [
-    {
-      id: 'acc_admin_01',
-      username: 'admin',
-      email: (process.env.ADMIN_EMAIL || 'reubengeoffrey16@gmail.com').toLowerCase().trim(),
-      name: 'Reuben Geoffrey',
-      roleClaim: 'hr_admin',
-      role: 'SUPERADMIN',
-      department: 'HR',
-      section: 'All',
-      passwordHash: hashPassword(process.env.ADMIN_PASSWORD || 'admin123'),
-      createdAt: '2026-01-01T00:00:00.000Z'
-    },
-    {
-      id: 'acc_hod_qc_01',
-      username: 'hod.qc',
-      email: 'hod.qc@atctires.com',
-      name: 'Quality Control HOD',
-      roleClaim: 'dept_hod',
-      role: 'DEPT_HEAD',
-      department: 'QUALITY CONTROL',
-      section: 'All QA',
-      passwordHash: hashPassword(process.env.DEPT_PASSWORD || 'hod123'),
-      createdAt: '2026-01-01T00:00:00.000Z'
-    },
-    {
-      id: 'acc_hod_prod_01',
-      username: 'hod.prod',
-      email: 'hod.production@atctires.com',
-      name: 'Production HOD',
-      roleClaim: 'dept_hod',
-      role: 'DEPT_HEAD',
-      department: 'PRODUCTION',
-      section: 'All Production',
-      passwordHash: hashPassword(process.env.DEPT_PASSWORD || 'hod123'),
-      createdAt: '2026-01-01T00:00:00.000Z'
-    },
-    {
-      id: 'acc_sec_tb_01',
-      username: 'sec.tirebuilding',
-      email: 'sec.tirebuilding@atctires.com',
-      name: 'Tire Building QA Head',
-      roleClaim: 'section_head',
-      role: 'SECTION_HEAD',
-      department: 'QUALITY CONTROL',
-      section: 'Tire building QA',
-      passwordHash: hashPassword(process.env.SECTION_PASSWORD || 'section123'),
-      createdAt: '2026-01-01T00:00:00.000Z'
-    },
-    {
-      id: 'acc_eval_safety_01',
-      username: 'eval.safety',
-      email: 'eval.safety@atctires.com',
-      name: 'Safety Evaluator',
-      roleClaim: 'evaluator',
-      role: 'EVALUATOR',
-      department: 'SAFETY',
-      section: 'Safety',
-      passwordHash: hashPassword(process.env.EVALUATOR_PASS_SAFETY || 'safety123'),
-      createdAt: '2026-01-01T00:00:00.000Z'
-    },
-    {
-      id: 'acc_eval_ci_01',
-      username: 'eval.ci',
-      email: 'eval.ci@atctires.com',
-      name: 'CI & TPM Evaluator',
-      roleClaim: 'evaluator',
-      role: 'EVALUATOR',
-      department: 'CI & TPM',
-      section: 'CI & TPM',
-      passwordHash: hashPassword(process.env.EVALUATOR_PASS_CI || 'ci123'),
-      createdAt: '2026-01-01T00:00:00.000Z'
-    },
-    {
-      id: 'acc_eval_quality_01',
-      username: 'eval.quality',
-      email: 'eval.quality@atctires.com',
-      name: 'Quality Evaluator',
-      roleClaim: 'evaluator',
-      role: 'EVALUATOR',
-      department: 'QUALITY CONTROL',
-      section: 'Quality',
-      passwordHash: hashPassword(process.env.EVALUATOR_PASS_QUALITY || 'quality123'),
-      createdAt: '2026-01-01T00:00:00.000Z'
-    },
-    {
-      id: 'acc_eval_tech_01',
-      username: 'eval.tech',
-      email: 'eval.tech@atctires.com',
-      name: 'Technical Evaluator',
-      roleClaim: 'evaluator',
-      role: 'EVALUATOR',
-      department: 'TECHNICAL',
-      section: 'Technical',
-      passwordHash: hashPassword(process.env.EVALUATOR_PASS_TECH || 'tech123'),
-      createdAt: '2026-01-01T00:00:00.000Z'
-    },
-    {
-      id: 'acc_eval_hr_01',
-      username: 'eval.hr',
-      email: 'eval.hr@atctires.com',
-      name: 'HR Evaluator',
-      roleClaim: 'evaluator',
-      role: 'EVALUATOR',
-      department: 'HR',
-      section: 'HR',
-      passwordHash: hashPassword(process.env.EVALUATOR_PASS_HR || 'hr123'),
-      createdAt: '2026-01-01T00:00:00.000Z'
-    }
-  ];
-}
-
-async function getAuthoritativeAccounts() {
-  if (kvUrl && kvToken) {
-    try {
-      const cloudAccounts = await syncWithCloudKv('GET', 'yokohama_accounts');
-      if (cloudAccounts && Array.isArray(cloudAccounts) && cloudAccounts.length > 0) {
-        customAccountsMemory = cloudAccounts;
-        return cloudAccounts;
-      }
-    } catch (e) {}
-  }
-  if (!customAccountsMemory || customAccountsMemory.length === 0) {
-    customAccountsMemory = getDefaultAccounts();
-  }
-  return customAccountsMemory;
-}
-
-async function saveAuthoritativeAccounts(accounts) {
-  customAccountsMemory = accounts;
-  if (kvUrl && kvToken) {
-    try {
-      await syncWithCloudKv('SET', 'yokohama_accounts', accounts);
-    } catch (kvErr) {
-      console.warn(`[STORAGE WARN] Cloud Redis sync for yokohama_accounts failed: ${kvErr.message}`);
-    }
-  }
-}
-
-// ---------------------------------------------------------------------
 // Role-Based Authorization Engine (RBAC)
 // ---------------------------------------------------------------------
 async function getAuthUser(req) {
-  // Check candidate tokens across explicit headers and session cookies
+  // Explicit headers always take precedence; cookie precedence follows route scope so an admin
+  // testing the Employee Portal in another tab is not shadowed by emp_session on Management routes.
+  const isEmpScopedRoute = typeof req.path === 'string' && (
+    req.path.startsWith('/api/employee') ||
+    req.path.startsWith('/api/exam') ||
+    req.path.startsWith('/api/auth/employee')
+  );
+  const empCookie = req.signedCookies.emp_session || req.cookies.emp_session;
+  const adminCookie = req.signedCookies.admin_session || req.cookies.admin_session;
+  const evaluatorCookie = req.signedCookies.evaluator_session || req.cookies.evaluator_session;
+  const sectionCookie = req.signedCookies.section_session || req.cookies.section_session;
+  const deptCookie = req.signedCookies.dept_session || req.cookies.dept_session;
+
+  const headerTokens = isEmpScopedRoute
+    ? [
+        req.headers['x-emp-token'],
+        req.headers['x-admin-token'],
+        req.headers['x-evaluator-token'],
+        req.headers['x-section-token'],
+        req.headers['x-dept-token'],
+        req.headers['x-session-token'],
+        req.headers.authorization && req.headers.authorization.startsWith('Bearer ') ? req.headers.authorization.slice(7).trim() : null
+      ]
+    : [
+        req.headers['x-admin-token'],
+        req.headers['x-dept-token'],
+        req.headers['x-section-token'],
+        req.headers['x-evaluator-token'],
+        req.headers['x-session-token'],
+        req.headers.authorization && req.headers.authorization.startsWith('Bearer ') ? req.headers.authorization.slice(7).trim() : null,
+        req.headers['x-emp-token']
+      ];
+
   const candidateTokens = [
-    req.headers['x-emp-token'],
-    req.headers['x-admin-token'],
-    req.headers['x-evaluator-token'],
-    req.headers['x-section-token'],
-    req.headers['x-dept-token'],
-    req.headers['x-session-token'],
-    req.headers.authorization && req.headers.authorization.startsWith('Bearer ') ? req.headers.authorization.slice(7).trim() : null,
-    req.signedCookies.emp_session || req.cookies.emp_session,
-    req.signedCookies.admin_session || req.cookies.admin_session,
-    req.signedCookies.evaluator_session || req.cookies.evaluator_session,
-    req.signedCookies.section_session || req.cookies.section_session,
-    req.signedCookies.dept_session || req.cookies.dept_session
+    ...headerTokens,
+    ...(isEmpScopedRoute
+      ? [empCookie, adminCookie, evaluatorCookie, sectionCookie, deptCookie]
+      : [adminCookie, deptCookie, sectionCookie, evaluatorCookie, empCookie])
   ].filter(Boolean);
 
   for (const token of candidateTokens) {
     const session = await getCloudSession(token);
     if (session) {
       req.authUser = session;
-      if (['SUPERADMIN', 'ADMIN', 'hr_admin'].includes(session.role) || session.roleClaim === 'hr_admin') {
+      if (['SUPERADMIN', 'ADMIN'].includes(session.role)) {
         req.adminSession = session;
       }
-      if (['emp', 'employee'].includes(session.role) || session.roleClaim === 'employee') {
+      if (session.role === 'emp') {
         req.empSession = session;
       }
-      if (['EVALUATOR', 'evaluator'].includes(session.role) || session.roleClaim === 'evaluator') {
+      if (session.role === 'EVALUATOR') {
         req.evaluatorSession = session;
       }
-      if (['SECTION_HEAD', 'section_head'].includes(session.role) || session.roleClaim === 'section_head') {
+      if (session.role === 'SECTION_HEAD') {
         req.sectionSession = session;
       }
-      if (['DEPT_HEAD', 'dept_hod'].includes(session.role) || session.roleClaim === 'dept_hod') {
+      if (session.role === 'DEPT_HEAD') {
         req.deptSession = session;
       }
       return session;
@@ -1339,7 +1658,7 @@ async function requireSuperAdminAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
   }
-  if (user.role !== 'SUPERADMIN' && user.roleClaim !== 'hr_admin') {
+  if (user.role !== 'SUPERADMIN') {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Superadmin access privilege required' });
   }
   next();
@@ -1350,7 +1669,7 @@ async function requireAdminAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
   }
-  if (!['SUPERADMIN', 'ADMIN'].includes(user.role) && user.roleClaim !== 'hr_admin') {
+  if (!['SUPERADMIN', 'ADMIN'].includes(user.role)) {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Administrator privileges required' });
   }
   next();
@@ -1361,7 +1680,7 @@ async function requireEvaluatorAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
   }
-  if (!['EVALUATOR', 'ADMIN', 'SUPERADMIN'].includes(user.role) && !['evaluator', 'hr_admin'].includes(user.roleClaim)) {
+  if (!['EVALUATOR', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Evaluator privileges required' });
   }
   next();
@@ -1372,7 +1691,7 @@ async function requireSectionAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
   }
-  if (!['SECTION_HEAD', 'ADMIN', 'SUPERADMIN'].includes(user.role) && !['section_head', 'hr_admin'].includes(user.roleClaim)) {
+  if (!['SECTION_HEAD', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Section Head privileges required' });
   }
   next();
@@ -1383,7 +1702,7 @@ async function requireDeptAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
   }
-  if (!['DEPT_HEAD', 'ADMIN', 'SUPERADMIN'].includes(user.role) && !['dept_hod', 'hr_admin'].includes(user.roleClaim)) {
+  if (!['DEPT_HEAD', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Department HOD privileges required' });
   }
   next();
@@ -1394,7 +1713,7 @@ async function requireEmpAuth(req, res, next) {
   if (!user) {
     return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Employee authentication required' });
   }
-  if (!['emp', 'ADMIN', 'SUPERADMIN'].includes(user.role) && !['employee', 'hr_admin'].includes(user.roleClaim)) {
+  if (!['emp', 'ADMIN', 'SUPERADMIN'].includes(user.role)) {
     return res.status(403).json({ success: false, authenticated: false, message: 'Forbidden: Employee privileges required' });
   }
   next();
@@ -1410,12 +1729,11 @@ async function requireAnyAuth(req, res, next) {
 
 async function canAccessEmployeeData(user, targetEmpNo) {
   if (!user) return false;
-  if (['SUPERADMIN', 'ADMIN'].includes(user.role) || user.roleClaim === 'hr_admin') return true;
+  if (['SUPERADMIN', 'ADMIN'].includes(user.role)) return true;
 
   const strTarget = String(targetEmpNo).trim().toLowerCase();
-  if (user.role === 'emp' || user.roleClaim === 'employee') {
-    return String(user.empNo).trim().toLowerCase() === strTarget ||
-           ('0' + String(user.empNo).trim().toLowerCase()) === strTarget;
+  if (user.role === 'emp') {
+    return String(user.empNo).trim().toLowerCase() === strTarget;
   }
 
   const employees = await getAuthoritativeEmployees();
@@ -1455,14 +1773,18 @@ try {
   }
 } catch (e) {}
 
-async function logAuditEvent(action, user, details, req = null) {
-  const ip = req ? (req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown') : 'system';
+async function logAuditEvent(action, user, details, req = null, target = '') {
+  const ip = req ? (req.headers['x-forwarded-for'] || (req.socket && req.socket.remoteAddress) || 'unknown') : 'system';
+  const actorStr = typeof user === 'string'
+    ? user
+    : ((user && (user.email || user.username || user.name || user.empNo)) || 'Unknown');
   const entry = {
     id: crypto.randomBytes(8).toString('hex'),
     timestamp: new Date().toISOString(),
-    action,
-    user: typeof user === 'string' ? user : (user.name || user.email || user.empNo || 'Unknown'),
-    details: typeof details === 'string' ? details : JSON.stringify(details),
+    action: String(action || 'EVENT'),
+    user: String(actorStr),
+    target: target ? String(target) : '',
+    details: typeof details === 'string' ? details : JSON.stringify(details || ''),
     ip: String(ip).split(',')[0].trim()
   };
 
@@ -1488,13 +1810,38 @@ async function logAuditEvent(action, user, details, req = null) {
 }
 
 app.get('/api/admin/audit-logs', requireAdminAuth, async (req, res) => {
+  const actionFilter = String(req.query.action || '').trim().toUpperCase();
+  const queryFilter = String(req.query.q || '').trim().toLowerCase();
+  let logs = null;
+
   if (kvUrl && kvToken) {
     const cloudLogs = await syncWithCloudKv('GET', 'yokohama_audit_logs');
-    if (cloudLogs && Array.isArray(cloudLogs)) {
-      return res.json({ success: true, logs: cloudLogs });
-    }
+    if (cloudLogs && Array.isArray(cloudLogs)) logs = cloudLogs;
   }
-  return res.json({ success: true, logs: auditLogsMemory });
+  if (!logs) logs = auditLogsMemory;
+
+  let filtered = Array.isArray(logs) ? logs : [];
+  if (actionFilter && actionFilter !== 'ALL') {
+    filtered = filtered.filter((l) => String(l.action || '').toUpperCase().includes(actionFilter));
+  }
+  if (queryFilter) {
+    filtered = filtered.filter((l) =>
+      `${l.action} ${l.user} ${l.target || ''} ${l.details} ${l.ip}`.toLowerCase().includes(queryFilter)
+    );
+  }
+  return res.json({ success: true, logs: filtered });
+});
+
+app.post('/api/audit-export', requireAnyAuth, async (req, res) => {
+  const { exportType, summary, target } = req.body || {};
+  await logAuditEvent(
+    String(exportType || 'EXPORT_DATA').toUpperCase().slice(0, 48),
+    req.authUser,
+    String(summary || 'User exported portal data').slice(0, 300),
+    req,
+    String(target || '')
+  );
+  return res.json({ success: true });
 });
 
 // ---------------------------------------------------------------------
@@ -1618,44 +1965,64 @@ app.post('/api/auth/admin/send-otp', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------
-// API ROUTE: POST /api/auth/admin/login (Password Login via Environment Credentials)
+// API ROUTE: POST /api/auth/admin/login (DB Hashed Accounts + Env Credentials)
 // ---------------------------------------------------------------------
 app.post('/api/auth/admin/login', authRateLimiter(), async (req, res) => {
-  const username = (req.body.username || req.body.email || '').trim();
+  const username = (req.body.username || '').trim();
   const password = (req.body.password || '').trim();
 
   if (!username || !password) {
     return res.status(400).json({
       success: false,
-      message: 'Admin username/email and password required'
+      message: 'Username/email and password required'
     });
   }
 
-  // Default shared admin password permitted unless REJECT_DEFAULT_PASSWORDS=true is explicitly set
-  if (process.env.REJECT_DEFAULT_PASSWORDS === 'true' && isProduction && !process.env.ADMIN_PASSWORD && password === 'admin123') {
-    return handleAuthFailure(req, res, 403, 'Default shared admin password rejected in production. Please configure ADMIN_PASSWORD.');
+  let matchedUser = null;
+  let blockAdminLegacyFallback = false;
+
+  // 1. Check Redis/memory individual hashed staff user account first
+  try {
+    const staffList = await getAuthoritativeStaffUsers();
+    const dbUser = await findStaffUserByIdentifier(username);
+    if (dbUser) {
+      if (!dbUser.isActive || dbUser.passwordCustom) {
+        blockAdminLegacyFallback = true;
+      }
+      if (dbUser.isActive && ['SUPERADMIN', 'ADMIN'].includes(dbUser.role) && dbUser.passwordHash) {
+        const ok = await verifyStaffPassword(password, dbUser.passwordHash);
+        if (ok) {
+          matchedUser = {
+            uid: dbUser.uid,
+            username: dbUser.username,
+            email: dbUser.email,
+            name: dbUser.displayName || 'Administrator',
+            role: dbUser.role
+          };
+        }
+      }
+    } else {
+      // If seeded primary superadmin changed its username or password, block legacy fallback
+      const primarySuper = staffList.find((u) => Number(u.id) === 1 && u.role === 'SUPERADMIN');
+      if (primarySuper && (primarySuper.passwordCustom || !primarySuper.isActive)) {
+        blockAdminLegacyFallback = true;
+      }
+    }
+  } catch (e) {
+    console.warn('[STAFF AUTH WARN] admin login check:', e.message);
   }
 
-  const accounts = await getAuthoritativeAccounts();
-  const adminAccount = accounts.find(a => 
-    a.roleClaim === 'hr_admin' && 
-    (a.username.toLowerCase() === username.toLowerCase() || a.email.toLowerCase() === username.toLowerCase() || username.toLowerCase() === 'admin')
-  );
+  // 2. Fallback to env configured master administrator (required for automated tests / headless bootstrapping)
+  if (!matchedUser && !blockAdminLegacyFallback && (process.env.NODE_ENV === 'test' || process.env.ALLOW_LEGACY_ROLE_LOGIN !== 'false')) {
+    const envUser = (process.env.ADMIN_USERNAME || 'admin').trim();
+    const envPass = (process.env.ADMIN_PASSWORD || 'admin123').trim();
+    const envEmail = (process.env.ADMIN_EMAIL || 'reubengeoffrey16@gmail.com').trim().toLowerCase();
 
-  const envUser = (process.env.ADMIN_USERNAME || 'admin').trim();
-  const envPass = (process.env.ADMIN_PASSWORD || 'admin123').trim();
-  const envEmail = (process.env.ADMIN_EMAIL || 'reubengeoffrey16@gmail.com').trim().toLowerCase();
+    const uLower = username.toLowerCase();
+    const validUsers = [envUser.toLowerCase(), envEmail, 'admin'].filter(Boolean);
+    const isUserValid = validUsers.includes(uLower);
 
-  const uLower = username.toLowerCase();
-  const validUsers = [envUser.toLowerCase(), envEmail, 'admin'].filter(Boolean);
-  const isUserValid = validUsers.includes(uLower) || Boolean(adminAccount);
-
-  let isPassValid = false;
-  if (password === envPass) {
-    isPassValid = true;
-  } else if (adminAccount && adminAccount.passwordHash && verifyPassword(password, adminAccount.passwordHash)) {
-    isPassValid = true;
-  } else {
+    let isPassValid = false;
     try {
       const pBuf = Buffer.from(password);
       const epBuf = Buffer.from(envPass);
@@ -1663,43 +2030,45 @@ app.post('/api/auth/admin/login', authRateLimiter(), async (req, res) => {
     } catch (e) {
       isPassValid = false;
     }
+
+    if (isUserValid && isPassValid) {
+      matchedUser = {
+        email: envEmail,
+        name: 'Administrator',
+        role: 'SUPERADMIN'
+      };
+    }
   }
 
-  if (isUserValid && isPassValid) {
+  if (matchedUser) {
     if (req.recordAuthSuccess) await req.recordAuthSuccess();
     const sessionToken = crypto.randomBytes(32).toString('hex');
-    const adminName = adminAccount?.name || 'Administrator';
-
     const sessionData = {
-      accountId: adminAccount?.id || 'acc_admin_01',
-      email: adminAccount?.email || (process.env.ADMIN_EMAIL || 'reubengeoffrey16@gmail.com').toLowerCase(),
-      name: adminName,
-      roleClaim: 'hr_admin',
-      role: 'SUPERADMIN',
-      department: 'HR',
+      email: matchedUser.email,
+      username: matchedUser.username || username,
+      name: matchedUser.name,
+      role: matchedUser.role,
       createdAt: new Date().toISOString(),
       expiresAt: Date.now() + (8 * 60 * 60 * 1000)
     };
 
     await setCloudSession(sessionToken, sessionData, 28800);
-    res.cookie('admin_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
-    await logAuditEvent('ADMIN_LOGIN_PASSWORD', sessionData.email, 'Admin signed in via password', req);
+    res.cookie('admin_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000, req));
+    await logAuditEvent('ADMIN_LOGIN_PASSWORD', sessionData.email || sessionData.username, 'Admin signed in via password', req, sessionData.role);
 
     return res.json({
       success: true,
       message: 'Admin authenticated successfully',
       token: sessionToken,
       admin: {
-        accountId: sessionData.accountId,
         email: sessionData.email,
-        name: adminName,
-        roleClaim: 'hr_admin',
-        role: 'SUPERADMIN'
+        name: sessionData.name,
+        role: sessionData.role
       }
     });
   }
 
-  return handleAuthFailure(req, res, 401, 'Invalid username or password');
+  return handleAuthFailure(req, res, 401, 'Invalid credentials');
 });
 
 // ---------------------------------------------------------------------
@@ -1769,7 +2138,7 @@ app.post('/api/auth/admin/verify-otp', async (req, res) => {
     };
 
     await setCloudSession(sessionToken, sessionData, 28800);
-    res.cookie('admin_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
+    res.cookie('admin_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000, req));
     await logAuditEvent('ADMIN_LOGIN_OTP', emailRaw, 'Admin verified OTP successfully', req);
 
     return res.json({
@@ -1792,7 +2161,7 @@ app.post('/api/auth/admin/verify-otp', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------
-// EVALUATOR AUTHENTICATION (Server-Verified & RBAC Scoped)
+// EVALUATOR AUTHENTICATION (Individual PG Accounts + Role Fallback)
 // ---------------------------------------------------------------------
 const EVALUATOR_CREDENTIALS = {
   'safety': process.env.EVALUATOR_PASS_SAFETY || 'safety123',
@@ -1802,217 +2171,292 @@ const EVALUATOR_CREDENTIALS = {
   'hr': process.env.EVALUATOR_PASS_HR || 'hr123'
 };
 
+async function resolveScopedStaffAuth({ username, defaultIdentifier, role, department, section, password, allowedRoles, legacyExpectedPass }) {
+  let matchedAccount = null;
+  let blockFallback = false;
+  try {
+    const usersList = await getAuthoritativeStaffUsers();
+    const candidates = username
+      ? findScopedStaffMatches(usersList, { identifier: username })
+      : [
+          ...(defaultIdentifier ? findScopedStaffMatches(usersList, { identifier: defaultIdentifier }) : []),
+          ...findScopedStaffMatches(usersList, { role, department, section })
+        ];
+    const unique = Array.from(new Map(candidates.map((u) => [u.id, u])).values());
+    for (const dbUser of unique) {
+      if (!dbUser.isActive || dbUser.passwordCustom) blockFallback = true;
+      if (dbUser.isActive && allowedRoles.includes(dbUser.role) && dbUser.passwordHash) {
+        if (await verifyStaffPassword(password, dbUser.passwordHash)) {
+          matchedAccount = dbUser;
+          break;
+        }
+      }
+    }
+    if (username && unique.length > 0 && !matchedAccount) {
+      blockFallback = true;
+    }
+  } catch (e) {}
+
+  let isValid = Boolean(matchedAccount);
+  if (!isValid && !blockFallback && (process.env.NODE_ENV === 'test' || process.env.ALLOW_LEGACY_ROLE_LOGIN !== 'false')) {
+    try {
+      const pBuf = Buffer.from(password);
+      const expBuf = Buffer.from(legacyExpectedPass);
+      if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
+        isValid = true;
+      }
+    } catch (e) {}
+  }
+  return { isValid, matchedAccount };
+}
+
 app.post('/api/auth/evaluator/login', authRateLimiter(), async (req, res) => {
   const section = (req.body.section || 'Safety').trim();
+  const username = (req.body.username || '').trim();
   const password = (req.body.password || '').trim();
-  const identifier = (req.body.email || req.body.username || '').trim().toLowerCase();
 
   if (!password) {
-    return res.status(400).json({ success: false, message: 'Evaluator password required' });
+    return res.status(400).json({ success: false, message: 'Credentials required' });
   }
 
   const secKey = section.toLowerCase();
-
-  // Default shared evaluator password permitted unless REJECT_DEFAULT_PASSWORDS=true is explicitly set
-  if (process.env.REJECT_DEFAULT_PASSWORDS === 'true' && isProduction && !process.env.EVALUATOR_PASS_SAFETY && !process.env.EVALUATOR_PASS_CI &&
-      !process.env.EVALUATOR_PASS_QUALITY && !process.env.EVALUATOR_PASS_TECH &&
-      !process.env.EVALUATOR_PASS_HR && ['safety123', 'ci123', 'quality123', 'tech123', 'hr123', 'ojt123'].includes(password)) {
-    return handleAuthFailure(req, res, 403, 'Default shared evaluator password rejected in production. Individual accounts or configured environment credentials required.');
-  }
-
-  const accounts = await getAuthoritativeAccounts();
-  const evalAccount = accounts.find(a => 
-    a.roleClaim === 'evaluator' && 
-    (
-      (identifier && (a.username.toLowerCase() === identifier || a.email.toLowerCase() === identifier)) ||
-      (a.section && a.section.toLowerCase() === secKey) ||
-      (a.username && a.username.toLowerCase() === `eval.${secKey.replace(/[^a-z0-9]/g, '')}`)
-    )
-  );
-
-  const expectedPass = EVALUATOR_CREDENTIALS[secKey] || process.env.EVALUATOR_PASSWORD || 'ojt123';
-
-  let isValid = false;
-  if (evalAccount && evalAccount.passwordHash && verifyPassword(password, evalAccount.passwordHash)) {
-    isValid = true;
-  } else {
-    try {
-      const pBuf = Buffer.from(password);
-      const expBuf = Buffer.from(expectedPass);
-      if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
-        isValid = true;
-      }
-    } catch (e) {}
-  }
+  const defaultUsername = secKey.includes('safety') ? 'eval.safety'
+    : secKey.includes('ci') ? 'eval.ci'
+    : secKey.includes('quality') ? 'eval.quality'
+    : secKey.includes('tech') ? 'eval.tech'
+    : secKey === 'hr' ? 'eval.hr'
+    : '';
+  const { isValid, matchedAccount } = await resolveScopedStaffAuth({
+    username,
+    defaultIdentifier: defaultUsername,
+    role: 'EVALUATOR',
+    section,
+    password,
+    allowedRoles: ['EVALUATOR', 'ADMIN', 'SUPERADMIN'],
+    legacyExpectedPass: EVALUATOR_CREDENTIALS[secKey] || process.env.EVALUATOR_PASSWORD || 'ojt123'
+  });
 
   if (!isValid) {
-    return handleAuthFailure(req, res, 401, `Invalid password for ${section} Evaluator`);
+    return handleAuthFailure(req, res, 401, 'Invalid credentials');
   }
 
   if (req.recordAuthSuccess) await req.recordAuthSuccess();
 
   const sessionToken = crypto.randomBytes(32).toString('hex');
+  const assignedSection = (matchedAccount && matchedAccount.section) ? matchedAccount.section : section;
   const sessionData = {
-    accountId: evalAccount?.id || `acc_eval_${secKey}`,
-    roleClaim: 'evaluator',
     role: 'EVALUATOR',
-    section: section,
-    name: evalAccount?.name || `${section} Evaluator`,
-    email: evalAccount?.email || `eval.${secKey}@atctires.com`,
+    section: assignedSection,
+    username: matchedAccount ? matchedAccount.username : undefined,
+    email: matchedAccount ? matchedAccount.email : undefined,
+    name: (matchedAccount && matchedAccount.displayName) || `${assignedSection} Evaluator`,
     createdAt: new Date().toISOString(),
     expiresAt: Date.now() + (8 * 60 * 60 * 1000)
   };
 
   await setCloudSession(sessionToken, sessionData, 28800);
-  res.cookie('evaluator_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
-  await logAuditEvent('EVALUATOR_LOGIN', sessionData.name, `Logged in to ${section} practical evaluation`, req);
+  res.cookie('evaluator_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000, req));
+  await logAuditEvent('EVALUATOR_LOGIN', sessionData.email || sessionData.name, `Logged in to ${assignedSection} practical evaluation`, req, assignedSection);
 
   return res.json({
     success: true,
-    message: `Signed in as ${section} Evaluator`,
+    message: `Signed in as ${assignedSection} Evaluator`,
     token: sessionToken,
     user: sessionData
   });
 });
 
 // ---------------------------------------------------------------------
-// SECTION HEAD AUTHENTICATION (Server-Verified & RBAC Scoped)
+// SECTION HEAD AUTHENTICATION (Individual PG Accounts + Role Fallback)
 // ---------------------------------------------------------------------
 app.post('/api/auth/section/login', authRateLimiter(), async (req, res) => {
-  const section = (req.body.section || '').trim();
+  const rawSection = (req.body.section || '').trim();
+  const username = (req.body.username || '').trim();
   const password = (req.body.password || '').trim();
-  const identifier = (req.body.email || req.body.username || '').trim().toLowerCase();
 
-  if (!section || !password) {
-    return res.status(400).json({ success: false, message: 'Section name and password required' });
+  if (!rawSection || !password) {
+    return res.status(400).json({ success: false, message: 'Section name and credentials required' });
   }
 
-  if (process.env.REJECT_DEFAULT_PASSWORDS === 'true' && isProduction && !process.env.SECTION_PASSWORD && password === 'section123') {
-    return handleAuthFailure(req, res, 403, 'Default shared section password rejected in production. Individual accounts or configured SECTION_PASSWORD required.');
-  }
-
-  const accounts = await getAuthoritativeAccounts();
-  const secAccount = accounts.find(a => 
-    a.roleClaim === 'section_head' && 
-    (
-      (identifier && (a.username.toLowerCase() === identifier || a.email.toLowerCase() === identifier)) ||
-      (a.section && a.section.toLowerCase() === section.toLowerCase()) ||
-      normalizeSectionNameServer(a.section) === normalizeSectionNameServer(section)
-    )
-  );
-
-  const expectedPass = process.env.SECTION_PASSWORD || 'section123';
-  let isValid = false;
-  if (secAccount && secAccount.passwordHash && verifyPassword(password, secAccount.passwordHash)) {
-    isValid = true;
-  } else {
-    try {
-      const pBuf = Buffer.from(password);
-      const expBuf = Buffer.from(expectedPass);
-      if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
-        isValid = true;
-      }
-    } catch (e) {}
-  }
+  const { isValid, matchedAccount } = await resolveScopedStaffAuth({
+    username,
+    defaultIdentifier: undefined,
+    role: 'SECTION_HEAD',
+    section: rawSection,
+    password,
+    allowedRoles: ['SECTION_HEAD', 'ADMIN', 'SUPERADMIN'],
+    legacyExpectedPass: process.env.SECTION_PASSWORD || 'section123'
+  });
 
   if (!isValid) {
-    return handleAuthFailure(req, res, 401, `Invalid password for ${section} Portal`);
+    return handleAuthFailure(req, res, 401, 'Invalid credentials');
   }
 
   if (req.recordAuthSuccess) await req.recordAuthSuccess();
 
   const sessionToken = crypto.randomBytes(32).toString('hex');
+  const assignedSection = (matchedAccount && matchedAccount.section && matchedAccount.section.toLowerCase() !== rawSection.toLowerCase())
+    ? matchedAccount.section
+    : rawSection;
   const sessionData = {
-    accountId: secAccount?.id || `acc_sec_${section}`,
-    roleClaim: 'section_head',
     role: 'SECTION_HEAD',
-    section: section,
-    name: secAccount?.name || `${section} Section Head`,
-    email: secAccount?.email || `sec.${section.toLowerCase().replace(/[^a-z0-9]/g, '')}@atctires.com`,
+    section: assignedSection,
+    username: matchedAccount ? matchedAccount.username : undefined,
+    email: matchedAccount ? matchedAccount.email : undefined,
+    name: (matchedAccount && matchedAccount.displayName) || `${assignedSection} Section Head`,
     createdAt: new Date().toISOString(),
     expiresAt: Date.now() + (8 * 60 * 60 * 1000)
   };
 
   await setCloudSession(sessionToken, sessionData, 28800);
-  res.cookie('section_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
-  await logAuditEvent('SECTION_LOGIN', sessionData.name, `Logged in to ${section} portal`, req);
+  res.cookie('section_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000, req));
+  await logAuditEvent('SECTION_LOGIN', sessionData.email || sessionData.name, `Logged in to ${assignedSection} portal`, req, assignedSection);
 
   return res.json({
     success: true,
-    message: `Signed in as ${section} Section Head`,
+    message: `Signed in as ${assignedSection} Section Head`,
     token: sessionToken,
     user: sessionData
   });
 });
 
 // ---------------------------------------------------------------------
-// DEPARTMENT / HOD AUTHENTICATION (Server-Verified & RBAC Scoped)
+// DEPARTMENT / HOD AUTHENTICATION (Individual PG Accounts + Role Fallback)
 // ---------------------------------------------------------------------
 app.post('/api/auth/dept/login', authRateLimiter(), async (req, res) => {
-  const department = (req.body.department || 'QUALITY CONTROL').trim();
+  const department = normalizeDepartmentName(req.body.department || 'QUALITY CONTROL');
+  const username = (req.body.username || '').trim();
   const password = (req.body.password || '').trim();
-  const identifier = (req.body.email || req.body.username || '').trim().toLowerCase();
 
   if (!password) {
-    return res.status(400).json({ success: false, message: 'Department HOD password required' });
+    return res.status(400).json({ success: false, message: 'Credentials required' });
   }
 
-  if (process.env.REJECT_DEFAULT_PASSWORDS === 'true' && isProduction && !process.env.DEPT_PASSWORD && password === 'hod123') {
-    return handleAuthFailure(req, res, 403, 'Default shared HOD password rejected in production. Individual accounts or configured DEPT_PASSWORD required.');
-  }
-
-  const accounts = await getAuthoritativeAccounts();
-  const deptAccount = accounts.find(a => 
-    a.roleClaim === 'dept_hod' && 
-    (
-      (identifier && (a.username.toLowerCase() === identifier || a.email.toLowerCase() === identifier)) ||
-      (a.department && a.department.toLowerCase() === department.toLowerCase())
-    )
-  );
-
-  const expectedPass = process.env.DEPT_PASSWORD || 'hod123';
-  let isValid = false;
-  if (deptAccount && deptAccount.passwordHash && verifyPassword(password, deptAccount.passwordHash)) {
-    isValid = true;
-  } else {
-    try {
-      const pBuf = Buffer.from(password);
-      const expBuf = Buffer.from(expectedPass);
-      if (pBuf.length === expBuf.length && crypto.timingSafeEqual(pBuf, expBuf)) {
-        isValid = true;
-      }
-    } catch (e) {}
-  }
+  const defaultUser = department === 'QUALITY CONTROL' ? 'hod.qc'
+    : department === 'PRODUCTION' ? 'hod.production' : '';
+  const { isValid, matchedAccount } = await resolveScopedStaffAuth({
+    username,
+    defaultIdentifier: defaultUser,
+    role: 'DEPT_HEAD',
+    department,
+    password,
+    allowedRoles: ['DEPT_HEAD', 'ADMIN', 'SUPERADMIN'],
+    legacyExpectedPass: process.env.DEPT_PASSWORD || 'hod123'
+  });
 
   if (!isValid) {
-    return handleAuthFailure(req, res, 401, 'Invalid password for Department HOD');
+    return handleAuthFailure(req, res, 401, 'Invalid credentials');
   }
 
   if (req.recordAuthSuccess) await req.recordAuthSuccess();
 
   const sessionToken = crypto.randomBytes(32).toString('hex');
+  const assignedDept = (matchedAccount && matchedAccount.department && matchedAccount.department !== 'ALL')
+    ? matchedAccount.department
+    : department;
   const sessionData = {
-    accountId: deptAccount?.id || `acc_dept_${department}`,
-    roleClaim: 'dept_hod',
     role: 'DEPT_HEAD',
-    department: department,
-    name: deptAccount?.name || `${department} HOD`,
-    email: deptAccount?.email || `hod.${department.toLowerCase().replace(/[^a-z0-9]/g, '')}@atctires.com`,
+    department: assignedDept,
+    username: matchedAccount ? matchedAccount.username : undefined,
+    email: matchedAccount ? matchedAccount.email : undefined,
+    name: (matchedAccount && matchedAccount.displayName) || `${assignedDept} HOD`,
     createdAt: new Date().toISOString(),
     expiresAt: Date.now() + (8 * 60 * 60 * 1000)
   };
 
   await setCloudSession(sessionToken, sessionData, 28800);
-  res.cookie('dept_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
-  await logAuditEvent('DEPT_LOGIN', sessionData.name, `Logged in to Department dashboard`, req);
+  res.cookie('dept_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000, req));
+  await logAuditEvent('DEPT_LOGIN', sessionData.email || sessionData.name, `Logged in to Department dashboard`, req, assignedDept);
 
   return res.json({
     success: true,
-    message: `Signed in as ${department} HOD`,
+    message: `Signed in as ${assignedDept} HOD`,
     token: sessionToken,
     user: sessionData
   });
 });
+
+// ---------------------------------------------------------------------
+// STAFF USER MANAGEMENT (Redis-Backed)
+// ---------------------------------------------------------------------
+
+async function handleSaveStaffUserRequest(req, res, explicitId) {
+  const { id, username, email, displayName, role, department, section, password, isActive } = req.body || {};
+  const targetId = explicitId !== undefined && explicitId !== null ? explicitId : id;
+  const isEditing = targetId !== undefined && targetId !== null && String(targetId).trim() !== '';
+
+  const cleanUsername = String(username || '').trim().toLowerCase();
+  const cleanDisplayName = String(displayName || '').trim();
+  const cleanEmail = String(email || '').trim().toLowerCase();
+
+  if (!cleanUsername || !/^[a-z0-9._@-]{2,64}$/i.test(cleanUsername)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Valid username is required (2-64 chars: letters, numbers, ., _, -, @)'
+    });
+  }
+  if (!cleanDisplayName || cleanDisplayName.length > 100) {
+    return res.status(400).json({ success: false, message: 'Display name is required (1-100 chars)' });
+  }
+  if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+    return res.status(400).json({ success: false, message: 'Valid email address is required' });
+  }
+  const allowedRoles = ['SUPERADMIN', 'ADMIN', 'DEPT_HEAD', 'SECTION_HEAD', 'EVALUATOR', 'emp'];
+  if (!role || !allowedRoles.includes(role)) {
+    return res.status(400).json({ success: false, message: 'Invalid role' });
+  }
+  const trimmedPassword = password !== undefined && password !== null ? String(password).trim() : '';
+  if (!isEditing && trimmedPassword.length < 6) {
+    return res.status(400).json({ success: false, message: 'Password (minimum 6 characters) is required for a new staff account' });
+  }
+  if (trimmedPassword && (trimmedPassword.length < 6 || trimmedPassword.length > 128)) {
+    return res.status(400).json({ success: false, message: 'Password must be between 6 and 128 characters' });
+  }
+
+  const result = await upsertStaffAccountAuthoritative({
+    id: isEditing ? targetId : undefined,
+    requirePassword: !isEditing,
+    username: cleanUsername,
+    email: cleanEmail || `${cleanUsername}@atctires.local`,
+    displayName: cleanDisplayName,
+    role,
+    department: department !== undefined && department !== null && String(department).trim() !== ''
+      ? (String(department).trim().toUpperCase() === 'ALL' ? 'ALL' : normalizeDepartmentName(department))
+      : null,
+    section: section !== undefined && section !== null && String(section).trim() !== '' ? String(section).trim() : null,
+    password: trimmedPassword || undefined,
+    isActive: isActive !== undefined ? Boolean(isActive) : true
+  });
+
+  if (result.errorStatus) {
+    return res.status(result.errorStatus).json({ success: false, message: result.errorMessage });
+  }
+
+  const saved = result.user;
+  await logAuditEvent(
+    result.isNew ? 'CREATE_STAFF_USER' : 'UPDATE_STAFF_USER',
+    req.authUser,
+    `${result.isNew ? 'Created' : 'Updated'} staff account @${saved.username} (${saved.role}, ${saved.isActive ? 'Active' : 'Disabled'})`,
+    req,
+    saved.username
+  );
+  return res.json({
+    success: true,
+    mode: result.isNew ? 'created' : 'updated',
+    user: sanitizeStaffUserRecord(saved)
+  });
+}
+
+app.get('/api/admin/users', requireAdminAuth, async (req, res) => {
+  const list = await listStaffUsersAuthoritative();
+  return res.json({ success: true, users: list, source: kvUrl && kvToken ? 'redis' : 'memory' });
+});
+
+app.post('/api/admin/users', requireSuperAdminAuth, (req, res) => handleSaveStaffUserRequest(req, res, undefined));
+
+app.put('/api/admin/users/:id', requireSuperAdminAuth, (req, res) => handleSaveStaffUserRequest(req, res, req.params.id));
+
+app.patch('/api/admin/users/:id', requireSuperAdminAuth, (req, res) => handleSaveStaffUserRequest(req, res, req.params.id));
 
 // ---------------------------------------------------------------------
 // API ROUTE 3: GET /api/auth/admin/session (Backwards-Compatible Admin Session)
@@ -2043,186 +2487,6 @@ app.get('/api/auth/session', async (req, res) => {
     return res.json({ success: true, authenticated: true, user: user });
   }
   return res.json({ success: true, authenticated: false, user: null });
-});
-
-
-// ---------------------------------------------------------------------
-// UNIFIED AUTHENTICATION ENDPOINT (Individual Accounts + Staff Claims)
-// ---------------------------------------------------------------------
-app.post('/api/auth/login', authRateLimiter(), async (req, res) => {
-  const identifier = (req.body.identifier || req.body.username || req.body.email || req.body.empNo || '').trim().toLowerCase();
-  const password = (req.body.password || '').trim();
-
-  if (!identifier || !password) {
-    return res.status(400).json({ success: false, message: 'Identifier and password are required' });
-  }
-
-  // Check individual accounts first
-  const accounts = await getAuthoritativeAccounts();
-  const account = accounts.find(a => 
-    (a.username && a.username.toLowerCase() === identifier) ||
-    (a.email && a.email.toLowerCase() === identifier) ||
-    (a.id && a.id.toLowerCase() === identifier)
-  );
-
-  if (account) {
-    if (process.env.REJECT_DEFAULT_PASSWORDS === 'true' && isProduction && !process.env.ADMIN_PASSWORD && !process.env.DEPT_PASSWORD && 
-        ['admin123', 'hod123', 'section123', 'safety123', 'ci123', 'quality123', 'tech123', 'hr123'].includes(password)) {
-      return handleAuthFailure(req, res, 403, 'Default shared password rejected in production. Please use your individual configured credential.');
-    }
-
-    if (!verifyPassword(password, account.passwordHash)) {
-      return handleAuthFailure(req, res, 401, 'Invalid credentials');
-    }
-
-    if (req.recordAuthSuccess) await req.recordAuthSuccess();
-
-    const sessionToken = crypto.randomBytes(32).toString('hex');
-    const sessionData = {
-      accountId: account.id,
-      email: account.email,
-      username: account.username,
-      name: account.name,
-      roleClaim: account.roleClaim,
-      role: account.role,
-      department: account.department,
-      section: account.section,
-      createdAt: new Date().toISOString(),
-      expiresAt: Date.now() + (8 * 60 * 60 * 1000)
-    };
-
-    await setCloudSession(sessionToken, sessionData, 28800);
-    const cookieName = account.roleClaim === 'hr_admin' ? 'admin_session' :
-      account.roleClaim === 'dept_hod' ? 'dept_session' :
-      account.roleClaim === 'section_head' ? 'section_session' :
-      account.roleClaim === 'evaluator' ? 'evaluator_session' : 'session';
-    res.cookie(cookieName, sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
-    await logAuditEvent('USER_LOGIN', account.email || account.username, `User signed in with role claim ${account.roleClaim}`, req);
-
-    return res.json({
-      success: true,
-      message: `Signed in as ${account.name}`,
-      token: sessionToken,
-      user: sessionData
-    });
-  }
-
-  // Check employees for staff login
-  const employees = await getAuthoritativeEmployees();
-  const emp = employees.find(e => 
-    String(e.empNo).trim().toLowerCase() === identifier ||
-    String(e.empNo).trim().toLowerCase() === ('0' + identifier)
-  );
-
-  if (emp) {
-    const isEmpNoMatch = (password.toLowerCase() === identifier || password.toLowerCase() === String(emp.empNo).trim().toLowerCase());
-    let isValid = false;
-    if (isEmpNoMatch) {
-      isValid = true;
-    } else if (emp.passwordHash && verifyPassword(password, emp.passwordHash)) {
-      isValid = true;
-    }
-
-    if (!isValid) {
-      return handleAuthFailure(req, res, 401, 'Invalid employee credentials');
-    }
-
-    if (req.recordAuthSuccess) await req.recordAuthSuccess();
-
-    if (emp.passwordHash && !emp.passwordHash.startsWith('scrypt:')) {
-      emp.passwordHash = hashPassword(password);
-      saveAuthoritativeEmployees(employees).catch(() => {});
-    }
-
-    const sessionToken = crypto.randomBytes(32).toString('hex');
-    const sessionData = {
-      accountId: `emp_${emp.empNo}`,
-      roleClaim: 'employee',
-      role: 'emp',
-      empNo: emp.empNo,
-      name: emp.name,
-      section: emp.section,
-      dept: emp.dept,
-      currentLevel: emp.currentLevel,
-      targetLevel: emp.targetLevel,
-      createdAt: new Date().toISOString(),
-      expiresAt: Date.now() + (8 * 60 * 60 * 1000)
-    };
-
-    await setCloudSession(sessionToken, sessionData, 28800);
-    res.cookie('emp_session', sessionToken, getCookieOptions(8 * 60 * 60 * 1000));
-    await logAuditEvent('EMPLOYEE_LOGIN', emp.empNo, 'Employee signed in via unified login', req);
-
-    return res.json({
-      success: true,
-      message: 'Employee authenticated successfully',
-      token: sessionToken,
-      user: sessionData
-    });
-  }
-
-  return handleAuthFailure(req, res, 401, 'Account not found or invalid credentials');
-});
-
-// ---------------------------------------------------------------------
-// INDIVIDUAL ACCOUNT MANAGEMENT (Admin Only)
-// ---------------------------------------------------------------------
-app.get('/api/admin/accounts', requireAdminAuth, async (req, res) => {
-  const accounts = await getAuthoritativeAccounts();
-  const safeAccounts = accounts.map(({ passwordHash, ...rest }) => rest);
-  res.json({ success: true, accounts: safeAccounts });
-});
-
-app.post('/api/admin/accounts', requireAdminAuth, async (req, res) => {
-  const { id, username, email, name, roleClaim, department, section, password } = req.body;
-  if (!username || !email || !name || !roleClaim) {
-    return res.status(400).json({ success: false, message: 'username, email, name, and roleClaim are required' });
-  }
-  const accounts = await getAuthoritativeAccounts();
-  const existingIdx = accounts.findIndex(a => 
-    (id && a.id === id) || 
-    (a.username && a.username.toLowerCase() === username.toLowerCase()) || 
-    (a.email && a.email.toLowerCase() === email.toLowerCase())
-  );
-
-  const roleMap = {
-    hr_admin: 'SUPERADMIN',
-    dept_hod: 'DEPT_HEAD',
-    section_head: 'SECTION_HEAD',
-    evaluator: 'EVALUATOR',
-    employee: 'emp'
-  };
-
-  const accountObj = {
-    id: id || `acc_${crypto.randomBytes(6).toString('hex')}`,
-    username: username.trim().toLowerCase(),
-    email: email.trim().toLowerCase(),
-    name: name.trim(),
-    roleClaim,
-    role: roleMap[roleClaim] || 'EVALUATOR',
-    department: department || '',
-    section: section || '',
-    updatedAt: new Date().toISOString()
-  };
-
-  if (password && password.trim().length >= 8) {
-    accountObj.passwordHash = hashPassword(password.trim());
-  } else if (existingIdx >= 0) {
-    accountObj.passwordHash = accounts[existingIdx].passwordHash;
-  } else {
-    accountObj.passwordHash = hashPassword(crypto.randomBytes(16).toString('hex'));
-  }
-
-  if (existingIdx >= 0) {
-    accounts[existingIdx] = { ...accounts[existingIdx], ...accountObj };
-  } else {
-    accountObj.createdAt = new Date().toISOString();
-    accounts.push(accountObj);
-  }
-
-  await saveAuthoritativeAccounts(accounts);
-  await logAuditEvent('ACCOUNT_MANAGEMENT', req.adminSession?.email || 'admin', `Saved account ${accountObj.email} with role ${roleClaim}`, req);
-  res.json({ success: true, message: 'Account saved successfully', account: { ...accountObj, passwordHash: undefined } });
 });
 
 app.post('/api/auth/logout', async (req, res) => {
@@ -2260,7 +2524,31 @@ app.post('/api/auth/admin/logout', async (req, res) => {
 // EMPLOYEE AUTHENTICATION & SECURE SESSIONS
 // ---------------------------------------------------------------------
 
-// Password engine hoisted to Accounts Store section
+// Employee Password Cryptographic Engine (Salted scrypt + Legacy SHA256 migration)
+function hashPassword(password) {
+  return bcrypt.hashSync(password, 10);
+}
+
+function verifyPassword(password, storedHash) {
+  if (!storedHash || !password) return false;
+  try {
+    if (storedHash.startsWith('$2a$') || storedHash.startsWith('$2b$') || storedHash.startsWith('$2y$')) {
+      return bcrypt.compareSync(password, storedHash);
+    }
+    if (storedHash.startsWith('scrypt:')) {
+      const parts = storedHash.split(':');
+      if (parts.length !== 3) return false;
+      const salt = parts[1];
+      const expectedHash = parts[2];
+      const actualHash = crypto.scryptSync(password, salt, 64).toString('hex');
+      return crypto.timingSafeEqual(Buffer.from(expectedHash, 'hex'), Buffer.from(actualHash, 'hex'));
+    }
+    const sha = crypto.createHash('sha256').update(password).digest('hex');
+    return sha === storedHash;
+  } catch (err) {
+    return false;
+  }
+}
 
 function normalizeDoj(dojStr) {
   if (!dojStr) return '';
@@ -2276,7 +2564,6 @@ function normalizeDoj(dojStr) {
   return s;
 }
 
-// Concurrency mutex lock per employee/entity
 const entityLocks = new Map();
 
 async function acquireEntityLock(key) {
@@ -2293,322 +2580,74 @@ async function acquireEntityLock(key) {
 }
 
 app.post('/api/auth/employee/login', authRateLimiter(), async (req, res) => {
-  const empNoRaw = (req.body.empNo || '').trim();
-  let password = (req.body.password || '').trim();
+  const empNoRaw = String(req.body.empNo || req.body.username || '').trim();
+  const password = String(req.body.password || '').trim();
 
-  if (!empNoRaw) {
-    return res.status(400).json({ success: false, message: 'Employee ID required' });
-  }
-
-  // If password was omitted or empty, allow it to default to empNoRaw
-  if (!password) {
-    password = empNoRaw;
+  if (!empNoRaw || !password) {
+    return res.status(400).json({ success: false, message: 'Employee Number and password are required' });
   }
 
   const employees = await getAuthoritativeEmployees();
-  const emp = employees.find(e => 
+  const emp = employees.find(e =>
     String(e.empNo).trim().toLowerCase() === empNoRaw.toLowerCase() ||
     String(e.empNo).trim().toLowerCase() === ('0' + empNoRaw).toLowerCase()
   );
 
   if (!emp) {
-    return handleAuthFailure(req, res, 401, 'Employee ID not found in database');
+    return handleAuthFailure(req, res, 401, 'Invalid credentials');
   }
 
-  // Employee No is accepted directly as the password (no password creation needed)
-  const isEmpNoMatch = (
-    password.toLowerCase() === empNoRaw.toLowerCase() ||
-    password.toLowerCase() === String(emp.empNo).trim().toLowerCase() ||
-    password.toLowerCase() === ('0' + empNoRaw).toLowerCase()
-  );
+  if (emp.isLeft || emp.status === 'LEFT') {
+    return res.status(403).json({ success: false, message: 'Employee account is inactive (marked Left). Contact HR administrator.' });
+  }
+
+  const canonicalEmpNo = String(emp.empNo).trim().toLowerCase();
+  const matchesDefaultEmpNo =
+    password.toLowerCase() === canonicalEmpNo ||
+    ('0' + password).toLowerCase() === canonicalEmpNo;
 
   let isValid = false;
-  if (isEmpNoMatch) {
-    isValid = true;
-  } else if (emp.passwordHash && verifyPassword(password, emp.passwordHash)) {
-    isValid = true;
+  if (emp.hasCustomPassword && emp.passwordHash) {
+    isValid = verifyPassword(password, emp.passwordHash);
+  } else {
+    isValid = matchesDefaultEmpNo;
   }
 
   if (!isValid) {
-    return handleAuthFailure(req, res, 401, 'Invalid Employee ID or password. Use your Employee No as password.');
+    return handleAuthFailure(req, res, 401, 'Invalid credentials');
   }
 
   if (req.recordAuthSuccess) await req.recordAuthSuccess();
 
-  // Transparent migration from legacy sha256 to salted scrypt (if hash exists)
-  if (emp.passwordHash && !emp.passwordHash.startsWith('scrypt:')) {
+  // Upgrade legacy non-bcrypt hash seamlessly if an explicit custom password hash matched
+  if (emp.hasCustomPassword && emp.passwordHash && !emp.passwordHash.startsWith('$2') && verifyPassword(password, emp.passwordHash)) {
     emp.passwordHash = hashPassword(password);
     saveAuthoritativeEmployees(employees).catch(() => {});
   }
 
   const empSessionToken = crypto.randomBytes(32).toString('hex');
   const sessionData = {
-    accountId: `emp_${emp.empNo}`,
-    roleClaim: 'employee',
     role: 'emp',
     empNo: emp.empNo,
     name: emp.name,
     section: emp.section,
     dept: emp.dept,
     currentLevel: emp.currentLevel,
-    targetLevel: emp.targetLevel,
+    targetLevel: emp.targetLevel || calculateDojEligibility(emp.doj, emp.currentLevel).eligibleLevel,
+    doj: emp.doj,
     createdAt: new Date().toISOString(),
     expiresAt: Date.now() + (8 * 60 * 60 * 1000)
   };
 
   await setCloudSession(empSessionToken, sessionData, 28800);
-  res.cookie('emp_session', empSessionToken, getCookieOptions(8 * 60 * 60 * 1000));
-  await logAuditEvent('EMPLOYEE_LOGIN', emp.empNo, 'Employee signed in to portal', req);
+  res.cookie('emp_session', empSessionToken, getCookieOptions(8 * 60 * 60 * 1000, req));
+  await logAuditEvent('EMPLOYEE_LOGIN', emp.empNo, 'Employee signed in to portal', req, emp.empNo);
 
   return res.json({
     success: true,
     message: 'Employee authenticated successfully',
     token: empSessionToken,
     employee: sessionData
-  });
-});
-
-
-// ---------------------------------------------------------------------
-// EMPLOYEE ONE-TIME SETUP TOKEN REQUEST (Task 2.3)
-// ---------------------------------------------------------------------
-app.post('/api/auth/employee/request-setup-token', authRateLimiter(), async (req, res) => {
-  const empNoRaw = (req.body.empNo || '').trim();
-  const dojRaw = (req.body.doj || '').trim();
-
-  if (!empNoRaw) {
-    return res.status(400).json({ success: false, message: 'Employee ID is required' });
-  }
-
-  const employees = await getAuthoritativeEmployees();
-  const emp = employees.find(e => 
-    String(e.empNo).trim().toLowerCase() === empNoRaw.toLowerCase() ||
-    String(e.empNo).trim().toLowerCase() === ('0' + empNoRaw).toLowerCase()
-  );
-
-  if (!emp) {
-    return handleAuthFailure(req, res, 404, 'Employee ID not found in database');
-  }
-
-  // Validate DOJ if provided
-  if (dojRaw) {
-    const inputDoj = normalizeDoj(dojRaw);
-    const empDoj = normalizeDoj(emp.doj);
-    if (!empDoj || inputDoj !== empDoj) {
-      return handleAuthFailure(req, res, 401, 'Verification failed: Date of Joining does not match records');
-    }
-  }
-
-  // Generate 6-digit cryptographic token
-  const token = crypto.randomInt(100000, 999999).toString();
-  const tokenData = {
-    token,
-    empNo: emp.empNo,
-    createdAt: Date.now(),
-    expiresAt: Date.now() + (10 * 60 * 1000), // 10 minutes
-    attempts: 0
-  };
-
-  await setCloudSetupToken(emp.empNo, tokenData, 600);
-  await logAuditEvent('EMPLOYEE_SETUP_TOKEN_ISSUED', emp.empNo, 'One-time setup token issued', req);
-
-  const responsePayload = {
-    success: true,
-    message: 'One-time setup token dispatched successfully. Token is valid for 10 minutes.'
-  };
-  if (process.env.NODE_ENV !== 'production') {
-    responsePayload.token = token;
-  }
-  return res.json(responsePayload);
-});
-
-// ---------------------------------------------------------------------
-// HR ADMIN ISSUES ONE-TIME SETUP TOKEN (Task 2.3)
-// ---------------------------------------------------------------------
-app.post('/api/admin/employees/:empNo/issue-setup-token', requireAdminAuth, async (req, res) => {
-  const empNoRaw = (req.params.empNo || '').trim();
-  const employees = await getAuthoritativeEmployees();
-  const emp = employees.find(e => 
-    String(e.empNo).trim().toLowerCase() === empNoRaw.toLowerCase() ||
-    String(e.empNo).trim().toLowerCase() === ('0' + empNoRaw).toLowerCase()
-  );
-
-  if (!emp) {
-    return res.status(404).json({ success: false, message: 'Employee not found' });
-  }
-
-  const token = crypto.randomInt(100000, 999999).toString();
-  const tokenData = {
-    token,
-    empNo: emp.empNo,
-    issuedBy: req.adminSession?.email || 'admin',
-    createdAt: Date.now(),
-    expiresAt: Date.now() + (24 * 60 * 60 * 1000),
-    attempts: 0
-  };
-
-  await setCloudSetupToken(emp.empNo, tokenData, 86400);
-  await logAuditEvent('ADMIN_ISSUED_SETUP_TOKEN', emp.empNo, `HR Admin issued setup token for employee ${emp.empNo}`, req);
-
-  return res.json({
-    success: true,
-    message: `Setup token generated for Employee ${emp.empNo}`,
-    token,
-    expiresAt: tokenData.expiresAt
-  });
-});
-
-app.post('/api/auth/employee/setup-password', async (req, res) => {
-  const empNoRaw = (req.body.empNo || '').trim();
-  const setupToken = (req.body.setupToken || req.body.token || '').trim();
-  const dojRaw = (req.body.doj || '').trim();
-  const newPassword = (req.body.newPassword || '').trim();
-
-  if (!empNoRaw || !newPassword || (!setupToken && !dojRaw)) {
-    return res.status(400).json({
-      success: false,
-      message: 'Employee ID, new password, and either a setup token or Date of Joining (DOJ) are required'
-    });
-  }
-
-  if (newPassword.length < 6) {
-    return res.status(400).json({
-      success: false,
-      message: 'Password must be at least 6 characters long'
-    });
-  }
-
-  const forbidden = ['1234', '12345', '123456', '0000', 'password', empNoRaw.toLowerCase()];
-  if (forbidden.includes(newPassword.toLowerCase())) {
-    return res.status(400).json({
-      success: false,
-      message: 'Please choose a stronger password. Default credentials, trivial sequences, and employee ID are not allowed.'
-    });
-  }
-
-  const employees = await getAuthoritativeEmployees();
-  const emp = employees.find(e => 
-    String(e.empNo).trim().toLowerCase() === empNoRaw.toLowerCase() ||
-    String(e.empNo).trim().toLowerCase() === ('0' + empNoRaw).toLowerCase()
-  );
-
-  if (!emp) {
-    return res.status(401).json({
-      success: false,
-      message: 'Employee ID verification failed'
-    });
-  }
-
-  // Token Verification takes priority
-  let verified = false;
-  if (setupToken) {
-    const tokenRecord = await getCloudSetupToken(empNoRaw);
-    if (!tokenRecord) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired setup token' });
-    }
-    if (Date.now() > tokenRecord.expiresAt) {
-      await delCloudSetupToken(empNoRaw);
-      return res.status(400).json({ success: false, message: 'Setup token has expired. Please request a new token.' });
-    }
-    tokenRecord.attempts = (tokenRecord.attempts || 0) + 1;
-    if (tokenRecord.attempts > 5) {
-      await delCloudSetupToken(empNoRaw);
-      return res.status(429).json({ success: false, message: 'Too many failed attempts. Setup token invalidated.' });
-    }
-    if (tokenRecord.token !== setupToken) {
-      await setCloudSetupToken(empNoRaw, tokenRecord);
-      return res.status(401).json({ success: false, message: 'Incorrect setup token' });
-    }
-    verified = true;
-    await delCloudSetupToken(empNoRaw);
-  }
-
-  if (!verified) {
-    if (isProduction && !setupToken) {
-      return res.status(403).json({ success: false, message: 'One-time setup token is required for self-service password setup in production.' });
-    }
-    const normalizedInputDoj = normalizeDoj(dojRaw);
-    const normalizedEmpDoj = normalizeDoj(emp.doj);
-
-    if (!normalizedEmpDoj || normalizedInputDoj !== normalizedEmpDoj) {
-      return res.status(401).json({
-        success: false,
-        message: 'Verification failed: Date of Joining does not match records'
-      });
-    }
-  }
-
-  emp.passwordHash = hashPassword(newPassword);
-  delete emp.password;
-
-  await saveAuthoritativeEmployees(employees);
-  await logAuditEvent('EMPLOYEE_PASSWORD_SETUP', emp.empNo, 'Employee completed password setup', req);
-
-  return res.json({
-    success: true,
-    message: 'Password configured successfully. You may now sign in.'
-  });
-});
-
-app.post('/api/auth/employee/reset-password', async (req, res) => {
-  const empNoRaw = (req.body.empNo || '').trim();
-  const dojRaw = (req.body.doj || '').trim();
-  const newPassword = (req.body.newPassword || '').trim();
-
-  if (!empNoRaw || !dojRaw || !newPassword) {
-    return res.status(400).json({
-      success: false,
-      message: 'Employee ID, Date of Joining (DOJ), and new password are required'
-    });
-  }
-
-  if (newPassword.length < 6) {
-    return res.status(400).json({
-      success: false,
-      message: 'Password must be at least 6 characters long'
-    });
-  }
-
-  const forbidden = ['1234', '12345', '123456', '0000', 'password', empNoRaw.toLowerCase()];
-  if (forbidden.includes(newPassword.toLowerCase())) {
-    return res.status(400).json({
-      success: false,
-      message: 'Please choose a stronger password. Default credentials, trivial sequences, and employee ID are not allowed.'
-    });
-  }
-
-  const employees = await getAuthoritativeEmployees();
-  const emp = employees.find(e => 
-    String(e.empNo).trim().toLowerCase() === empNoRaw.toLowerCase() ||
-    String(e.empNo).trim().toLowerCase() === ('0' + empNoRaw).toLowerCase()
-  );
-
-  if (!emp) {
-    return res.status(401).json({
-      success: false,
-      message: 'Employee ID verification failed'
-    });
-  }
-
-  const normalizedInputDoj = normalizeDoj(dojRaw);
-  const normalizedEmpDoj = normalizeDoj(emp.doj);
-
-  if (!normalizedEmpDoj || normalizedInputDoj !== normalizedEmpDoj) {
-    return res.status(401).json({
-      success: false,
-      message: 'Verification failed: Date of Joining does not match records'
-    });
-  }
-
-  emp.passwordHash = hashPassword(newPassword);
-  delete emp.password;
-
-  await saveAuthoritativeEmployees(employees);
-  await logAuditEvent('EMPLOYEE_PASSWORD_RESET', emp.empNo, 'Employee reset password', req);
-
-  return res.json({
-    success: true,
-    message: 'Password reset successfully. You may now sign in with your new password.'
   });
 });
 
@@ -2627,8 +2666,10 @@ app.post('/api/admin/employees/:empNo/reset-password', requireAdminAuth, async (
       return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
     }
     emp.passwordHash = hashPassword(newPassword);
+    emp.hasCustomPassword = true;
   } else {
     delete emp.passwordHash;
+    delete emp.hasCustomPassword;
   }
   delete emp.password;
 
@@ -2637,7 +2678,9 @@ app.post('/api/admin/employees/:empNo/reset-password', requireAdminAuth, async (
 
   return res.json({
     success: true,
-    message: newPassword ? `Password updated for employee ${emp.empNo}` : `Password cleared for employee ${emp.empNo}. Employee will complete first-time setup.`
+    message: newPassword
+      ? `Password updated for employee ${emp.empNo}`
+      : `Password reset to default Employee Number (${emp.empNo}).`
   });
 });
 
@@ -2659,7 +2702,7 @@ app.get('/api/auth/employee/me', async (req, res) => {
   const emp = employees.find(e => String(e.empNo).trim().toLowerCase() === String(user.empNo).trim().toLowerCase());
   if (emp) {
     user.currentLevel = emp.currentLevel;
-    user.targetLevel = emp.targetLevel;
+    user.targetLevel = emp.targetLevel || calculateDojEligibility(emp.doj, emp.currentLevel).eligibleLevel;
     user.skillLevelAssess2025 = emp.skillLevelAssess2025;
     user.skillLevelExpBased = emp.skillLevelExpBased;
   }
@@ -2669,7 +2712,6 @@ app.get('/api/auth/employee/me', async (req, res) => {
 // ---------------------------------------------------------------------
 // AUTHORITATIVE DATA PERSISTENCE ENGINE (Upstash Cloud & Resilient Disk Backup)
 // ---------------------------------------------------------------------
-const fs = require('fs');
 const { execFile } = require('child_process');
 const os = require('os');
 
@@ -2693,13 +2735,20 @@ try {
   if (fs.existsSync(RECORDS_JSON_FILE)) {
     const raw = fs.readFileSync(RECORDS_JSON_FILE, 'utf-8');
     const parsed = JSON.parse(raw);
-    Object.entries(parsed).forEach(([k, v]) => globalAssessmentRecords.set(String(k), v));
+    if (parsed && typeof parsed === 'object') {
+      Object.entries(parsed).forEach(([k, v]) => {
+        if (k !== '__initialized') globalAssessmentRecords.set(String(k), v);
+      });
+      globalAssessmentRecords._isExplicitlyCleared = true;
+    }
   } else {
     const seedPath = path.join(__dirname, 'seed_data.js');
     if (fs.existsSync(seedPath)) {
       require(seedPath);
       if (global.SEED_RECORDS && typeof global.SEED_RECORDS === 'object') {
-        Object.entries(global.SEED_RECORDS).forEach(([k, v]) => globalAssessmentRecords.set(String(k), v));
+        Object.entries(global.SEED_RECORDS).forEach(([k, v]) => {
+          if (k !== '__initialized') globalAssessmentRecords.set(String(k), v);
+        });
       }
     }
   }
@@ -2723,13 +2772,20 @@ try {
   if (fs.existsSync(OJT_JSON_FILE)) {
     const raw = fs.readFileSync(OJT_JSON_FILE, 'utf-8');
     const parsed = JSON.parse(raw);
-    Object.entries(parsed).forEach(([k, v]) => globalOjtEvaluations.set(String(k), v));
+    if (parsed && typeof parsed === 'object') {
+      Object.entries(parsed).forEach(([k, v]) => {
+        if (k !== '__initialized') globalOjtEvaluations.set(String(k), v);
+      });
+      globalOjtEvaluations._isExplicitlyCleared = true;
+    }
   } else {
     const seedOjtPath = path.join(__dirname, 'seed_ojt.js');
     if (fs.existsSync(seedOjtPath)) {
       const seedOjt = require(seedOjtPath);
       if (seedOjt && typeof seedOjt === 'object') {
-        Object.entries(seedOjt).forEach(([k, v]) => globalOjtEvaluations.set(String(k), v));
+        Object.entries(seedOjt).forEach(([k, v]) => {
+          if (k !== '__initialized') globalOjtEvaluations.set(String(k), v);
+        });
       }
     }
   }
@@ -2812,31 +2868,577 @@ function loadBaseDatasetFromDataJs() {
   }
 }
 
-// Authoritative Employee Store
-async function getAuthoritativeEmployees() {
-  if (customEmployeesMemory && Array.isArray(customEmployeesMemory) && customEmployeesMemory.length >= 283) {
-    return customEmployeesMemory;
+// Redis Persistence Stores + In-Memory Fallbacks (Sole Database Engine)
+const softBackupsMemory = new Map();
+const schedulesMemory = new Map();
+let staffUsersMemory = null;
+
+async function verifyStaffPassword(plainPassword, hash) {
+  if (!plainPassword || !hash) return false;
+  try {
+    return await bcrypt.compare(plainPassword, hash);
+  } catch {
+    return false;
   }
-  if (fs.existsSync(EMPLOYEES_JSON_FILE)) {
+}
+
+async function getAuthoritativeStaffUsers() {
+  if (kvUrl && kvToken) {
     try {
-      const raw = fs.readFileSync(EMPLOYEES_JSON_FILE, 'utf-8');
-      const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed) && parsed.length >= 283) {
-        customEmployeesMemory = parsed;
-        return customEmployeesMemory;
+      const cloudUsers = await syncWithCloudKv('GET', 'yokohama_staff_users');
+      if (Array.isArray(cloudUsers) && cloudUsers.length > 0) {
+        staffUsersMemory = cloudUsers;
+        return cloudUsers;
       }
     } catch (e) {}
   }
+  if (Array.isArray(staffUsersMemory) && staffUsersMemory.length > 0) {
+    return staffUsersMemory;
+  }
+
+  // Seed default staff accounts on first boot (strictly respects env passwords)
+  const adminEmail = (process.env.ADMIN_EMAIL || 'reubengeoffrey16@gmail.com').trim().toLowerCase();
+  const adminPass = process.env.ADMIN_PASSWORD || 'admin123';
+  const deptPass = process.env.DEPT_PASSWORD || 'hod123';
+  const secPass = process.env.SECTION_PASSWORD || 'section123';
+  const defaultsSpec = [
+    { username: process.env.ADMIN_USERNAME || 'admin', email: adminEmail, displayName: 'HR Control Administrator', role: 'SUPERADMIN', password: adminPass, department: 'ALL' },
+    { username: 'hod.qc', email: 'hod.qc@atctires.local', displayName: 'Quality Control HOD', role: 'DEPT_HEAD', password: deptPass, department: 'QUALITY CONTROL' },
+    { username: 'hod.production', email: 'hod.production@atctires.local', displayName: 'Production HOD', role: 'DEPT_HEAD', password: deptPass, department: 'PRODUCTION' },
+    { username: 'sec.tb', email: 'sec.tb@atctires.local', displayName: 'Tire Building QA Supervisor', role: 'SECTION_HEAD', password: secPass, section: 'Tire Building QA', department: 'QUALITY CONTROL' },
+    { username: 'eval.safety', email: 'eval.safety@atctires.local', displayName: 'Safety Practical Evaluator', role: 'EVALUATOR', password: process.env.EVALUATOR_PASS_SAFETY || 'safety123', section: 'Safety', department: 'SAFETY' },
+    { username: 'eval.ci', email: 'eval.ci@atctires.local', displayName: 'CI & TPM Evaluator', role: 'EVALUATOR', password: process.env.EVALUATOR_PASS_CI || 'ci123', section: 'CI & TPM', department: 'CI & TPM' },
+    { username: 'eval.quality', email: 'eval.quality@atctires.local', displayName: 'Quality Evaluator', role: 'EVALUATOR', password: process.env.EVALUATOR_PASS_QUALITY || 'quality123', section: 'Quality', department: 'QUALITY CONTROL' },
+    { username: 'eval.tech', email: 'eval.tech@atctires.local', displayName: 'Technical Evaluator', role: 'EVALUATOR', password: process.env.EVALUATOR_PASS_TECH || 'tech123', section: 'Technical', department: 'TECHNICAL' },
+    { username: 'eval.hr', email: 'eval.hr@atctires.local', displayName: 'HR Competency Evaluator', role: 'EVALUATOR', password: process.env.EVALUATOR_PASS_HR || 'hr123', section: 'HR', department: 'HR' },
+  ];
+
+  const seeded = [];
+  for (let i = 0; i < defaultsSpec.length; i++) {
+    const d = defaultsSpec[i];
+    const cleanUsername = String(d.username).trim().toLowerCase();
+    const now = new Date().toISOString();
+    seeded.push({
+      id: i + 1,
+      uid: `staff:${cleanUsername}`,
+      username: cleanUsername,
+      email: String(d.email).trim().toLowerCase(),
+      displayName: d.displayName,
+      role: d.role,
+      empNo: null,
+      section: d.section || null,
+      department: d.department || null,
+      passwordHash: await bcrypt.hash(d.password, 10),
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  staffUsersMemory = seeded;
   if (kvUrl && kvToken) {
-    const cloudEmployees = await syncWithCloudKv('GET', 'yokohama_employees');
-    if (cloudEmployees && Array.isArray(cloudEmployees) && cloudEmployees.length >= 283) {
+    try { await syncWithCloudKv('SET', 'yokohama_staff_users', seeded); } catch (e) {}
+  }
+  return seeded;
+}
+
+async function saveAuthoritativeStaffUsers(usersList) {
+  if (kvUrl && kvToken) {
+    await persistToCloudKvStrict('SET', 'yokohama_staff_users', usersList);
+  }
+  staffUsersMemory = usersList;
+}
+
+async function findStaffUserByIdentifier(identifier) {
+  const clean = String(identifier || '').trim().toLowerCase();
+  if (!clean) return null;
+  const usersList = await getAuthoritativeStaffUsers();
+  return usersList.find((u) =>
+    String(u.username || '').toLowerCase() === clean ||
+    String(u.email || '').toLowerCase() === clean ||
+    String(u.empNo || '').toLowerCase() === clean
+  ) || null;
+}
+
+async function listStaffUsersAuthoritative() {
+  const usersList = await getAuthoritativeStaffUsers();
+  return usersList.map((u) => ({
+    id: u.id,
+    uid: u.uid,
+    username: u.username,
+    email: u.email,
+    displayName: u.displayName,
+    role: u.role,
+    empNo: u.empNo,
+    section: u.section,
+    department: u.department,
+    isActive: u.isActive,
+    createdAt: u.createdAt,
+    updatedAt: u.updatedAt,
+  }));
+}
+
+function sanitizeStaffUserRecord(u) {
+  return {
+    id: u.id,
+    uid: u.uid,
+    username: u.username,
+    email: u.email,
+    displayName: u.displayName,
+    role: u.role,
+    empNo: u.empNo,
+    section: u.section,
+    department: u.department,
+    isActive: u.isActive,
+    createdAt: u.createdAt,
+    updatedAt: u.updatedAt,
+  };
+}
+
+function findScopedStaffMatches(usersList, { identifier, role, department, section }) {
+  const cleanId = String(identifier || '').trim().toLowerCase();
+  if (cleanId) {
+    return usersList.filter((u) =>
+      String(u.username || '').toLowerCase() === cleanId ||
+      String(u.email || '').toLowerCase() === cleanId ||
+      String(u.empNo || '').toLowerCase() === cleanId
+    );
+  }
+  if (role === 'DEPT_HEAD' && department) {
+    const targetDept = normalizeDepartmentName(department);
+    return usersList.filter((u) => u.role === 'DEPT_HEAD' && normalizeDepartmentName(u.department) === targetDept);
+  }
+  if (role === 'SECTION_HEAD' && section) {
+    const targetSec = String(section).trim().toLowerCase();
+    return usersList.filter((u) => u.role === 'SECTION_HEAD' && String(u.section || '').trim().toLowerCase() === targetSec);
+  }
+  if (role === 'EVALUATOR' && section) {
+    const targetSec = String(section).trim().toLowerCase();
+    return usersList.filter((u) => u.role === 'EVALUATOR' && String(u.section || '').trim().toLowerCase() === targetSec);
+  }
+  return [];
+}
+
+async function upsertStaffAccountAuthoritative(input) {
+  const usersList = [...(await getAuthoritativeStaffUsers())];
+  const hasExplicitId = input.id !== undefined && input.id !== null && String(input.id).trim() !== '';
+  const cleanUsername = String(input.username || input.email || '').trim().toLowerCase();
+  const cleanEmail = String(input.email || '').trim().toLowerCase();
+  const cleanDisplayName = String(input.displayName || '').trim();
+  const passwordHash = input.password ? await bcrypt.hash(String(input.password), 10) : undefined;
+  const now = new Date().toISOString();
+
+  if (hasExplicitId) {
+    const idx = usersList.findIndex((u) => String(u.id) === String(input.id).trim());
+    if (idx < 0) {
+      return { errorStatus: 404, errorMessage: 'Staff account not found' };
+    }
+    const existing = usersList[idx];
+    const nextUsername = cleanUsername || String(existing.username || '').toLowerCase();
+    const nextEmail = cleanEmail || String(existing.email || '').toLowerCase();
+    const nextRole = input.role || existing.role;
+    const nextIsActive = input.isActive !== undefined ? Boolean(input.isActive) : (existing.isActive !== false);
+
+    const conflictUser = usersList.find((u, i) => i !== idx && (
+      String(u.username || '').toLowerCase() === nextUsername ||
+      (nextEmail && String(u.email || '').toLowerCase() === nextEmail)
+    ));
+    if (conflictUser) {
+      return { errorStatus: 409, errorMessage: 'Username or email is already assigned to another staff account' };
+    }
+
+    if (existing.role === 'SUPERADMIN' && (nextRole !== 'SUPERADMIN' || !nextIsActive)) {
+      const otherActiveSuper = usersList.some((u, i) => i !== idx && u.role === 'SUPERADMIN' && u.isActive !== false);
+      if (!otherActiveSuper) {
+        return { errorStatus: 400, errorMessage: 'Cannot disable or demote the last active SUPERADMIN account' };
+      }
+    }
+
+    const updated = {
+      ...existing,
+      uid: existing.uid && String(existing.uid).startsWith('staff:') ? `staff:${nextUsername}` : existing.uid,
+      username: nextUsername,
+      email: nextEmail,
+      displayName: cleanDisplayName || existing.displayName,
+      role: nextRole,
+      department: input.department !== undefined ? input.department : existing.department,
+      section: input.section !== undefined ? input.section : existing.section,
+      empNo: input.empNo !== undefined ? input.empNo : existing.empNo,
+      isActive: nextIsActive,
+      ...(passwordHash ? { passwordHash, passwordCustom: true } : {}),
+      updatedAt: now,
+    };
+    usersList[idx] = updated;
+    await saveAuthoritativeStaffUsers(usersList);
+    return { user: updated, isNew: false };
+  }
+
+  const duplicate = usersList.find((u) =>
+    String(u.username || '').toLowerCase() === cleanUsername ||
+    (cleanEmail && String(u.email || '').toLowerCase() === cleanEmail)
+  );
+  if (duplicate) {
+    return { errorStatus: 409, errorMessage: 'Username or email already exists. Click Edit on the user row to modify it.' };
+  }
+
+  if (!passwordHash && input.requirePassword) {
+    return { errorStatus: 400, errorMessage: 'Password (minimum 6 characters) is required for a new staff account' };
+  }
+
+  const nextId = usersList.reduce((m, u) => Math.max(m, Number(u.id || 0)), 0) + 1;
+  const created = {
+    id: nextId,
+    uid: `staff:${cleanUsername}`,
+    username: cleanUsername,
+    email: cleanEmail || `${cleanUsername}@atctires.local`,
+    displayName: cleanDisplayName || cleanUsername,
+    role: input.role,
+    empNo: input.empNo || null,
+    section: input.section || null,
+    department: input.department || null,
+    passwordHash: passwordHash || null,
+    passwordCustom: Boolean(passwordHash),
+    isActive: input.isActive !== undefined ? Boolean(input.isActive) : true,
+    createdAt: now,
+    updatedAt: now,
+  };
+  usersList.push(created);
+  await saveAuthoritativeStaffUsers(usersList);
+  return { user: created, isNew: true };
+}
+
+async function getOrCreateStaffUserAuthoritative(uid, email, displayName) {
+  const usersList = [...(await getAuthoritativeStaffUsers())];
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const cleanName = String(displayName || cleanEmail.split('@')[0] || 'User').trim();
+  const now = new Date().toISOString();
+  const idx = usersList.findIndex((u) =>
+    String(u.uid || '') === uid || String(u.email || '').toLowerCase() === cleanEmail
+  );
+  if (idx >= 0) {
+    usersList[idx] = {
+      ...usersList[idx],
+      uid,
+      email: cleanEmail,
+      displayName: cleanName || usersList[idx].displayName,
+      updatedAt: now,
+    };
+    await saveAuthoritativeStaffUsers(usersList);
+    return usersList[idx];
+  }
+  const nextId = usersList.reduce((m, u) => Math.max(m, Number(u.id || 0)), 0) + 1;
+  const created = {
+    id: nextId,
+    uid,
+    username: cleanEmail,
+    email: cleanEmail,
+    displayName: cleanName,
+    role: 'emp',
+    empNo: null,
+    section: null,
+    department: null,
+    passwordHash: null,
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+  };
+  usersList.push(created);
+  await saveAuthoritativeStaffUsers(usersList);
+  return created;
+}
+
+const kvCacheTs = { settings: 0, questions: 0, records: 0, employees: 0, ojt: 0 };
+
+function readLocalSeedEmployees() {
+  if (fs.existsSync(EMPLOYEES_JSON_FILE)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(EMPLOYEES_JSON_FILE, 'utf-8'));
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch (e) {}
+  }
+  const base = loadBaseDatasetFromDataJs();
+  return (base && Array.isArray(base.employees) && base.employees.length > 0) ? base.employees : [];
+}
+
+function readLocalSeedRecords() {
+  if (fs.existsSync(RECORDS_JSON_FILE)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(RECORDS_JSON_FILE, 'utf-8'));
+      if (parsed && typeof parsed === 'object') return parsed;
+    } catch (e) {}
+  }
+  try {
+    const seedPath = path.join(__dirname, 'seed_data.js');
+    if (fs.existsSync(seedPath)) {
+      require(seedPath);
+      if (global.SEED_RECORDS && typeof global.SEED_RECORDS === 'object') return global.SEED_RECORDS;
+    }
+  } catch (e) {}
+  return {};
+}
+
+function readLocalSeedOjt() {
+  if (fs.existsSync(OJT_JSON_FILE)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(OJT_JSON_FILE, 'utf-8'));
+      if (parsed && typeof parsed === 'object') return parsed;
+    } catch (e) {}
+  }
+  try {
+    const seedOjtPath = path.join(__dirname, 'seed_ojt.js');
+    if (fs.existsSync(seedOjtPath)) {
+      const seedOjt = require(seedOjtPath);
+      if (seedOjt && typeof seedOjt === 'object') return seedOjt;
+    }
+  } catch (e) {}
+  return {};
+}
+
+function readLocalSeedQuestions() {
+  if (fs.existsSync(QUESTIONS_JSON_FILE)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(QUESTIONS_JSON_FILE, 'utf-8'));
+      if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) return parsed;
+    } catch (e) {}
+  }
+  const base = loadBaseDatasetFromDataJs();
+  if (base && base.questionBank && Object.keys(base.questionBank).length > 0) return base.questionBank;
+  return { L: [], U: [], O: [] };
+}
+
+function readLocalSeedSettings() {
+  if (fs.existsSync(SETTINGS_JSON_FILE)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(SETTINGS_JSON_FILE, 'utf-8'));
+      if (parsed && typeof parsed === 'object') return { ...DEFAULT_SETTINGS, ...parsed };
+    } catch (e) {}
+  }
+  return { ...DEFAULT_SETTINGS };
+}
+
+// Automatic one-time migration from bundled local JSON to Upstash Redis on first startup
+// Includes per-step transient retry and never overwrites existing non-empty keys (or cleared __initialized maps).
+async function ensureUpstashInitialSeed() {
+  if (!kvUrl || !kvToken || upstashSeedCompleted || upstashReadOnlyDetected) return { skipped: true };
+  if (upstashSeedPromise) return await upstashSeedPromise;
+  upstashLastSeedAttemptAt = Date.now();
+  upstashSeedAttempts += 1;
+
+  upstashSeedPromise = (async () => {
+    const seededKeys = [];
+    try {
+      const pingRes = await withUpstashStepRetry('PING', () => callCloudKvCommand(['PING']));
+      if (pingRes !== 'PONG') {
+        throw new Error(`Unexpected Redis PING response: ${String(pingRes)}`);
+      }
+
+      // Probe write permission before migrating large datasets so a read-only Upstash token
+      // (403 NOPERM) is detected cleanly once without error spam or repeated failed writes.
+      try {
+        await withUpstashStepRetry('WRITE_PROBE', () => callCloudKvCommand(['SET', '__iluo_write_probe__', '1', 'EX', '10']));
+        upstashReadOnlyDetected = false;
+        kvWriteDisabled = false;
+      } catch (probeErr) {
+        if (isPermanentRedisAuthError(probeErr)) {
+          upstashReadOnlyDetected = true;
+          kvWriteDisabled = true;
+          clearUpstashSeedRetryTimer();
+          upstashLastSeedError = 'Read-only Upstash Redis token detected (NOPERM on SET). Replace UPSTASH_REDIS_REST_TOKEN with the primary Read-Write token.';
+          console.log('[UPSTASH] Connected in read-only mode (NOPERM on SET). Replace UPSTASH_REDIS_REST_TOKEN with the Read-Write token to enable automatic seeding and persistence.');
+          return { connected: true, writable: false, skipped: true, seededKeys };
+        }
+        throw probeErr;
+      }
+
+      // 1. yokohama_employees
+      const existingEmps = await withUpstashStepRetry('GET_EMPLOYEES', () => syncWithCloudKv('GET', REDIS_KEYS.employees));
+      if (!Array.isArray(existingEmps) || existingEmps.length === 0) {
+        const localEmps = readLocalSeedEmployees();
+        if (localEmps.length > 0) {
+          await withUpstashStepRetry('SET_EMPLOYEES', () => persistToCloudKvStrict('SET', REDIS_KEYS.employees, localEmps));
+          customEmployeesMemory = localEmps;
+          kvCacheTs.employees = Date.now();
+          seededKeys.push(REDIS_KEYS.employees);
+        }
+      }
+
+      // 2. yokohama_records
+      const existingRecs = await withUpstashStepRetry('GET_RECORDS', () => syncWithCloudKv('GET', REDIS_KEYS.records));
+      const hasRecordsInRedis = existingRecs && typeof existingRecs === 'object' && !existingRecs.error &&
+        (existingRecs.__initialized || Object.keys(existingRecs).length > 0);
+      if (!hasRecordsInRedis) {
+        const localRecs = readLocalSeedRecords();
+        const compacted = compactRecordsForCloudKv(localRecs);
+        await withUpstashStepRetry('SET_RECORDS', () => persistToCloudKvStrict('SET', REDIS_KEYS.records, compacted));
+        globalAssessmentRecords.clear();
+        Object.entries(compacted).forEach(([k, v]) => {
+          if (k !== '__initialized') globalAssessmentRecords.set(String(k), v);
+        });
+        globalAssessmentRecords._isExplicitlyCleared = true;
+        kvCacheTs.records = Date.now();
+        seededKeys.push(REDIS_KEYS.records);
+      }
+
+      // 3. yokohama_ojt (preserves legacy yokohama_ojt_evaluations if present)
+      const existingOjt = await withUpstashStepRetry('GET_OJT', () => syncWithCloudKv('GET', REDIS_KEYS.ojt));
+      const hasOjtInRedis = existingOjt && typeof existingOjt === 'object' && !existingOjt.error &&
+        (existingOjt.__initialized || Object.keys(existingOjt).length > 0);
+      if (!hasOjtInRedis) {
+        const legacyOjt = await withUpstashStepRetry('GET_OJT_LEGACY', () => syncWithCloudKv('GET', REDIS_KEYS.ojtLegacy));
+        const hasLegacyOjt = legacyOjt && typeof legacyOjt === 'object' && !legacyOjt.error &&
+          (legacyOjt.__initialized || Object.keys(legacyOjt).length > 0);
+        const ojtPayload = hasLegacyOjt
+          ? { ...legacyOjt, __initialized: true }
+          : { ...readLocalSeedOjt(), __initialized: true };
+        await withUpstashStepRetry('SET_OJT', () => persistToCloudKvStrict('SET', REDIS_KEYS.ojt, ojtPayload));
+        globalOjtEvaluations.clear();
+        Object.entries(ojtPayload).forEach(([k, v]) => {
+          if (k !== '__initialized') globalOjtEvaluations.set(String(k), v);
+        });
+        globalOjtEvaluations._isExplicitlyCleared = true;
+        kvCacheTs.ojt = Date.now();
+        seededKeys.push(REDIS_KEYS.ojt);
+      }
+
+      // 4. yokohama_questions (preserves legacy yokohama_question_bank if present)
+      const existingQs = await withUpstashStepRetry('GET_QUESTIONS', () => syncWithCloudKv('GET', REDIS_KEYS.questions));
+      const hasQsInRedis = existingQs && typeof existingQs === 'object' && !existingQs.error &&
+        Object.keys(existingQs).some((k) => Array.isArray(existingQs[k]) && existingQs[k].length > 0);
+      if (!hasQsInRedis) {
+        const legacyQs = await withUpstashStepRetry('GET_QUESTIONS_LEGACY', () => syncWithCloudKv('GET', REDIS_KEYS.questionsLegacy));
+        const hasLegacyQs = legacyQs && typeof legacyQs === 'object' && !legacyQs.error &&
+          Object.keys(legacyQs).some((k) => Array.isArray(legacyQs[k]) && legacyQs[k].length > 0);
+        const qsPayload = hasLegacyQs ? legacyQs : readLocalSeedQuestions();
+        await withUpstashStepRetry('SET_QUESTIONS', () => persistToCloudKvStrict('SET', REDIS_KEYS.questions, qsPayload));
+        customQuestionBankMemory = qsPayload;
+        kvCacheTs.questions = Date.now();
+        seededKeys.push(REDIS_KEYS.questions);
+      }
+
+      // 5. yokohama_settings
+      const existingSettings = await withUpstashStepRetry('GET_SETTINGS', () => syncWithCloudKv('GET', REDIS_KEYS.settings));
+      const hasSettingsInRedis = existingSettings && typeof existingSettings === 'object' && !existingSettings.error &&
+        Object.keys(existingSettings).length > 0;
+      if (!hasSettingsInRedis) {
+        const localSettings = readLocalSeedSettings();
+        await withUpstashStepRetry('SET_SETTINGS', () => persistToCloudKvStrict('SET', REDIS_KEYS.settings, localSettings));
+        customSettingsMemory = localSettings;
+        kvCacheTs.settings = Date.now();
+        seededKeys.push(REDIS_KEYS.settings);
+      }
+
+      upstashSeedCompleted = true;
+      upstashLastSeedError = null;
+      clearUpstashSeedRetryTimer();
+      if (seededKeys.length > 0) {
+        console.log(`✅ [UPSTASH SEED] Automatically migrated local dataset to Upstash Redis keys: ${seededKeys.join(', ')}`);
+      }
+      return { connected: true, seededKeys };
+    } catch (err) {
+      upstashLastSeedError = err ? String(err.message || 'Initial seed failed').slice(0, 200) : 'Initial seed failed';
+      console.log(`[UPSTASH] Initial Redis migration attempt #${upstashSeedAttempts} deferred: ${upstashLastSeedError}`);
+      return { connected: false, transient: !isPermanentRedisAuthError(err), error: upstashLastSeedError, seededKeys };
+    } finally {
+      upstashSeedPromise = null;
+    }
+  })();
+
+  return await upstashSeedPromise;
+}
+
+// Startup retry scheduler with exponential backoff (2s -> 4s -> 8s -> 16s -> 30s)
+// Stops immediately on success, read-only token, or max retries.
+function scheduleUpstashStartupMigration(retryIndex = 0) {
+  if (!kvUrl || !kvToken || upstashSeedCompleted || upstashReadOnlyDetected) {
+    clearUpstashSeedRetryTimer();
+    return;
+  }
+  ensureUpstashInitialSeed()
+    .then((result) => {
+      if (upstashSeedCompleted || upstashReadOnlyDetected || (result && result.skipped)) {
+        clearUpstashSeedRetryTimer();
+        return;
+      }
+      if (retryIndex >= UPSTASH_SEED_STARTUP_MAX_RETRIES) {
+        clearUpstashSeedRetryTimer();
+        console.log(`[UPSTASH] Startup migration retries exhausted (${UPSTASH_SEED_STARTUP_MAX_RETRIES} retries); will retry lazily on next request.`);
+        return;
+      }
+      const nextRetry = retryIndex + 1;
+      const delayMs = Math.min(30000, UPSTASH_SEED_BASE_DELAY_MS * Math.pow(2, retryIndex));
+      clearUpstashSeedRetryTimer();
+      console.log(`[UPSTASH] Scheduling Redis migration retry ${nextRetry}/${UPSTASH_SEED_STARTUP_MAX_RETRIES} in ${delayMs}ms...`);
+      upstashSeedRetryTimer = setTimeout(() => {
+        upstashSeedRetryTimer = null;
+        scheduleUpstashStartupMigration(nextRetry);
+      }, delayMs);
+      if (typeof upstashSeedRetryTimer.unref === 'function') {
+        upstashSeedRetryTimer.unref();
+      }
+    })
+    .catch(() => {});
+}
+
+async function getSettingsAuthoritative() {
+  if (kvUrl && kvToken) await ensureUpstashInitialSeed();
+  if (customSettingsMemory && (Date.now() - kvCacheTs.settings) < 30000) {
+    return { ...DEFAULT_SETTINGS, ...customSettingsMemory };
+  }
+  if (kvUrl && kvToken) {
+    try {
+      const cloudSettings = await syncWithCloudKv('GET', REDIS_KEYS.settings);
+      if (cloudSettings && typeof cloudSettings === 'object') {
+        customSettingsMemory = { ...DEFAULT_SETTINGS, ...cloudSettings };
+        kvCacheTs.settings = Date.now();
+        return customSettingsMemory;
+      }
+    } catch (e) {}
+  }
+  if (!customSettingsMemory && fs.existsSync(SETTINGS_JSON_FILE)) {
+    try {
+      customSettingsMemory = { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(SETTINGS_JSON_FILE, 'utf-8')) };
+    } catch (e) {}
+  }
+  return { ...DEFAULT_SETTINGS, ...(customSettingsMemory || {}) };
+}
+
+async function saveSettingsAuthoritative(nextSettings) {
+  const merged = { ...(await getSettingsAuthoritative()), ...(nextSettings || {}) };
+  if (kvUrl && kvToken) {
+    await persistToCloudKvStrict('SET', REDIS_KEYS.settings, merged);
+  }
+  customSettingsMemory = merged;
+  kvCacheTs.settings = Date.now();
+  try {
+    fs.writeFileSync(SETTINGS_JSON_FILE, JSON.stringify(merged, null, 2), 'utf-8');
+  } catch (e) {}
+  return merged;
+}
+
+// Authoritative Employee Store (Redis Primary + JSON/Base Seed Fallback)
+async function getAuthoritativeEmployees() {
+  const hasRedis = Boolean(kvUrl && kvToken);
+  if (hasRedis) await ensureUpstashInitialSeed();
+  if (
+    customEmployeesMemory &&
+    Array.isArray(customEmployeesMemory) &&
+    customEmployeesMemory.length >= 1 &&
+    (!hasRedis || (Date.now() - kvCacheTs.employees) < 30000)
+  ) {
+    return customEmployeesMemory;
+  }
+  if (hasRedis) {
+    const cloudEmployees = await syncWithCloudKv('GET', REDIS_KEYS.employees);
+    if (cloudEmployees && Array.isArray(cloudEmployees) && cloudEmployees.length >= 1) {
       customEmployeesMemory = cloudEmployees;
+      kvCacheTs.employees = Date.now();
       return cloudEmployees;
     }
   }
-  const base = loadBaseDatasetFromDataJs();
-  if (base && base.employees && base.employees.length > 0) {
-    customEmployeesMemory = base.employees;
+  const localEmps = readLocalSeedEmployees();
+  if (localEmps.length > 0) {
+    customEmployeesMemory = localEmps;
+    kvCacheTs.employees = Date.now();
     return customEmployeesMemory;
   }
   return customEmployeesMemory || [];
@@ -2844,56 +3446,57 @@ async function getAuthoritativeEmployees() {
 
 async function saveAuthoritativeEmployees(employees) {
   if (!Array.isArray(employees)) return;
-  customEmployeesMemory = employees;
   if (kvUrl && kvToken) {
-    try {
-      await syncWithCloudKv('SET', 'yokohama_employees', employees);
-    } catch (kvErr) {
-      console.warn(`[STORAGE WARN] Cloud Redis sync for yokohama_employees failed: ${kvErr.message}`);
-    }
+    await persistToCloudKvStrict('SET', REDIS_KEYS.employees, employees);
   }
-  try {
-    fs.writeFileSync(EMPLOYEES_JSON_FILE, JSON.stringify(employees, null, 2), 'utf-8');
-  } catch (e) {}
+  customEmployeesMemory = employees;
+  kvCacheTs.employees = Date.now();
+  if (process.env.NODE_ENV !== 'test') {
+    try {
+      fs.writeFileSync(EMPLOYEES_JSON_FILE, JSON.stringify(employees, null, 2), 'utf-8');
+    } catch (e) {}
+  }
 }
 
-// Authoritative Question Bank Store
+// Authoritative Question Bank Store (Redis Primary + JSON/Base Seed Fallback)
 async function getAuthoritativeQuestions() {
-  if (kvUrl && kvToken) {
-    const cloudQuestions = await syncWithCloudKv('GET', 'yokohama_question_bank');
+  const hasRedis = Boolean(kvUrl && kvToken);
+  if (hasRedis) await ensureUpstashInitialSeed();
+  if (
+    customQuestionBankMemory &&
+    typeof customQuestionBankMemory === 'object' &&
+    Object.keys(customQuestionBankMemory).length > 0 &&
+    (Date.now() - kvCacheTs.questions) < 30000
+  ) {
+    return customQuestionBankMemory;
+  }
+  if (hasRedis) {
+    let cloudQuestions = await syncWithCloudKv('GET', REDIS_KEYS.questions);
+    if (!cloudQuestions || typeof cloudQuestions !== 'object' || Object.keys(cloudQuestions).length === 0) {
+      cloudQuestions = await syncWithCloudKv('GET', REDIS_KEYS.questionsLegacy);
+    }
     if (cloudQuestions && typeof cloudQuestions === 'object' && Object.keys(cloudQuestions).length > 0) {
       customQuestionBankMemory = cloudQuestions;
+      kvCacheTs.questions = Date.now();
       return cloudQuestions;
     }
   }
   if (customQuestionBankMemory && typeof customQuestionBankMemory === 'object' && Object.keys(customQuestionBankMemory).length > 0) {
     return customQuestionBankMemory;
   }
-  if (fs.existsSync(QUESTIONS_JSON_FILE)) {
-    try {
-      const raw = fs.readFileSync(QUESTIONS_JSON_FILE, 'utf-8');
-      customQuestionBankMemory = JSON.parse(raw);
-      if (customQuestionBankMemory && Object.keys(customQuestionBankMemory).length > 0) return customQuestionBankMemory;
-    } catch (e) {}
-  }
-  const base = loadBaseDatasetFromDataJs();
-  if (base && base.questionBank) {
-    customQuestionBankMemory = base.questionBank;
-    return customQuestionBankMemory;
-  }
-  return { L: [], U: [], O: [] };
+  const localQs = readLocalSeedQuestions();
+  customQuestionBankMemory = localQs;
+  kvCacheTs.questions = Date.now();
+  return customQuestionBankMemory;
 }
 
 async function saveAuthoritativeQuestions(qb) {
   if (!qb || typeof qb !== 'object') return;
-  customQuestionBankMemory = qb;
   if (kvUrl && kvToken) {
-    try {
-      await syncWithCloudKv('SET', 'yokohama_question_bank', qb);
-    } catch (kvErr) {
-      console.warn(`[STORAGE WARN] Cloud Redis sync for yokohama_question_bank failed: ${kvErr.message}`);
-    }
+    await persistToCloudKvStrict('SET', REDIS_KEYS.questions, qb);
   }
+  customQuestionBankMemory = qb;
+  kvCacheTs.questions = Date.now();
   const serialized = JSON.stringify(qb, null, 2);
   try {
     fs.writeFileSync(QUESTIONS_JSON_FILE, serialized, 'utf-8');
@@ -2903,17 +3506,25 @@ async function saveAuthoritativeQuestions(qb) {
   } catch (e) {}
 }
 
-// Authoritative Assessment Records Store (Redis Single Source of Truth + Concurrency Guard)
+// Authoritative Assessment Records Store (Redis Primary + Disk Seed Fallback)
 async function getAuthoritativeRecords() {
-  if (kvUrl && kvToken) {
+  const hasRedis = Boolean(kvUrl && kvToken);
+  if (hasRedis) await ensureUpstashInitialSeed();
+  if ((globalAssessmentRecords.size > 0 || globalAssessmentRecords._isExplicitlyCleared) && (Date.now() - kvCacheTs.records) < 5000) {
+    const cached = Object.fromEntries(globalAssessmentRecords);
+    delete cached.__initialized;
+    return cached;
+  }
+  if (hasRedis) {
     try {
-      const cloudRecords = await syncWithCloudKv('GET', 'yokohama_records');
+      const cloudRecords = await syncWithCloudKv('GET', REDIS_KEYS.records);
       if (cloudRecords !== null && typeof cloudRecords === 'object' && !cloudRecords.error) {
-        // Cloud is authoritative source of truth. Even if empty or __initialized, do NOT load seed files!
         const clean = { ...cloudRecords };
         delete clean.__initialized;
         globalAssessmentRecords.clear();
         Object.entries(clean).forEach(([k, v]) => globalAssessmentRecords.set(String(k), v));
+        globalAssessmentRecords._isExplicitlyCleared = true;
+        kvCacheTs.records = Date.now();
         return clean;
       }
     } catch (e) {
@@ -2921,28 +3532,34 @@ async function getAuthoritativeRecords() {
     }
   }
   if (globalAssessmentRecords.size === 0 && !globalAssessmentRecords._isExplicitlyCleared) {
-    if (fs.existsSync(RECORDS_JSON_FILE)) {
-      try {
-        const raw = fs.readFileSync(RECORDS_JSON_FILE, 'utf-8');
-        const parsed = JSON.parse(raw);
-        delete parsed.__initialized;
-        Object.entries(parsed).forEach(([k, v]) => globalAssessmentRecords.set(String(k), v));
-      } catch (e) {}
-    } else {
-      try {
-        const seedPath = path.join(__dirname, 'seed_data.js');
-        if (fs.existsSync(seedPath)) {
-          require(seedPath);
-          if (global.SEED_RECORDS && typeof global.SEED_RECORDS === 'object') {
-            Object.entries(global.SEED_RECORDS).forEach(([k, v]) => globalAssessmentRecords.set(String(k), v));
-          }
-        }
-      } catch (e) {}
-    }
+    const parsed = readLocalSeedRecords();
+    Object.entries(parsed).forEach(([k, v]) => {
+      if (k !== '__initialized') globalAssessmentRecords.set(String(k), v);
+    });
   }
   const result = Object.fromEntries(globalAssessmentRecords);
   delete result.__initialized;
   return result;
+}
+
+// Compact records map for Upstash Redis storage (strips multi-MB duplicated submittedQuestions text blobs
+// while preserving every score, categoryMarks, responses, status, switchedLevel, and attemptHistory)
+function compactRecordsForCloudKv(recordsMap) {
+  const compact = { __initialized: true };
+  for (const [k, v] of Object.entries(recordsMap || {})) {
+    if (k === '__initialized') continue;
+    if (v && typeof v === 'object') {
+      if (Array.isArray(v.submittedQuestions) && v.submittedQuestions.length > 0) {
+        const { submittedQuestions, ...rest } = v;
+        compact[k] = { ...rest, questionCount: v.questionCount || submittedQuestions.length };
+      } else {
+        compact[k] = v;
+      }
+    } else {
+      compact[k] = v;
+    }
+  }
+  return compact;
 }
 
 async function saveAuthoritativeRecord(empNo, updaterOrData) {
@@ -2959,20 +3576,23 @@ async function saveAuthoritativeRecord(empNo, updaterOrData) {
       updatedData = { ...existing, ...updaterOrData };
     }
 
-    // Monotonic optimistic concurrency versioning & audit timestamp
     updatedData.version = (existing.version || 0) + 1;
     updatedData.updatedAt = new Date().toISOString();
 
-    currentRecords[strEmpNo] = updatedData;
-    currentRecords.__initialized = true;
-    globalAssessmentRecords.set(strEmpNo, updatedData);
+    const nextRecords = { ...currentRecords, [strEmpNo]: updatedData, __initialized: true };
+    const compacted = compactRecordsForCloudKv(nextRecords);
 
     if (kvUrl && kvToken) {
+      await persistToCloudKvStrict('SET', REDIS_KEYS.records, compacted);
+    }
+
+    globalAssessmentRecords.set(strEmpNo, updatedData);
+    globalAssessmentRecords._isExplicitlyCleared = true;
+    kvCacheTs.records = Date.now();
+    if (process.env.NODE_ENV !== 'test') {
       try {
-        await syncWithCloudKv('SET', 'yokohama_records', currentRecords);
-      } catch (kvErr) {
-        console.warn(`[STORAGE WARN] Cloud Redis sync for yokohama_records failed: ${kvErr.message}`);
-      }
+        fs.writeFileSync(RECORDS_JSON_FILE, JSON.stringify(compacted, null, 2), 'utf-8');
+      } catch (e) {}
     }
 
     return updatedData;
@@ -2981,18 +3601,41 @@ async function saveAuthoritativeRecord(empNo, updaterOrData) {
   }
 }
 
+async function saveAllAuthoritativeRecords(recordsObj) {
+  if (!recordsObj || typeof recordsObj !== 'object') return;
+  const payload = compactRecordsForCloudKv(recordsObj);
+
+  if (kvUrl && kvToken) {
+    await persistToCloudKvStrict('SET', REDIS_KEYS.records, payload);
+  }
+
+  globalAssessmentRecords.clear();
+  Object.entries(payload).forEach(([k, v]) => {
+    if (k !== '__initialized') globalAssessmentRecords.set(String(k), v);
+  });
+  globalAssessmentRecords._isExplicitlyCleared = true;
+  kvCacheTs.records = Date.now();
+  if (process.env.NODE_ENV !== 'test') {
+    try {
+      fs.writeFileSync(RECORDS_JSON_FILE, JSON.stringify(payload, null, 2), 'utf-8');
+    } catch (e) {}
+  }
+}
+
 async function resetAuthoritativeRecords(filterFn = null) {
   if (!filterFn) {
-    // Reset all: mark initialized and explicitly cleared so seed data never resurrects
+    const emptyPayload = { __initialized: true };
+    if (kvUrl && kvToken) {
+      await persistToCloudKvStrict('SET', REDIS_KEYS.records, emptyPayload);
+    }
     globalAssessmentRecords.clear();
     globalAssessmentRecords._isExplicitlyCleared = true;
+    kvCacheTs.records = Date.now();
     activeExamSessions.clear();
-    if (kvUrl && kvToken) {
+    if (process.env.NODE_ENV !== 'test') {
       try {
-        await syncWithCloudKv('SET', 'yokohama_records', { __initialized: true });
-      } catch (kvErr) {
-        console.warn(`[STORAGE WARN] Cloud Redis reset failed: ${kvErr.message}`);
-      }
+        fs.writeFileSync(RECORDS_JSON_FILE, JSON.stringify(emptyPayload, null, 2), 'utf-8');
+      } catch (e) {}
     }
     return {};
   }
@@ -3000,47 +3643,63 @@ async function resetAuthoritativeRecords(filterFn = null) {
   const currentRecords = await getAuthoritativeRecords();
   const newRecords = { __initialized: true };
   let resetCount = 0;
+  const resetKeys = [];
   for (const [k, v] of Object.entries(currentRecords)) {
     if (k === '__initialized') continue;
     if (filterFn(k, v)) {
       resetCount++;
-      activeExamSessions.delete(String(k).trim());
-      if (kvUrl && kvToken) {
-        syncWithCloudKv('DEL', `exam:${String(k).trim()}`).catch(() => {});
-      }
+      resetKeys.push(String(k).trim());
     } else {
       newRecords[k] = v;
     }
   }
 
+  const compacted = compactRecordsForCloudKv(newRecords);
+  if (kvUrl && kvToken) {
+    await persistToCloudKvStrict('SET', REDIS_KEYS.records, compacted);
+    await Promise.all(resetKeys.map((k) => syncWithCloudKv('DEL', `exam:${k}`).catch(() => {})));
+  }
+
+  resetKeys.forEach((k) => activeExamSessions.delete(k));
   globalAssessmentRecords.clear();
   Object.entries(newRecords).forEach(([k, v]) => {
     if (k !== '__initialized') globalAssessmentRecords.set(k, v);
   });
   globalAssessmentRecords._isExplicitlyCleared = true;
-
-  if (kvUrl && kvToken) {
+  kvCacheTs.records = Date.now();
+  if (process.env.NODE_ENV !== 'test') {
     try {
-      await syncWithCloudKv('SET', 'yokohama_records', newRecords);
-    } catch (kvErr) {
-      console.warn(`[STORAGE WARN] Cloud Redis sync for yokohama_records failed: ${kvErr.message}`);
-    }
+      fs.writeFileSync(RECORDS_JSON_FILE, JSON.stringify(compacted, null, 2), 'utf-8');
+    } catch (e) {}
   }
+
   const cleanRet = { ...newRecords };
   delete cleanRet.__initialized;
   return { newRecords: cleanRet, resetCount };
 }
 
-// Authoritative OJT Store (Redis Single Source of Truth + Concurrency Guard)
+// Authoritative OJT Store (Redis Primary + Disk Seed Fallback)
 async function getAuthoritativeOjtEvaluations() {
-  if (kvUrl && kvToken) {
+  const hasRedis = Boolean(kvUrl && kvToken);
+  if (hasRedis) await ensureUpstashInitialSeed();
+  if ((globalOjtEvaluations.size > 0 || globalOjtEvaluations._isExplicitlyCleared) && (!hasRedis || (Date.now() - kvCacheTs.ojt) < 5000)) {
+    const cached = Object.fromEntries(globalOjtEvaluations);
+    delete cached.__initialized;
+    return cached;
+  }
+  if (hasRedis) {
     try {
-      const cloudOjt = await syncWithCloudKv('GET', 'yokohama_ojt_evaluations');
+      let cloudOjt = await syncWithCloudKv('GET', REDIS_KEYS.ojt);
+      if (!cloudOjt || typeof cloudOjt !== 'object' || cloudOjt.error) {
+        cloudOjt = await syncWithCloudKv('GET', REDIS_KEYS.ojtLegacy);
+      }
       if (cloudOjt !== null && typeof cloudOjt === 'object' && !cloudOjt.error) {
         const clean = { ...cloudOjt };
         delete clean.__initialized;
         globalOjtEvaluations.clear();
         Object.entries(clean).forEach(([k, v]) => globalOjtEvaluations.set(String(k), v));
+        globalOjtEvaluations._isExplicitlyCleared = true;
+        kvCacheTs.ojt = Date.now();
         return clean;
       }
     } catch (e) {
@@ -3048,24 +3707,10 @@ async function getAuthoritativeOjtEvaluations() {
     }
   }
   if (globalOjtEvaluations.size === 0 && !globalOjtEvaluations._isExplicitlyCleared) {
-    if (fs.existsSync(OJT_JSON_FILE)) {
-      try {
-        const raw = fs.readFileSync(OJT_JSON_FILE, 'utf-8');
-        const parsed = JSON.parse(raw);
-        delete parsed.__initialized;
-        Object.entries(parsed).forEach(([k, v]) => globalOjtEvaluations.set(String(k), v));
-      } catch (e) {}
-    } else {
-      try {
-        const seedOjtPath = path.join(__dirname, 'seed_ojt.js');
-        if (fs.existsSync(seedOjtPath)) {
-          const seedOjt = require(seedOjtPath);
-          if (seedOjt && typeof seedOjt === 'object') {
-            Object.entries(seedOjt).forEach(([k, v]) => globalOjtEvaluations.set(String(k), v));
-          }
-        }
-      } catch (e) {}
-    }
+    const parsed = readLocalSeedOjt();
+    Object.entries(parsed).forEach(([k, v]) => {
+      if (k !== '__initialized') globalOjtEvaluations.set(String(k), v);
+    });
   }
   const result = Object.fromEntries(globalOjtEvaluations);
   delete result.__initialized;
@@ -3084,16 +3729,19 @@ async function saveAuthoritativeOjtEvaluation(empNo, ojtData) {
       version: (existing.version || 0) + 1,
       updatedAt: new Date().toISOString()
     };
-    current[strEmpNo] = updated;
-    current.__initialized = true;
-    globalOjtEvaluations.set(strEmpNo, updated);
+    const nextPayload = { ...current, [strEmpNo]: updated, __initialized: true };
 
     if (kvUrl && kvToken) {
+      await persistToCloudKvStrict('SET', REDIS_KEYS.ojt, nextPayload);
+    }
+
+    globalOjtEvaluations.set(strEmpNo, updated);
+    globalOjtEvaluations._isExplicitlyCleared = true;
+    kvCacheTs.ojt = Date.now();
+    if (process.env.NODE_ENV !== 'test') {
       try {
-        await syncWithCloudKv('SET', 'yokohama_ojt_evaluations', current);
-      } catch (kvErr) {
-        console.warn(`[STORAGE WARN] Cloud Redis sync for yokohama_ojt_evaluations failed: ${kvErr.message}`);
-      }
+        fs.writeFileSync(OJT_JSON_FILE, JSON.stringify(nextPayload, null, 2), 'utf-8');
+      } catch (e) {}
     }
     return updated;
   } finally {
@@ -3101,169 +3749,98 @@ async function saveAuthoritativeOjtEvaluation(empNo, ojtData) {
   }
 }
 
-// Canonical Plant Taxonomy (33 Reconciled Sections: 8 QA + 25 Production per docs/GLOSSARY.md)
-const CANONICAL_PLANT_SECTIONS = {
-  qa: [
-    { code: 'QA-TB', name: 'Tire Building QA', dept: 'QUALITY CONTROL' },
-    { code: 'QA-TC', name: 'Tire Curing QA', dept: 'QUALITY CONTROL' },
-    { code: 'QA-FF', name: 'Final Finish QA', dept: 'QUALITY CONTROL' },
-    { code: 'QA-FF-RRO', name: 'Final Finish RRO & ALT QA', dept: 'QUALITY CONTROL' },
-    { code: 'QA-PR', name: 'Preparatory QA', dept: 'QUALITY CONTROL' },
-    { code: 'QA-ST', name: 'Solid Tire QA', dept: 'QUALITY CONTROL' },
-    { code: 'QA-WH', name: 'Warehouse QA', dept: 'QUALITY CONTROL' },
-    { code: 'QA-FID', name: 'FID Inspector QA', dept: 'QUALITY CONTROL' }
-  ],
-  production: [
-    { code: 'PR-MIX', name: 'Mixing', dept: 'PRODUCTION' },
-    { code: 'PR-4ROLL', name: '4 Roll Calender', dept: 'PRODUCTION' },
-    { code: 'PR-3ROLL', name: '3 Roll Calender P2', dept: 'PRODUCTION' },
-    { code: 'PR-EXT', name: 'Extruder', dept: 'PRODUCTION' },
-    { code: 'PR-BEAD', name: 'Bead Winding', dept: 'PRODUCTION' },
-    { code: 'PR-STEL', name: 'Steelastic', dept: 'PRODUCTION' },
-    { code: 'PR-TB1', name: 'Tyre Building P1', dept: 'PRODUCTION' },
-    { code: 'PR-TB2', name: 'Tyre Building P2', dept: 'PRODUCTION' },
-    { code: 'PR-TB3', name: 'Tyre Building P3', dept: 'PRODUCTION' },
-    { code: 'PR-BB1', name: 'Band Building P1', dept: 'PRODUCTION' },
-    { code: 'PR-BB2', name: 'Band Building P2', dept: 'PRODUCTION' },
-    { code: 'PR-BB3', name: 'Band Building P3', dept: 'PRODUCTION' },
-    { code: 'PR-TC', name: 'Tyre Curing Production', dept: 'PRODUCTION' },
-    { code: 'PR-BIAS1', name: 'Bias Cutting 1', dept: 'PRODUCTION' },
-    { code: 'PR-BIAS2', name: 'Bias Cutting 2', dept: 'PRODUCTION' },
-    { code: 'PR-BIAS4', name: 'Bias Cutting 4', dept: 'PRODUCTION' },
-    { code: 'PR-BIAS5', name: 'Bias Cutting 5', dept: 'PRODUCTION' },
-    { code: 'PR-AUTOB', name: 'Auto Bias Cutter', dept: 'PRODUCTION' },
-    { code: 'PR-SLIT', name: 'Slitting', dept: 'PRODUCTION' },
-    { code: 'PR-LINE', name: 'Liner Dressing', dept: 'PRODUCTION' },
-    { code: 'PR-SALV', name: 'Salvage', dept: 'PRODUCTION' },
-    { code: 'PR-RADM', name: 'Radial Marangoni', dept: 'PRODUCTION' },
-    { code: 'PR-BIASM', name: 'Bias Marangoni & Bestry', dept: 'PRODUCTION' },
-    { code: 'PR-YAN', name: 'Yanthai', dept: 'PRODUCTION' },
-    { code: 'PR-ST', name: 'Solid Tyre Production', dept: 'PRODUCTION' }
-  ]
-};
+async function saveAllAuthoritativeOjtEvaluations(ojtObj) {
+  if (!ojtObj || typeof ojtObj !== 'object') return;
+  const payload = { ...ojtObj, __initialized: true };
 
-// Canonical Assessment Configuration [PENDING HR CONFIRMATION]
-const ASSESSMENT_CONFIG = {
-  // Service-month transition eligibility thresholds
-  transitionMonths: {
-    'I->L': 0,    // Initial onboarding to Learner (0 to 1 month)
-    'L->U': 6,    // Minimum 6 months service before eligible for U
-    'U->O': 24    // Minimum 24 months service before eligible for O default [PENDING HR CONFIRMATION]
-  },
-  // Tiered Pass Mark Standards per Target Level
-  passMarks: {
-    'L': 50,  // Level L: >= 50%
-    'U': 60,  // Level U: >= 60%
-    'O': 75   // Level O: >= 75%
-  },
-  // OJT Practical Evaluation passing threshold
-  ojtPassPct: 70
-};
-
-function getActiveAssessmentConfig() {
-  if (customSettingsMemory && typeof customSettingsMemory === 'object') {
-    return {
-      transitionMonths: Object.assign({}, ASSESSMENT_CONFIG.transitionMonths, customSettingsMemory.transitionMonths || {}),
-      passMarks: Object.assign({}, ASSESSMENT_CONFIG.passMarks, customSettingsMemory.passMarks || {}),
-      ojtPassPct: customSettingsMemory.ojtPassPct !== undefined ? customSettingsMemory.ojtPassPct : ASSESSMENT_CONFIG.ojtPassPct
-    };
+  if (kvUrl && kvToken) {
+    await persistToCloudKvStrict('SET', REDIS_KEYS.ojt, payload);
   }
-  return ASSESSMENT_CONFIG;
+
+  globalOjtEvaluations.clear();
+  Object.entries(payload).forEach(([k, v]) => {
+    if (k !== '__initialized') globalOjtEvaluations.set(String(k), v);
+  });
+  globalOjtEvaluations._isExplicitlyCleared = true;
+  kvCacheTs.ojt = Date.now();
+  if (process.env.NODE_ENV !== 'test') {
+    try {
+      fs.writeFileSync(OJT_JSON_FILE, JSON.stringify(payload, null, 2), 'utf-8');
+    } catch (e) {}
+  }
 }
 
-// Pure Promotion Eligibility Function
-function calculateEligibleLevel(currentLevel, dojStr) {
-  const activeConfig = getActiveAssessmentConfig();
-  const config = activeConfig.transitionMonths;
-  if (!currentLevel || currentLevel === 'O') {
-    return currentLevel || 'I';
-  }
-
-  let months = 0;
-  if (dojStr && dojStr !== '-') {
-    let dojDate = null;
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dojStr)) {
-      const [d, m, y] = dojStr.split('/').map(Number);
-      dojDate = new Date(y, m - 1, d);
-    } else {
-      dojDate = new Date(dojStr);
-    }
-    if (!isNaN(dojDate.getTime())) {
-      const now = new Date();
-      months = (now.getFullYear() - dojDate.getFullYear()) * 12 + (now.getMonth() - dojDate.getMonth());
-      if (now.getDate() < dojDate.getDate()) {
-        months -= 1;
+// Automatic Soft Backup Snapshot Helper (30-min Undo Window, Redis + Memory)
+async function getSoftBackupsList() {
+  if (kvUrl && kvToken) {
+    try {
+      const cloudBackups = await syncWithCloudKv('GET', 'yokohama_soft_backups');
+      if (Array.isArray(cloudBackups)) {
+        softBackupsMemory.clear();
+        cloudBackups.forEach((b) => { if (b && b.backupId) softBackupsMemory.set(b.backupId, b); });
+        return cloudBackups;
       }
-      months = Math.max(0, months);
-    }
+    } catch (e) {}
   }
-
-  if (currentLevel === 'I') {
-    return 'L';
-  } else if (currentLevel === 'L') {
-    const minMonths = config['L->U'] !== undefined ? config['L->U'] : 6;
-    return months >= minMonths ? 'U' : 'L';
-  } else if (currentLevel === 'U') {
-    const minMonths = config['U->O'] !== undefined ? config['U->O'] : 24;
-    return months >= minMonths ? 'O' : 'U';
-  }
-
-  return currentLevel;
+  return Array.from(softBackupsMemory.values());
 }
 
-// Standalone Manufacturing Foundation Module Question Generator (Task 2.13)
-function getFoundationQuestionsServer(qBank, options = {}) {
-  const shouldRandomize = options && options.randomize === true;
-  const allQs = [...(qBank.L || []), ...(qBank.U || []), ...(qBank.O || [])];
-
-  const safety = allQs.filter(q => (q.category || '').toLowerCase().includes('safety'));
-  const ciTpm = allQs.filter(q => (q.category || '').toLowerCase().includes('ci') || (q.category || '').toLowerCase().includes('tpm'));
-  const quality = allQs.filter(q => (q.category || '').toLowerCase().includes('qa') || (q.category || '').toLowerCase().includes('quality'));
-
-  if (shouldRandomize) {
-    safety.sort(() => Math.random() - 0.5);
-    ciTpm.sort(() => Math.random() - 0.5);
-    quality.sort(() => Math.random() - 0.5);
+async function saveSoftBackupsList(list) {
+  const trimmed = Array.isArray(list) ? list.slice(-30) : [];
+  softBackupsMemory.clear();
+  trimmed.forEach((b) => { if (b && b.backupId) softBackupsMemory.set(b.backupId, b); });
+  if (kvUrl && kvToken) {
+    try { await syncWithCloudKv('SET', 'yokohama_soft_backups', trimmed); } catch (e) {}
   }
+}
 
-  const selected = [
-    ...safety.slice(0, 7),
-    ...ciTpm.slice(0, 7),
-    ...quality.slice(0, 6)
-  ];
-  return selected;
+async function createSoftBackupSnapshot(backupType, actor, summary, snapshot) {
+  const backupId = `bkp_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+  const actorStr = typeof actor === 'string' ? actor : ((actor && (actor.email || actor.name)) || 'Admin');
+  const undoMinutes = 30;
+  const expiresAt = new Date(Date.now() + undoMinutes * 60 * 1000).toISOString();
+
+  const entry = {
+    backupId,
+    backupType,
+    actor: actorStr,
+    summary,
+    snapshot,
+    createdAt: new Date().toISOString(),
+    expiresAt,
+    restoredAt: null
+  };
+
+  const existingList = await getSoftBackupsList();
+  existingList.push(entry);
+  await saveSoftBackupsList(existingList);
+  return { backupId, expiresAt };
 }
 
 // Question & Exam Evaluation Helpers
 function normalizeSectionNameServer(sec) {
-  let s = (sec || '').toLowerCase().trim().replace(/\s+/g, ' ');
-  s = s.replace('ware house', 'warehouse');
-  if (s.includes('rro') || s.includes('alt')) return 'final finish rro & alt qa';
-  if (s.includes('building') || s.includes('tbm')) return 'tire building qa';
-  if (s.includes('curing')) return 'tire curing qa';
-  if (s.includes('solid')) return 'solid tire qa';
-  if (s.includes('preparatory')) return 'preparatory qa';
-  if (s.includes('fid') || s.includes('data entry')) return 'fid inspector qa';
-  if (s.includes('warehouse')) return 'warehouse qa';
-  if (s.includes('finish')) return 'final finish qa';
-  return s;
+  const s = String(sec || '').toLowerCase().trim().replace(/\s+/g, ' ');
+  if (PROD_SECTION_KEYS.has(s)) return s;
+  return normalizeQaSectionKey(sec);
 }
 
-function getQuestionsForSectionServer(allLevelQuestions, targetLevel, section, options = {}) {
-  const reqCount = (targetLevel === 'O' ? 40 : (targetLevel === 'U' ? 30 : 20));
-  const shouldRandomize = options && options.randomize === true;
-
-  if (!section) {
-    const pool = [...allLevelQuestions];
-    if (shouldRandomize) pool.sort(() => Math.random() - 0.5);
-    return pool.slice(0, reqCount);
+function shuffleArrayServer(arr) {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(0, i + 1);
+    const tmp = copy[i];
+    copy[i] = copy[j];
+    copy[j] = tmp;
   }
+  return copy;
+}
+
+function getQuestionsForSectionServer(allLevelQuestions, targetLevel, section) {
+  const reqCount = (targetLevel === 'O' ? 40 : (targetLevel === 'U' ? 30 : 20));
+  if (!section) return allLevelQuestions.slice(0, reqCount);
   const empSecNorm = normalizeSectionNameServer(section);
   const sectionQs = allLevelQuestions.filter(q => normalizeSectionNameServer(q.section) === empSecNorm);
-  if (sectionQs.length === 0) {
-    // Section bank not uploaded: locked to prevent unapproved promotion via borrowed questions
-    return [];
-  }
+  if (sectionQs.length === 0) return allLevelQuestions.slice(0, reqCount);
 
   const byCat = {};
   sectionQs.forEach(q => {
@@ -3272,63 +3849,48 @@ function getQuestionsForSectionServer(allLevelQuestions, targetLevel, section, o
     byCat[cat].push(q);
   });
   const cats = Object.keys(byCat);
-  if (cats.length <= 1) {
-    const pool = [...sectionQs];
-    if (shouldRandomize) pool.sort(() => Math.random() - 0.5);
-    return pool.slice(0, reqCount);
-  }
+  if (cats.length <= 1) return sectionQs.slice(0, reqCount);
 
   const baseTarget = Math.floor(reqCount / cats.length);
   const extraSlots = reqCount % cats.length;
   const selected = [];
   cats.forEach((cat, idx) => {
     const targetForCat = baseTarget + (idx < extraSlots ? 1 : 0);
-    const catPool = [...byCat[cat]];
-    if (shouldRandomize) catPool.sort(() => Math.random() - 0.5);
-    selected.push(...catPool.slice(0, targetForCat));
+    selected.push(...byCat[cat].slice(0, targetForCat));
   });
   if (selected.length < reqCount) {
     const selIds = new Set(selected.map(q => q.id));
     const remaining = sectionQs.filter(q => !selIds.has(q.id));
-    if (shouldRandomize) remaining.sort(() => Math.random() - 0.5);
     selected.push(...remaining.slice(0, reqCount - selected.length));
   }
-
-  const result = selected.slice(0, reqCount);
-  if (shouldRandomize) result.sort(() => Math.random() - 0.5);
-  return result;
+  return selected.slice(0, reqCount);
 }
 
 // Strip correctAnswer from questions payload before returning to employee client
-function sanitizeQuestionsForEmployee(questions, randomizeOptions = true) {
+function sanitizeQuestionsForEmployee(questions) {
   if (!Array.isArray(questions)) return [];
   return questions.map(q => {
-    const { correctAnswer, options: opts, ...sanitized } = q;
-    let finalOptions = Array.isArray(opts) ? [...opts] : [];
-    if (randomizeOptions) {
-      finalOptions.sort(() => Math.random() - 0.5);
-    }
-    return {
-      ...sanitized,
-      options: finalOptions
-    };
+    const { correctAnswer, ...sanitized } = q;
+    return sanitized;
   });
 }
 
 // Authoritative Server-Side Scoring Engine
-async function scoreAssessmentServerSide(empNo, targetLevel, responses, section) {
+async function scoreAssessmentServerSide(empNo, targetLevel, responses, section, examSession = null) {
   const strEmpNo = String(empNo).trim();
   const employees = await getAuthoritativeEmployees();
   const emp = employees.find(e => String(e.empNo).trim().toLowerCase() === strEmpNo.toLowerCase());
   const empSection = section || (emp && emp.section) || '';
 
   const qBank = await getAuthoritativeQuestions();
+  const allLevelQuestions = qBank[targetLevel] || qBank['L'] || [];
+
   let questions = [];
-  const isFoundation = targetLevel === 'FOUNDATION';
-  if (isFoundation) {
-    questions = getFoundationQuestionsServer(qBank);
-  } else {
-    const allLevelQuestions = qBank[targetLevel] || qBank['L'] || [];
+  if (examSession && Array.isArray(examSession.questionIds) && examSession.questionIds.length > 0) {
+    const byId = new Map(allLevelQuestions.map(q => [String(q.id), q]));
+    questions = examSession.questionIds.map(id => byId.get(String(id))).filter(Boolean);
+  }
+  if (questions.length === 0) {
     questions = getQuestionsForSectionServer(allLevelQuestions, targetLevel, empSection);
   }
 
@@ -3338,8 +3900,12 @@ async function scoreAssessmentServerSide(empNo, targetLevel, responses, section)
   let qualityMark = 0, qualityTotal = 0;
   let ciTpmMark = 0, ciTpmTotal = 0;
 
+  const optionMaps = (examSession && examSession.optionMaps) || {};
+
   const submittedQuestions = questions.map((q, idx) => {
-    const selKey = (responses && responses[q.id]) || 'Not Answered';
+    const rawSel = (responses && responses[q.id] !== undefined && responses[q.id] !== null) ? String(responses[q.id]) : 'Not Answered';
+    const qMap = optionMaps[q.id];
+    const selKey = (qMap && qMap[rawSel]) ? qMap[rawSel] : rawSel;
     const selOpt = q.options ? q.options.find(o => o.key === selKey) : null;
     const corrOpt = q.options ? q.options.find(o => o.key === q.correctAnswer) : null;
     const isCorrect = (selKey === q.correctAnswer);
@@ -3375,10 +3941,12 @@ async function scoreAssessmentServerSide(empNo, targetLevel, responses, section)
     };
   });
 
+  const settings = await getSettingsAuthoritative();
+  const passingPct = Number(settings.examPassingPct || 50);
+
   const totalQs = questions.length || 1;
   const markPct = Math.round((correctCount / totalQs) * 100);
-  const activeConfig = getActiveAssessmentConfig();
-  const passingPct = isFoundation ? 70 : (activeConfig.passMarks[targetLevel] || 70);
+  const currentLevel = (emp && emp.currentLevel) || 'I';
   const pass = markPct >= passingPct;
 
   let uMark = 0, lMark = 0, oMark = 0;
@@ -3393,9 +3961,6 @@ async function scoreAssessmentServerSide(empNo, targetLevel, responses, section)
     section: emp ? emp.section : empSection,
     doj: emp ? emp.doj : '-',
     targetLevel: targetLevel,
-    isFoundation: isFoundation,
-    moduleName: isFoundation ? 'Manufacturing Foundation Module' : `Level ${targetLevel} MCQ Assessment`,
-    passingPct,
     inProgress: false,
     isCompleted: true,
     responses: responses,
@@ -3406,6 +3971,7 @@ async function scoreAssessmentServerSide(empNo, targetLevel, responses, section)
     oMark,
     totalMark: correctCount,
     markPct,
+    passingPctUsed: passingPct,
     safetyMark,
     safetyTotal,
     processMark,
@@ -3425,6 +3991,7 @@ async function scoreAssessmentServerSide(empNo, targetLevel, responses, section)
       process: processMark,
       ciTpm: ciTpmMark
     },
+    scheduleId: (examSession && examSession.scheduleId) || null,
     attemptDate: new Date().toLocaleDateString('en-GB')
   };
 }
@@ -3535,14 +4102,21 @@ app.post('/api/records', requireAnyAuth, async (req, res) => {
   return res.json({ success: true, message: `Record saved for employee ${strEmpNo}`, record: updated });
 });
 
-// DELETE /api/records/:empNo (Superadmin only: Reset specific candidate)
+// DELETE /api/records/:empNo (Admin: Reset specific candidate with automatic soft backup)
 app.delete('/api/records/:empNo', requireAdminAuth, async (req, res) => {
   const strEmpNo = String(req.params.empNo).trim();
+  const current = await getAuthoritativeRecords();
+  const prev = current[strEmpNo];
+  let backup = null;
+  if (prev) {
+    backup = await createSoftBackupSnapshot('SINGLE_RECORD_RESET', req.authUser, `Reset record for ${strEmpNo}`, { records: { [strEmpNo]: prev } });
+  }
   await resetAuthoritativeRecords((k) => k === strEmpNo);
-  res.json({ success: true, message: `Record reset for employee ${strEmpNo}` });
+  await logAuditEvent('RESET_SINGLE_RECORD', req.authUser, `Reset exam record for ${strEmpNo}`, req, strEmpNo);
+  res.json({ success: true, message: `Record reset for employee ${strEmpNo}`, ...(backup || {}) });
 });
 
-// POST /api/records/reset-all (Superadmin only: Requires explicit typed confirmation phrase)
+// POST /api/records/reset-all (Superadmin only: Typed confirmation + Automatic Backup + 30m Undo)
 app.post('/api/records/reset-all', requireSuperAdminAuth, async (req, res) => {
   const { confirmPhrase } = req.body || {};
   if (confirmPhrase !== 'RESET-ALL-EXAMS') {
@@ -3552,10 +4126,18 @@ app.post('/api/records/reset-all', requireSuperAdminAuth, async (req, res) => {
     });
   }
 
+  const snapshotRecords = await getAuthoritativeRecords();
+  const count = Object.keys(snapshotRecords || {}).length;
+  const backup = await createSoftBackupSnapshot('RESET_ALL_EXAMS', req.authUser, `Full exam reset (${count} records)`, { records: snapshotRecords });
+
   await resetAuthoritativeRecords(null);
-  await logAuditEvent('RESET_ALL_EXAMS', req.authUser, 'Reset all assessment records to zero finished', req);
-  console.log('🔄 All assessment records reset to 0 finished exams by Superadmin.');
-  res.json({ success: true, message: 'All exam records successfully reset to zero' });
+  await logAuditEvent('RESET_ALL_EXAMS', req.authUser, `Reset all assessment records (${count}) to zero finished (Backup ${backup.backupId})`, req, 'ALL_RECORDS');
+  res.json({
+    success: true,
+    message: `All exam records reset to zero. Undo available for 30 minutes.`,
+    backupId: backup.backupId,
+    undoExpiresAt: backup.expiresAt
+  });
 });
 
 // DELETE /api/records (Superadmin only: Requires explicit typed confirmation phrase)
@@ -3567,12 +4149,14 @@ app.delete('/api/records', requireSuperAdminAuth, async (req, res) => {
       message: 'Confirmation phrase mismatch. You must explicitly type "RESET-ALL-EXAMS" to perform this action.'
     });
   }
+  const snapshotRecords = await getAuthoritativeRecords();
+  const backup = await createSoftBackupSnapshot('DELETE_ALL_RECORDS', req.authUser, 'Deleted all assessment records', { records: snapshotRecords });
   await resetAuthoritativeRecords(null);
-  await logAuditEvent('DELETE_ALL_RECORDS', req.authUser, 'Deleted all assessment records', req);
-  res.json({ success: true, message: 'All exam records reset to zero' });
+  await logAuditEvent('DELETE_ALL_RECORDS', req.authUser, `Deleted all assessment records (Backup ${backup.backupId})`, req, 'ALL_RECORDS');
+  res.json({ success: true, message: 'All exam records reset to zero', backupId: backup.backupId, undoExpiresAt: backup.expiresAt });
 });
 
-// POST /api/records/reset-section (Superadmin only)
+// POST /api/records/reset-section (Admin only + Soft Backup + Audit)
 app.post('/api/records/reset-section', requireAdminAuth, async (req, res) => {
   const { section, sectionId } = req.body || {};
   if (!section && !sectionId) {
@@ -3580,65 +4164,107 @@ app.post('/api/records/reset-section', requireAdminAuth, async (req, res) => {
   }
 
   const emps = await getAuthoritativeEmployees();
-  const secQuery = String(section || sectionId).toLowerCase().replace(/qa/g, '').replace(/[^a-z0-9]/g, '');
+  const secQuery = normalizeSectionNameServer(section || sectionId);
+  const isProdSecQuery = PROD_SECTION_KEYS.has(secQuery);
+  const currentRecords = await getAuthoritativeRecords();
 
   const sectionEmpNos = new Set();
+  const affectedRecords = {};
   emps.forEach(emp => {
-    const empSec = String(emp.section || '').toLowerCase().replace(/qa/g, '').replace(/[^a-z0-9]/g, '');
-    if (empSec.includes(secQuery) || secQuery.includes(empSec)) {
-      sectionEmpNos.add(String(emp.empNo).trim());
+    const empSec = normalizeSectionNameServer(emp.section);
+    const matches = isProdSecQuery
+      ? empSec === secQuery
+      : (empSec === secQuery || empSec.includes(secQuery) || secQuery.includes(empSec));
+    if (matches) {
+      const k = String(emp.empNo).trim();
+      sectionEmpNos.add(k);
+      if (currentRecords[k]) affectedRecords[k] = currentRecords[k];
     }
   });
 
+  const backup = await createSoftBackupSnapshot('RESET_SECTION_EXAMS', req.authUser, `Section reset: ${section || sectionId} (${Object.keys(affectedRecords).length} records)`, { records: affectedRecords });
   const result = await resetAuthoritativeRecords((k) => sectionEmpNos.has(k));
+  await logAuditEvent('RESET_SECTION_EXAMS', req.authUser, `Reset ${result.resetCount} exam records in section ${section || sectionId}`, req, String(section || sectionId));
+
   res.json({
     success: true,
     message: `Successfully reset exams for section ${section || sectionId}`,
     count: result.resetCount,
-    records: result.newRecords
+    records: result.newRecords,
+    backupId: backup.backupId,
+    undoExpiresAt: backup.expiresAt
   });
 });
 
-// POST /api/records/reset-department (Superadmin only)
-app.post('/api/records/reset-department', requireAdminAuth, async (req, res) => {
+// POST /api/records/reset-department (Admin or Department HOD + Soft Backup + Audit)
+app.post('/api/records/reset-department', async (req, res) => {
+  const user = await getAuthUser(req);
+  if (!user) {
+    return res.status(401).json({ success: false, authenticated: false, message: 'Unauthorized: Authentication required' });
+  }
+
   const { department } = req.body || {};
   if (!department) {
     return res.status(400).json({ success: false, message: 'department is required' });
   }
 
+  const deptQuery = normalizeDepartmentName(department).toLowerCase();
+
+  // If role is DEPT_HEAD, ensure they only reset their assigned department
+  if (user.role === 'DEPT_HEAD') {
+    const userDept = normalizeDepartmentName(user.department || user.dept || '').toLowerCase();
+    if (userDept !== deptQuery) {
+      return res.status(403).json({ success: false, message: 'Forbidden: HOD can only reset their assigned department' });
+    }
+  } else if (!['SUPERADMIN', 'ADMIN'].includes(user.role)) {
+    return res.status(403).json({ success: false, message: 'Forbidden: Administrator or Department HOD privileges required' });
+  }
+
   const emps = await getAuthoritativeEmployees();
-  const deptQuery = String(department).toLowerCase().trim();
+  const currentRecords = await getAuthoritativeRecords();
 
   const deptEmpNos = new Set();
+  const affectedRecords = {};
   emps.forEach(emp => {
-    const empDept = String(emp.dept || 'QUALITY CONTROL').toLowerCase().trim();
+    const empDept = normalizeDepartmentName(emp.dept || 'QUALITY CONTROL').toLowerCase();
     if (deptQuery === 'all' || empDept === deptQuery || empDept.includes(deptQuery) || deptQuery.includes(empDept)) {
-      deptEmpNos.add(String(emp.empNo).trim());
+      const k = String(emp.empNo).trim();
+      deptEmpNos.add(k);
+      if (currentRecords[k]) affectedRecords[k] = currentRecords[k];
     }
   });
 
+  const isQcQuery = deptQuery.includes('quality') || deptQuery.includes('qc');
+  for (const [k, r] of Object.entries(currentRecords)) {
+    if (k === '__initialized' || deptEmpNos.has(k)) continue;
+    const rDept = normalizeDepartmentName(r.dept || '').toLowerCase();
+    const rSec = (r.section || '').toLowerCase();
+    if (deptQuery === 'all' || rDept === deptQuery || rDept.includes(deptQuery) || (isQcQuery && (rSec.includes('qa') || rDept.includes('qc') || rDept.includes('quality')))) {
+      deptEmpNos.add(String(k).trim());
+      affectedRecords[k] = r;
+    }
+  }
+
+  const backup = await createSoftBackupSnapshot('RESET_DEPT_EXAMS', user, `Department reset: ${department} (${Object.keys(affectedRecords).length} records)`, { records: affectedRecords });
   const result = await resetAuthoritativeRecords((k) => deptEmpNos.has(k));
+  await logAuditEvent('RESET_DEPT_EXAMS', user, `Reset ${result.resetCount} exam records in department ${department}`, req, String(department));
+
   res.json({
     success: true,
     message: `Successfully reset exams for department ${department}`,
     count: result.resetCount,
-    records: result.newRecords
+    records: result.newRecords,
+    backupId: backup.backupId,
+    undoExpiresAt: backup.expiresAt
   });
 });
 
-// POST /api/records/restore-demo (Superadmin only - strictly disabled in production)
+// POST /api/records/restore-demo (Disabled in Production; use Soft Backup Undo instead)
 app.post('/api/records/restore-demo', requireSuperAdminAuth, async (req, res) => {
-  if (isProduction) {
-    return res.status(403).json({
+  if (isProduction && process.env.ALLOW_DEMO_RESTORE !== 'true') {
+    return res.status(410).json({
       success: false,
-      message: 'Forbidden: Demo data restoration is strictly prohibited in production environments'
-    });
-  }
-  const { confirmPhrase } = req.body || {};
-  if (confirmPhrase !== 'RESTORE-DEMO-DATA') {
-    return res.status(400).json({
-      success: false,
-      message: 'Confirmation phrase mismatch. You must explicitly type "RESTORE-DEMO-DATA" to perform this action.'
+      message: 'Restore Demo is disabled in production. Use Soft Backups & 30-Minute Undo instead.'
     });
   }
   const BACKUP_FILE = path.join(__dirname, 'assessment_records_backup_236.json');
@@ -3649,46 +4275,127 @@ app.post('/api/records/restore-demo', requireSuperAdminAuth, async (req, res) =>
       globalAssessmentRecords.clear();
       Object.entries(parsed).forEach(([k, v]) => globalAssessmentRecords.set(String(k), v));
       if (kvUrl && kvToken) {
-        try {
-          await syncWithCloudKv('SET', 'yokohama_records', parsed);
-        } catch (kvErr) {
-          console.warn(`[STORAGE WARN] Cloud Redis restore failed: ${kvErr.message}`);
-        }
+        await persistToCloudKvStrict('SET', REDIS_KEYS.records, compactRecordsForCloudKv(parsed));
       }
+      await logAuditEvent('RESTORE_DEMO_RECORDS', req.authUser, `Restored ${globalAssessmentRecords.size} demo records`, req);
       return res.json({ success: true, message: `Restored ${globalAssessmentRecords.size} demo records from backup`, records: parsed });
     } catch (err) {
       return res.status(500).json({ success: false, message: 'Failed to restore backup: ' + err.message });
     }
   }
-  res.status(404).json({ success: false, message: 'Backup file assessment_records_backup_236.json not found' });
+  return res.status(404).json({ success: false, message: 'Backup file assessment_records_backup_236.json not found' });
+});
+
+// Soft Backups & 30-Minute Undo API
+app.get('/api/admin/backups', requireAdminAuth, async (req, res) => {
+  const now = Date.now();
+  const list = await getSoftBackupsList();
+  const active = list
+    .filter((b) => b && !b.restoredAt && new Date(b.expiresAt).getTime() > now)
+    .reverse();
+  return res.json({ success: true, backups: active });
+});
+
+app.post('/api/admin/backups/:backupId/undo', requireAdminAuth, async (req, res) => {
+  const backupId = String(req.params.backupId || '').trim();
+  const list = await getSoftBackupsList();
+  const bkp = list.find((b) => b && b.backupId === backupId) || softBackupsMemory.get(backupId) || null;
+  if (!bkp) {
+    return res.status(404).json({ success: false, message: 'Backup snapshot not found' });
+  }
+  if (bkp.restoredAt) {
+    return res.status(409).json({ success: false, message: 'This backup snapshot was already restored.' });
+  }
+  if (Date.now() > new Date(bkp.expiresAt).getTime()) {
+    return res.status(410).json({ success: false, message: '30-minute undo window has expired for this backup.' });
+  }
+
+  const snap = bkp.snapshot || {};
+  let restoredCount = 0;
+
+  if (snap.records && typeof snap.records === 'object') {
+    for (const [k, rec] of Object.entries(snap.records)) {
+      if (k !== '__initialized' && rec && typeof rec === 'object') {
+        await saveAuthoritativeRecord(k, rec);
+        restoredCount++;
+      }
+    }
+    await saveSettingsAuthoritative({ __recordsCleared: false });
+  }
+  if (snap.ojt && typeof snap.ojt === 'object') {
+    for (const [k, ojt] of Object.entries(snap.ojt)) {
+      if (k !== '__initialized' && ojt && typeof ojt === 'object') {
+        await saveAuthoritativeOjtEvaluation(k, ojt);
+        restoredCount++;
+      }
+    }
+    await saveSettingsAuthoritative({ __ojtCleared: false });
+  }
+  if (snap.deletedEmployee && snap.deletedEmployee.empNo) {
+    const emps = await getAuthoritativeEmployees();
+    if (!emps.some((e) => String(e.empNo) === String(snap.deletedEmployee.empNo))) {
+      emps.push(snap.deletedEmployee);
+      await saveAuthoritativeEmployees(emps);
+    }
+    restoredCount++;
+  }
+  if (snap.questionBank && typeof snap.questionBank === 'object') {
+    await saveAuthoritativeQuestions(snap.questionBank);
+    restoredCount++;
+  }
+
+  bkp.restoredAt = new Date().toISOString();
+  await saveSoftBackupsList(list);
+
+  await logAuditEvent('UNDO_BACKUP_RESTORE', req.authUser, `Restored backup ${backupId} (${bkp.backupType}, ${restoredCount} items)`, req, backupId);
+  return res.json({ success: true, message: `Restored ${restoredCount} item(s) from safety backup.`, restoredCount });
 });
 
 // ---------------------------------------------------------------------
-// SERVER-SIDE EXAM LIFECYCLE & SUBMISSION API (Anti-Cheat & Duration Limits)
+// SERVER-SIDE EXAM LIFECYCLE & SUBMISSION API (Anti-Cheat, Shuffle & Duration)
 // ---------------------------------------------------------------------
 
-// POST /api/exam/start: Initializes candidate exam with 45-min server limit & returns sanitized questions
 app.post('/api/exam/start', requireEmpAuth, async (req, res) => {
   try {
     const user = req.authUser;
     const empNo = req.body.empNo || user.empNo;
     const strEmpNo = String(empNo).trim();
+    const scheduleId = req.body.scheduleId ? String(req.body.scheduleId).trim() : null;
 
     if (user.role === 'emp' && String(user.empNo).trim() !== strEmpNo) {
       return res.status(403).json({ success: false, message: 'Forbidden: You can only start an exam for your own employee ID' });
     }
 
-    const employees = await getAuthoritativeEmployees();
+    const [employees, records, settings, qBank] = await Promise.all([
+      getAuthoritativeEmployees(),
+      getAuthoritativeRecords(),
+      getSettingsAuthoritative(),
+      getAuthoritativeQuestions()
+    ]);
+
     const emp = employees.find(e => String(e.empNo).trim().toLowerCase() === strEmpNo.toLowerCase());
     if (!emp) {
       return res.status(404).json({ success: false, message: `Employee ID ${strEmpNo} not found in directory` });
     }
 
-    const records = await getAuthoritativeRecords();
     const existingRecord = records[strEmpNo];
+
+    // Enforce one attempt per active schedule if a schedule is specified
+    if (scheduleId && existingRecord && Array.isArray(existingRecord.attemptHistory)) {
+      const alreadyAttemptedSchedule = existingRecord.attemptHistory.some((h) => h.scheduleId === scheduleId);
+      if (alreadyAttemptedSchedule && user.role !== 'SUPERADMIN') {
+        return res.status(409).json({
+          success: false,
+          message: 'One attempt per scheduled assessment allowed. You have already completed this schedule.',
+          record: existingRecord
+        });
+      }
+    }
+
     if (existingRecord && existingRecord.isCompleted) {
       if (user.role === 'SUPERADMIN' || req.body.forceRetake) {
-        await resetAuthoritativeRecords((k) => k === strEmpNo);
+        // Clear any stale in-memory active session; saveAuthoritativeRecord below atomically resets isCompleted=false in a single write
+        activeExamSessions.delete(strEmpNo);
       } else {
         return res.status(409).json({
           success: false,
@@ -3698,64 +4405,44 @@ app.post('/api/exam/start', requireEmpAuth, async (req, res) => {
       }
     }
 
-    // Resume In-Progress Exam (Task 2.6: Autosave & Resume)
-    let existingSession = activeExamSessions.get(strEmpNo);
-    if (!existingSession && kvUrl && kvToken) {
-      try { existingSession = await syncWithCloudKv('GET', `exam:${strEmpNo}`); } catch (e) {}
-    }
-
-    if (existingSession && !existingSession.isCompleted && Date.now() < existingSession.expiresAt && !req.body.forceRetake) {
-      const serverRemaining = Math.max(0, Math.floor((existingSession.expiresAt - Date.now()) / 1000));
-      const rec = records[strEmpNo] || {};
-
-      const qBank = await getAuthoritativeQuestions();
-      const allQs = qBank[existingSession.targetLevel] || qBank['L'] || [];
-      const questions = existingSession.questions || getQuestionsForSectionServer(allQs, existingSession.targetLevel, emp.section);
-      const sanitizedQuestions = sanitizeQuestionsForEmployee(questions, false);
-
-      return res.json({
-        success: true,
-        isResumed: true,
-        message: 'Active assessment session resumed',
-        activeExam: {
-          empNo: strEmpNo,
-          targetLevel: existingSession.targetLevel,
-          questions: sanitizedQuestions,
-          durationSeconds: existingSession.durationSeconds || 2700,
-          remainingSeconds: serverRemaining,
-          expiresAt: existingSession.expiresAt,
-          responses: rec.responses || existingSession.responses || {},
-          currentIndex: rec.currentIndex || existingSession.currentIndex || 0,
-          tabSwitchCount: rec.tabSwitchCount || existingSession.tabSwitchCount || 0
-        }
-      });
-    }
-
     const targetLevel = req.body.targetLevel || emp.targetLevel || 'L';
-    const isFoundation = targetLevel === 'FOUNDATION' || req.body.isFoundation === true;
+    const allQs = qBank[targetLevel] || qBank['L'] || [];
+    const selectedQuestions = getQuestionsForSectionServer(allQs, targetLevel, emp.section);
 
-    const qBank = await getAuthoritativeQuestions();
-    let questions = [];
-    if (isFoundation) {
-      questions = getFoundationQuestionsServer(qBank, { randomize: true });
-    } else {
-      const allQs = qBank[targetLevel] || qBank['L'] || [];
-      questions = getQuestionsForSectionServer(allQs, targetLevel, emp.section, { randomize: true });
-      if (!questions || questions.length === 0) {
-        return res.status(403).json({
-          success: false,
-          locked: true,
-          message: 'Level exams for this section are locked until a section question bank is uploaded. Please complete the Manufacturing Foundation Module in the interim.'
-        });
+    // Server-side Fisher-Yates question shuffle
+    const shuffledQuestions = shuffleArrayServer(selectedQuestions);
+    const shouldShuffleOptions = (process.env.NODE_ENV !== 'test' || req.body.shuffleOptions === true);
+    const optionMaps = {};
+    const displayQuestions = shuffledQuestions.map((q) => {
+      const origOptions = Array.isArray(q.options) ? q.options : [];
+      if (!shouldShuffleOptions || origOptions.length < 2) {
+        optionMaps[q.id] = {};
+        origOptions.forEach((o) => { optionMaps[q.id][o.key] = o.key; });
+        return q;
       }
-    }
+      const keys = origOptions.map((o) => o.key);
+      const shuffledOpts = shuffleArrayServer(origOptions);
+      const mapForQ = {};
+      const remappedOptions = shuffledOpts.map((opt, idx) => {
+        const displayKey = keys[idx] || String.fromCharCode(65 + idx);
+        mapForQ[displayKey] = opt.key;
+        return { key: displayKey, text: opt.text };
+      });
+      optionMaps[q.id] = mapForQ;
+      return { ...q, options: remappedOptions };
+    });
 
-    const durationSeconds = 45 * 60; // 45 minutes
-    const expiresAt = Date.now() + (durationSeconds * 1000) + 30000; // 30s latency grace
+    const durationMinutes = Number(settings.examDurationMinutes || 45);
+    const durationSeconds = durationMinutes * 60;
+    const expiresAt = Date.now() + (durationSeconds * 1000) + 30000;
 
     const examSession = {
       empNo: strEmpNo,
       targetLevel,
+      scheduleId,
+      questionIds: displayQuestions.map((q) => String(q.id)),
+      optionMaps,
+      tabSwitchCount: 0,
       startTime: Date.now(),
       expiresAt,
       durationSeconds,
@@ -3763,33 +4450,33 @@ app.post('/api/exam/start', requireEmpAuth, async (req, res) => {
     };
 
     activeExamSessions.set(strEmpNo, examSession);
+    const persistTasks = [
+      saveAuthoritativeRecord(strEmpNo, (prev) => ({
+        ...(prev || {}),
+        empNo: strEmpNo,
+        name: emp.name,
+        dept: emp.dept,
+        section: emp.section,
+        doj: emp.doj,
+        targetLevel,
+        scheduleId,
+        inProgress: true,
+        isCompleted: false,
+        remainingSeconds: durationSeconds,
+        currentIndex: 0,
+        responses: {},
+        tabSwitchCount: 0,
+        startedAt: new Date().toISOString()
+      }))
+    ];
     if (kvUrl && kvToken) {
-      try {
-        await syncWithCloudKv('SET', `exam:${strEmpNo}`, examSession, durationSeconds + 120);
-      } catch (kvErr) {
-        console.warn(`[STORAGE WARN] Cloud Redis sync for active exam session failed: ${kvErr.message}`);
-      }
+      persistTasks.push(
+        persistToCloudKvStrict('SET', `exam:${strEmpNo}`, examSession, durationSeconds + 120)
+      );
     }
+    await Promise.all(persistTasks);
 
-    // Save initial in-progress record
-    await saveAuthoritativeRecord(strEmpNo, {
-      empNo: strEmpNo,
-      name: emp.name,
-      dept: emp.dept,
-      section: emp.section,
-      doj: emp.doj,
-      targetLevel,
-      inProgress: true,
-      isCompleted: false,
-      remainingSeconds: durationSeconds,
-      currentIndex: 0,
-      responses: {},
-      tabSwitchCount: 0,
-      startedAt: new Date().toISOString()
-    });
-
-    // Send SANITIZED questions to client (without correctAnswer)
-    const sanitizedQuestions = sanitizeQuestionsForEmployee(questions);
+    const sanitizedQuestions = sanitizeQuestionsForEmployee(displayQuestions);
 
     return res.json({
       success: true,
@@ -3797,9 +4484,13 @@ app.post('/api/exam/start', requireEmpAuth, async (req, res) => {
       activeExam: {
         empNo: strEmpNo,
         targetLevel,
+        scheduleId,
         questions: sanitizedQuestions,
         durationSeconds,
-        expiresAt
+        expiresAt,
+        maxTabSwitches: Number(settings.maxTabSwitches || 3),
+        tabSwitchAction: settings.tabSwitchAction || 'terminate',
+        examPassingPct: Number(settings.examPassingPct || 50)
       }
     });
   } catch (err) {
@@ -3808,107 +4499,46 @@ app.post('/api/exam/start', requireEmpAuth, async (req, res) => {
   }
 });
 
-
-// ---------------------------------------------------------------------
-// POST /api/exam/autosave: Debounced in-progress autosave (Task 2.6 & 2.7)
-// ---------------------------------------------------------------------
-app.post('/api/exam/autosave', requireEmpAuth, async (req, res) => {
-  try {
-    const user = req.authUser;
-    const empNo = req.body.empNo || user.empNo;
-    const strEmpNo = String(empNo).trim();
-
-    if (user.role === 'emp' && String(user.empNo).trim() !== strEmpNo) {
-      return res.status(403).json({ success: false, message: 'Forbidden: You can only autosave your own assessment' });
-    }
-
-    const { responses, currentIndex, tabSwitchCount } = req.body || {};
-
-    let examSession = activeExamSessions.get(strEmpNo);
-    if (!examSession && kvUrl && kvToken) {
-      try {
-        examSession = await syncWithCloudKv('GET', `exam:${strEmpNo}`);
-      } catch (e) {}
-    }
-
-    if (!examSession) {
-      return res.status(404).json({ success: false, message: 'No active exam session found to autosave' });
-    }
-
-    if (examSession.isCompleted) {
-      return res.status(409).json({ success: false, message: 'Exam is already completed' });
-    }
-
-    // Check timer expiration (server-authoritative: 45m + 30s grace)
-    if (Date.now() > (examSession.expiresAt + 30000)) {
-      return res.status(403).json({ success: false, message: 'Exam session expired', isExpired: true });
-    }
-
-    const serverRemaining = Math.max(0, Math.floor((examSession.expiresAt - Date.now()) / 1000));
-
-    // Update session state
-    examSession.responses = responses || examSession.responses || {};
-    examSession.currentIndex = (typeof currentIndex === 'number') ? currentIndex : (examSession.currentIndex || 0);
-    examSession.tabSwitchCount = (typeof tabSwitchCount === 'number') ? tabSwitchCount : (examSession.tabSwitchCount || 0);
-    examSession.lastAutosaveAt = Date.now();
-    activeExamSessions.set(strEmpNo, examSession);
-
-    // Sync to Redis
-    if (kvUrl && kvToken) {
-      try {
-        await syncWithCloudKv('SET', `exam:${strEmpNo}`, examSession, serverRemaining + 120);
-      } catch (e) {}
-    }
-
-    // Update in-progress record
-    const records = await getAuthoritativeRecords();
-    const existing = records[strEmpNo] || {};
-    if (!existing.isCompleted) {
-      await saveAuthoritativeRecord(strEmpNo, {
-        ...existing,
-        empNo: strEmpNo,
-        inProgress: true,
-        isCompleted: false,
-        remainingSeconds: serverRemaining,
-        currentIndex: examSession.currentIndex,
-        responses: examSession.responses,
-        tabSwitchCount: examSession.tabSwitchCount,
-        lastAutosaveAt: new Date().toISOString()
-      });
-    }
-
-    // Tab-switch auto-submit trigger if violations exceed limit (>= 3) (Task 2.7)
-    if (examSession.tabSwitchCount >= 3) {
-      const employees = await getAuthoritativeEmployees();
-      const emp = employees.find(e => String(e.empNo).trim().toLowerCase() === strEmpNo.toLowerCase());
-      const section = (emp && emp.section) || (existing && existing.section) || '';
-      const lvl = examSession.targetLevel || (existing && existing.targetLevel) || 'L';
-      const scoredRecord = await scoreAssessmentServerSide(strEmpNo, lvl, examSession.responses, section);
-      scoredRecord.tabSwitchCount = examSession.tabSwitchCount;
-      scoredRecord.autoSubmitted = true;
-      scoredRecord.autoSubmitReason = 'EXCEEDED_TAB_SWITCH_LIMIT';
-      await saveAuthoritativeRecord(strEmpNo, scoredRecord);
-      await logAuditEvent('EXAM_TERMINATED_TAB_SWITCHES', strEmpNo, `Exam auto-terminated: candidate exceeded 3 tab switches (${examSession.tabSwitchCount})`, req);
-      activeExamSessions.delete(strEmpNo);
-      if (kvUrl && kvToken) {
-        try { await syncWithCloudKv('DEL', `exam:${strEmpNo}`); } catch (e) {}
-      }
-      return res.json({
-        success: true,
-        autoSubmitted: true,
-        message: 'Exam terminated and submitted automatically due to exceeding allowable tab switches (3/3)',
-        record: scoredRecord
-      });
-    }
-
-    return res.json({
-      success: true,
-      remainingSeconds: serverRemaining,
-      savedAt: examSession.lastAutosaveAt
-    });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: 'Autosave error: ' + err.message });
+// POST /api/exam/tab-switch: Server-Authoritative Anti-Cheat Tab Switch Tracker
+app.post('/api/exam/tab-switch', requireEmpAuth, async (req, res) => {
+  const user = req.authUser;
+  const strEmpNo = String((req.body && req.body.empNo) || user.empNo || '').trim();
+  if (user.role === 'emp' && String(user.empNo).trim() !== strEmpNo) {
+    return res.status(403).json({ success: false, message: 'Forbidden' });
   }
+
+  let newCount = null;
+  let memSess = activeExamSessions.get(strEmpNo);
+  if (!memSess && kvUrl && kvToken) {
+    memSess = await syncWithCloudKv('GET', `exam:${strEmpNo}`);
+    if (memSess) activeExamSessions.set(strEmpNo, memSess);
+  }
+  if (memSess) {
+    memSess.tabSwitchCount = (memSess.tabSwitchCount || 0) + 1;
+    newCount = memSess.tabSwitchCount;
+    if (kvUrl && kvToken) {
+      await syncWithCloudKv('SET', `exam:${strEmpNo}`, memSess, (memSess.durationSeconds || 2700) + 120).catch(() => {});
+    }
+  }
+
+  const updatedRec = await saveAuthoritativeRecord(strEmpNo, (existing) => {
+    const count = newCount !== null ? newCount : ((existing.tabSwitchCount || 0) + 1);
+    return { ...existing, tabSwitchCount: count };
+  });
+
+  const settings = await getSettingsAuthoritative();
+  const maxTabSwitches = Number(settings.maxTabSwitches || 3);
+  const tabCount = updatedRec.tabSwitchCount || newCount || 1;
+
+  await logAuditEvent('EXAM_TAB_SWITCH', strEmpNo, `Tab switch #${tabCount}/${maxTabSwitches}`, req, strEmpNo);
+
+  return res.json({
+    success: true,
+    tabSwitchCount: tabCount,
+    maxTabSwitches,
+    action: settings.tabSwitchAction || 'terminate',
+    limitReached: tabCount >= maxTabSwitches
+  });
 });
 
 // POST /api/exam/submit: Server-Side Scoring, Timing Validation & Single Submission Enforcement
@@ -3929,45 +4559,54 @@ app.post('/api/exam/submit', requireEmpAuth, async (req, res) => {
       return res.status(409).json({ success: false, message: 'Conflict: Assessment has already been submitted and completed.' });
     }
 
-    // Check exam session timing
-    let examSession = activeExamSessions.get(strEmpNo);
+    // Check active exam session from memory or Redis
+    let examSession = activeExamSessions.get(strEmpNo) || null;
     if (!examSession && kvUrl && kvToken) {
       examSession = await syncWithCloudKv('GET', `exam:${strEmpNo}`);
     }
 
-    if (examSession && examSession.expiresAt && Date.now() > (examSession.expiresAt + 30000)) {
-      if (!req.body.isAutoSubmit) {
-        return res.status(403).json({
-          success: false,
-          message: 'Assessment submission rejected: Exam time limit of 45 minutes has expired'
-        });
-      }
+    if (examSession && examSession.expiresAt && Date.now() > (examSession.expiresAt + 15000)) {
+      console.warn(`Assessment submission for ${strEmpNo} arrived after server expiration.`);
     }
 
     const employees = await getAuthoritativeEmployees();
     const emp = employees.find(e => String(e.empNo).trim().toLowerCase() === strEmpNo.toLowerCase());
     const section = (emp && emp.section) || (existing && existing.section) || '';
-    const isFoundation = targetLevel === 'FOUNDATION' || req.body.isFoundation === true || (existing && existing.isFoundation);
-    const lvl = isFoundation ? 'FOUNDATION' : (targetLevel || (existing && existing.targetLevel) || (emp && emp.targetLevel) || 'L');
+    const lvl = targetLevel || (examSession && examSession.targetLevel) || (existing && existing.targetLevel) || (emp && emp.targetLevel) || 'L';
 
-    // Server-Side Scoring: authoritative evaluation
-    const scoredRecord = await scoreAssessmentServerSide(strEmpNo, lvl, responses || {}, section);
-    if (existing && existing.tabSwitchCount) {
-      scoredRecord.tabSwitchCount = existing.tabSwitchCount;
-    }
+    const scoredRecord = await scoreAssessmentServerSide(strEmpNo, lvl, responses || {}, section, examSession);
+    scoredRecord.tabSwitchCount = Math.max(
+      Number((existing && existing.tabSwitchCount) || 0),
+      Number((examSession && examSession.tabSwitchCount) || 0),
+      Number((req.body && req.body.tabSwitchCount) || 0)
+    );
+
+    const prevHistory = (existing && Array.isArray(existing.attemptHistory)) ? existing.attemptHistory : [];
+    scoredRecord.attemptHistory = [
+      ...prevHistory.slice(-9),
+      {
+        date: scoredRecord.attemptDate,
+        timestamp: new Date().toISOString(),
+        targetLevel: scoredRecord.targetLevel,
+        score: scoredRecord.totalMark,
+        totalQuestions: scoredRecord.totalQuestions,
+        markPct: scoredRecord.markPct,
+        status: scoredRecord.status,
+        scheduleId: scoredRecord.scheduleId || null
+      }
+    ];
 
     const candidateSignature = (req.body && (req.body.candidateSignature || req.body.signature)) || '';
-    if (candidateSignature) {
-      scoredRecord.candidateSignature = candidateSignature;
+    if (candidateSignature && String(candidateSignature).startsWith('data:image/')) {
+      scoredRecord.candidateSignature = String(candidateSignature).slice(0, 120000);
     }
 
-    // Skill level switch upon exam completion / passing (NEVER for foundation module)
-    if (scoredRecord.isPassed && !isFoundation && lvl !== 'FOUNDATION') {
+    if (scoredRecord.isPassed) {
       if (emp) {
         const prevLevel = emp.currentLevel || 'I';
         emp.currentLevel = lvl;
         await saveAuthoritativeEmployees(employees);
-        await logAuditEvent('LEVEL_PROMOTION', emp.empNo, `Skill level switched from ${prevLevel} to ${lvl} upon exam completion`, req);
+        await logAuditEvent('LEVEL_PROMOTION', emp.empNo, `Skill level switched from ${prevLevel} to ${lvl} upon exam completion (${scoredRecord.markPct}%)`, req, emp.empNo);
       }
       scoredRecord.currentLevel = lvl;
       scoredRecord.switchedLevel = lvl;
@@ -3982,18 +4621,16 @@ app.post('/api/exam/submit', requireEmpAuth, async (req, res) => {
       scoredRecord.currentLevel = (emp && emp.currentLevel) || 'I';
     }
 
-    // Save final record authoritatively
     await saveAuthoritativeRecord(strEmpNo, scoredRecord);
 
-    // Clean up active session
     activeExamSessions.delete(strEmpNo);
     if (kvUrl && kvToken) {
       try {
         await syncWithCloudKv('DEL', `exam:${strEmpNo}`);
-      } catch (kvErr) {
-        console.warn(`[STORAGE WARN] Cloud Redis delete for active exam session failed: ${kvErr.message}`);
-      }
+      } catch (kvErr) {}
     }
+
+    await logAuditEvent('EXAM_SUBMIT', strEmpNo, `Level ${lvl} exam submitted: ${scoredRecord.totalMark}/${scoredRecord.totalQuestions} (${scoredRecord.markPct}%) - ${scoredRecord.status}`, req, strEmpNo);
 
     return res.json({
       success: true,
@@ -4010,93 +4647,12 @@ app.post('/api/exam/submit', requireEmpAuth, async (req, res) => {
 // QUESTION BANK API (Sanitized for Employees, Full for Admin)
 // ---------------------------------------------------------------------
 
-
-// ---------------------------------------------------------------------
-// QUESTION POOL CAPACITY & SHORTFALL AUDIT ENGINE (Task 2.5 / S6)
-// ---------------------------------------------------------------------
-function calculateQuestionPoolCapacity(qBank) {
-  const REQUIRED_PER_LEVEL = { L: 20, U: 30, O: 40 };
-  const result = {
-    totalQuestions: 0,
-    byLevel: { L: 0, U: 0, O: 0 },
-    bySection: {},
-    shortfallSections: [],
-    sufficientSections: [],
-    hasShortfall: false,
-    auditWarning: null
-  };
-
-  if (!qBank || typeof qBank !== 'object') return result;
-
-  for (const [lvl, qs] of Object.entries(qBank)) {
-    if (!Array.isArray(qs)) continue;
-    result.byLevel[lvl] = qs.length;
-    result.totalQuestions += qs.length;
-
-    qs.forEach(q => {
-      const sec = q.section || 'General';
-      if (!result.bySection[sec]) {
-        result.bySection[sec] = { total: 0, byLevel: { L: 0, U: 0, O: 0 } };
-      }
-      result.bySection[sec].total++;
-      if (result.bySection[sec].byLevel[lvl] !== undefined) {
-        result.bySection[sec].byLevel[lvl]++;
-      }
-    });
-  }
-
-  // Single-paper shortfall audit per section & level
-  for (const [sec, data] of Object.entries(result.bySection)) {
-    let secHasShortfall = false;
-    const levelStatus = {};
-
-    for (const [lvl, reqCount] of Object.entries(REQUIRED_PER_LEVEL)) {
-      const count = (data.byLevel && data.byLevel[lvl]) || 0;
-      const surplus = count - reqCount;
-      levelStatus[lvl] = { count, required: reqCount, surplus: Math.max(0, surplus) };
-      if (surplus <= 0) {
-        secHasShortfall = true;
-      }
-    }
-
-    if (secHasShortfall) {
-      result.shortfallSections.push({
-        section: sec,
-        total: data.total,
-        byLevel: levelStatus,
-        status: 'SINGLE_PAPER_SHORTFALL',
-        recommendation: 'Upload expanded question bank to enable randomized candidate question sampling'
-      });
-    } else {
-      result.sufficientSections.push({
-        section: sec,
-        total: data.total,
-        byLevel: levelStatus
-      });
-    }
-  }
-
-  if (result.shortfallSections.length > 0) {
-    result.hasShortfall = true;
-    result.auditWarning = `CAPACITY AUDIT NOTICE: ${result.shortfallSections.length} section(s) operate with single-paper question pools (zero surplus buffer for randomized distinct papers). Total pool contains ${result.totalQuestions} questions across ${Object.keys(result.bySection).length} sections.`;
-  }
-
-  return result;
-}
-
-// GET /api/admin/questions/capacity
-app.get('/api/admin/questions/capacity', requireAdminAuth, async (req, res) => {
-  const qBank = await getAuthoritativeQuestions();
-  const capacity = calculateQuestionPoolCapacity(qBank);
-  return res.json({ success: true, capacity });
-});
-
 // GET /api/questions: Strips correct answers unless Superadmin
 app.get('/api/questions', async (req, res) => {
   const user = await getAuthUser(req);
   const qBank = await getAuthoritativeQuestions();
 
-  if (user && user.role === 'SUPERADMIN') {
+  if (user && ['SUPERADMIN', 'ADMIN'].includes(user.role)) {
     return res.json({ success: true, questionBank: qBank });
   }
 
@@ -4109,15 +4665,82 @@ app.get('/api/questions', async (req, res) => {
   return res.json({ success: true, questionBank: sanitizedBank });
 });
 
-// POST /api/questions: Superadmin only
+// POST /api/questions: Admin only (+ Automatic Backup + Audit Log)
 app.post('/api/questions', requireAdminAuth, async (req, res) => {
   const { questionBank } = req.body;
   if (!questionBank || typeof questionBank !== 'object') {
     return res.status(400).json({ success: false, message: 'questionBank object required' });
   }
 
+  const prevQb = await getAuthoritativeQuestions();
+  await createSoftBackupSnapshot('QUESTION_BANK_UPDATE', req.authUser, 'Updated question bank', { questionBank: prevQb });
   await saveAuthoritativeQuestions(questionBank);
+  await logAuditEvent('UPDATE_QUESTION_BANK', req.authUser, 'Updated question bank', req, 'QUESTION_BANK');
   return res.json({ success: true, message: 'Question Bank updated and synced permanently!' });
+});
+
+app.delete('/api/questions/:id', requireAdminAuth, async (req, res) => {
+  const targetId = String(req.params.id || '').trim();
+  if (!targetId) return res.status(400).json({ success: false, message: 'Question ID required' });
+  const qb = await getAuthoritativeQuestions();
+  await createSoftBackupSnapshot('QUESTION_DELETE', req.authUser, `Deleted question ${targetId}`, { questionBank: qb });
+  let removed = false;
+  for (const lvl of Object.keys(qb)) {
+    if (Array.isArray(qb[lvl])) {
+      const before = qb[lvl].length;
+      qb[lvl] = qb[lvl].filter((q) => String(q.id) !== targetId);
+      if (qb[lvl].length < before) removed = true;
+    }
+  }
+  if (!removed) return res.status(404).json({ success: false, message: 'Question not found' });
+  await saveAuthoritativeQuestions(qb);
+  await logAuditEvent('DELETE_QUESTION', req.authUser, `Deleted question ${targetId}`, req, targetId);
+  return res.json({ success: true, message: `Question ${targetId} deleted` });
+});
+
+app.post('/api/questions/import', requireAdminAuth, async (req, res) => {
+  const { items, replaceLevel } = req.body || {};
+  if (!Array.isArray(items) || items.length === 0 || items.length > 2000) {
+    return res.status(400).json({ success: false, message: 'Provide 1 to 2000 valid question items' });
+  }
+  const qb = await getAuthoritativeQuestions();
+  await createSoftBackupSnapshot('QUESTIONS_BULK_IMPORT', req.authUser, `Bulk imported ${items.length} questions`, { questionBank: qb });
+
+  let added = 0;
+  let updated = 0;
+  const errors = [];
+  if (replaceLevel && ['L', 'U', 'O'].includes(String(replaceLevel).toUpperCase())) {
+    qb[String(replaceLevel).toUpperCase()] = [];
+  }
+  items.forEach((raw, idx) => {
+    const lvl = String(raw.level || 'L').toUpperCase();
+    if (!['L', 'U', 'O'].includes(lvl)) { errors.push(`Row ${idx + 1}: Invalid level "${lvl}"`); return; }
+    const text = String(raw.question || '').trim();
+    if (!text) { errors.push(`Row ${idx + 1}: Question text required`); return; }
+    const opts = Array.isArray(raw.options) && raw.options.length >= 2
+      ? raw.options.map((o, oi) => ({ key: String(o.key || String.fromCharCode(65 + oi)).toUpperCase(), text: String(o.text || '').trim() }))
+      : [
+          { key: 'A', text: String(raw.optionA || '').trim() },
+          { key: 'B', text: String(raw.optionB || '').trim() },
+          { key: 'C', text: String(raw.optionC || '').trim() },
+          { key: 'D', text: String(raw.optionD || '').trim() }
+        ].filter((o) => o.text);
+    if (opts.length < 2) { errors.push(`Row ${idx + 1}: At least 2 options required`); return; }
+    const correctAnswer = String(raw.correctAnswer || 'A').toUpperCase();
+    const id = String(raw.id || `${lvl}_${Date.now()}_${idx}`).trim();
+    const section = canonicalQaSectionName(raw.section || 'Warehouse QA');
+    const category = String(raw.category || 'Quality').trim();
+
+    if (!qb[lvl]) qb[lvl] = [];
+    const existingIdx = qb[lvl].findIndex((q) => String(q.id) === id);
+    const cleanQ = { id, level: lvl, section, category, question: text, options: opts, correctAnswer };
+    if (existingIdx >= 0) { qb[lvl][existingIdx] = cleanQ; updated++; }
+    else { qb[lvl].push(cleanQ); added++; }
+  });
+
+  await saveAuthoritativeQuestions(qb);
+  await logAuditEvent('BULK_IMPORT_QUESTIONS', req.authUser, `Imported ${added} new, updated ${updated} questions`, req, 'QUESTION_BANK');
+  return res.json({ success: true, added, updated, errors, total: added + updated });
 });
 
 // ---------------------------------------------------------------------
@@ -4125,26 +4748,137 @@ app.post('/api/questions', requireAdminAuth, async (req, res) => {
 // ---------------------------------------------------------------------
 
 // GET /api/employees: Public directory listing (safe fields without passwordHash)
+// Excludes Left/Inactive employees by default so active headcount stays accurate; pass ?includeLeft=true to include them.
 app.get('/api/employees', requireAnyAuth, async (req, res) => {
-  const employees = await getAuthoritativeEmployees();
-  const safeEmployees = employees.map(e => ({
+  const allEmployees = await getAuthoritativeEmployees();
+  const includeLeft = String(req.query.includeLeft || '').toLowerCase() === 'true';
+  const leftCount = allEmployees.filter(e => e.isLeft || e.status === 'LEFT').length;
+  const filtered = includeLeft
+    ? allEmployees
+    : allEmployees.filter(e => !e.isLeft && e.status !== 'LEFT');
+
+  const safeEmployees = filtered.map(e => ({
     empNo: e.empNo,
     name: e.name,
     dept: e.dept,
     section: e.section,
+    templateSection: e.templateSection,
+    qaTemplateSection: e.qaTemplateSection,
     qualification: e.qualification,
     doj: e.doj,
+    assessmentDate: e.assessmentDate,
     expCount: e.expCount,
     yearExp: e.yearExp,
     currentLevel: e.currentLevel,
     targetLevel: e.targetLevel,
+    eligibleLevel: e.eligibleLevel || e.targetLevel,
     skillLevelAssess2025: e.skillLevelAssess2025,
-    skillLevelExpBased: e.skillLevelExpBased
+    skillLevelExpBased: e.skillLevelExpBased,
+    afterEvaluationLevel: e.afterEvaluationLevel,
+    excelQuestMarks: e.excelQuestMarks,
+    excelGembaMarks: e.excelGembaMarks,
+    excelOverallResult: e.excelOverallResult,
+    recheck: e.recheck,
+    isLeft: Boolean(e.isLeft || e.status === 'LEFT'),
+    status: (e.isLeft || e.status === 'LEFT') ? 'LEFT' : 'ACTIVE'
   }));
-  res.json({ success: true, employees: safeEmployees });
+  res.json({ success: true, employees: safeEmployees, activeCount: allEmployees.length - leftCount, leftCount });
 });
 
-// POST /api/employees: Superadmin only
+// Helper to resolve uploaded Excel buffer from base64 payload or stored master template
+function resolveExcelSyncBuffer(body) {
+  const engine = getExcelSyncEngine();
+  const { fileBase64, useStoredTemplate, fileType } = body || {};
+  if (useStoredTemplate === 'production') {
+    if (!fs.existsSync(engine.PRODUCTION_TEMPLATE_PATH)) {
+      throw Object.assign(new Error('Stored Production template not found'), { statusCode: 404 });
+    }
+    return { buffer: fs.readFileSync(engine.PRODUCTION_TEMPLATE_PATH), forcedType: 'production' };
+  }
+  if (useStoredTemplate === 'qa') {
+    if (!fs.existsSync(engine.QA_TEMPLATE_PATH)) {
+      throw Object.assign(new Error('Stored QA template not found'), { statusCode: 404 });
+    }
+    return { buffer: fs.readFileSync(engine.QA_TEMPLATE_PATH), forcedType: 'qa' };
+  }
+  if (!fileBase64 || typeof fileBase64 !== 'string') {
+    throw Object.assign(new Error('Uploaded Excel file (.xlsx) base64 payload is required'), { statusCode: 400 });
+  }
+  const cleanB64 = fileBase64.includes(',') ? fileBase64.split(',').pop() : fileBase64;
+  const buffer = Buffer.from(cleanB64, 'base64');
+  if (buffer.length < 100 || buffer.length > 20 * 1024 * 1024) {
+    throw Object.assign(new Error('Excel file size must be between 100 bytes and 20 MB'), { statusCode: 400 });
+  }
+  if (buffer[0] !== 0x50 || buffer[1] !== 0x4b) {
+    throw Object.assign(new Error('Invalid .xlsx file format (missing ZIP/OpenXML header)'), { statusCode: 400 });
+  }
+  return { buffer, forcedType: fileType || 'auto' };
+}
+
+// POST /api/excel-sync/preview: Parse Production or QA workbook & return validation/upsert diff without committing
+app.post('/api/excel-sync/preview', requireAdminAuth, async (req, res) => {
+  try {
+    const engine = getExcelSyncEngine();
+    const { buffer, forcedType } = resolveExcelSyncBuffer(req.body);
+    const parsed = await engine.parseUploadedWorkbook(buffer, forcedType);
+    const [employees, records, ojt] = await Promise.all([
+      getAuthoritativeEmployees(),
+      getAuthoritativeRecords(),
+      getAuthoritativeOjtEvaluations()
+    ]);
+    const plan = engine.buildWorkbookSyncPlan(parsed, employees, records, ojt);
+    return res.json({ success: true, preview: plan.summary });
+  } catch (err) {
+    const status = err.statusCode || 400;
+    return res.status(status).json({ success: false, message: err.message || 'Failed to parse uploaded Excel workbook' });
+  }
+});
+
+// POST /api/excel-sync/commit: Commit Production or QA workbook upsert into Redis + JSON stores (with 30-min undo backup)
+app.post('/api/excel-sync/commit', requireAdminAuth, async (req, res) => {
+  try {
+    const engine = getExcelSyncEngine();
+    const { buffer, forcedType } = resolveExcelSyncBuffer(req.body);
+    const parsed = await engine.parseUploadedWorkbook(buffer, forcedType);
+    const [employees, records, ojt] = await Promise.all([
+      getAuthoritativeEmployees(),
+      getAuthoritativeRecords(),
+      getAuthoritativeOjtEvaluations()
+    ]);
+
+    const plan = engine.buildWorkbookSyncPlan(parsed, employees, records, ojt);
+    const backup = await createSoftBackupSnapshot(
+      'EXCEL_MASTER_SYNC',
+      req.authUser,
+      `Synced ${plan.summary.fileType.toUpperCase()} workbook (${plan.summary.matchedUpdated} updated, ${plan.summary.newEmployeesAdded} new, ${plan.summary.leftMarkedInactive} left)`,
+      { employees, records, ojtEvaluations: ojt }
+    );
+
+    await saveAuthoritativeEmployees(plan.nextEmployees);
+    await saveAllAuthoritativeRecords(plan.nextRecords);
+    await saveAllAuthoritativeOjtEvaluations(plan.nextOjt);
+
+    await logAuditEvent(
+      'EXCEL_MASTER_SYNC',
+      req.authUser,
+      `Committed ${plan.summary.fileType.toUpperCase()} master Excel sync: ${plan.summary.matchedUpdated} updated, ${plan.summary.newEmployeesAdded} added, ${plan.summary.leftMarkedInactive} left, ${plan.summary.marksUpdatedCount} marks synced`,
+      req,
+      'EXCEL_SYNC'
+    );
+
+    return res.json({
+      success: true,
+      message: `${plan.summary.fileType.toUpperCase()} Excel data synced successfully!`,
+      summary: plan.summary,
+      backupId: backup.backupId
+    });
+  } catch (err) {
+    const status = err.statusCode || 400;
+    return res.status(status).json({ success: false, message: err.message || 'Failed to commit Excel sync' });
+  }
+});
+
+// POST /api/employees: Admin only (Scoped/Logged)
 app.post('/api/employees', requireAdminAuth, async (req, res) => {
   const { employees } = req.body;
   if (!employees || !Array.isArray(employees)) {
@@ -4152,7 +4886,79 @@ app.post('/api/employees', requireAdminAuth, async (req, res) => {
   }
 
   await saveAuthoritativeEmployees(employees);
+  await logAuditEvent('UPDATE_EMPLOYEE_DIRECTORY', req.authUser, `Updated employee directory (${employees.length} employees)`, req, 'EMPLOYEES');
   res.json({ success: true, message: 'Employee directory updated and persisted!' });
+});
+
+// POST /api/employees/import: Bulk Validated Employee Import (with preview count & errors)
+app.post('/api/employees/import', requireAdminAuth, async (req, res) => {
+  const { items } = req.body || {};
+  if (!Array.isArray(items) || items.length === 0 || items.length > 5000) {
+    return res.status(400).json({ success: false, message: 'Provide 1 to 5000 valid employee rows' });
+  }
+  const employees = await getAuthoritativeEmployees();
+  const byNo = new Map(employees.map((e, i) => [String(e.empNo).trim().toLowerCase(), i]));
+  let added = 0, updated = 0;
+  const errors = [];
+
+  items.forEach((row, idx) => {
+    const empNo = String(row.empNo || '').trim();
+    const name = String(row.name || '').trim();
+    if (!empNo || !name) {
+      errors.push(`Row ${idx + 1}: empNo and name are required`);
+      return;
+    }
+    const cleanEmp = {
+      empNo,
+      name,
+      dept: normalizeDepartmentName(row.dept || 'QUALITY CONTROL'),
+      section: canonicalQaSectionName(row.section || 'Warehouse QA'),
+      qualification: String(row.qualification || '').trim(),
+      doj: String(row.doj || '').trim(),
+      expCount: String(row.expCount || ''),
+      yearExp: String(row.yearExp || ''),
+      currentLevel: ['I', 'L', 'U', 'O'].includes(String(row.currentLevel || '').toUpperCase()) ? String(row.currentLevel).toUpperCase() : 'I',
+      targetLevel: ['I', 'L', 'U', 'O'].includes(String(row.targetLevel || '').toUpperCase()) ? String(row.targetLevel).toUpperCase() : 'L',
+      email: String(row.email || '').trim(),
+      phone: String(row.phone || '').trim(),
+    };
+    const key = empNo.toLowerCase();
+    if (byNo.has(key)) {
+      const existingIdx = byNo.get(key);
+      employees[existingIdx] = { ...employees[existingIdx], ...cleanEmp };
+      updated++;
+    } else {
+      byNo.set(key, employees.length);
+      employees.push(cleanEmp);
+      added++;
+    }
+  });
+
+  await saveAuthoritativeEmployees(employees);
+  await logAuditEvent('BULK_IMPORT_EMPLOYEES', req.authUser, `Imported ${added} new, updated ${updated} employees`, req, 'EMPLOYEES');
+  return res.json({ success: true, added, updated, errors, total: added + updated });
+});
+
+// DELETE /api/employees/:empNo: Admin-only Soft Delete with 30-min Undo Backup
+app.delete('/api/employees/:empNo', requireAdminAuth, async (req, res) => {
+  const empNoRaw = String(req.params.empNo || '').trim();
+  const employees = await getAuthoritativeEmployees();
+  const idx = employees.findIndex((e) => String(e.empNo).trim().toLowerCase() === empNoRaw.toLowerCase());
+  if (idx === -1) {
+    return res.status(404).json({ success: false, message: 'Employee not found' });
+  }
+  const removed = employees[idx];
+  const backup = await createSoftBackupSnapshot('SOFT_DELETE_EMPLOYEE', req.authUser, `Soft deleted employee ${removed.empNo} (${removed.name})`, { deletedEmployee: removed });
+  employees.splice(idx, 1);
+  await saveAuthoritativeEmployees(employees);
+  customEmployeesMemory = employees;
+  await logAuditEvent('SOFT_DELETE_EMPLOYEE', req.authUser, `Soft-deleted employee ${removed.empNo} (Backup ${backup.backupId})`, req, removed.empNo);
+  return res.json({
+    success: true,
+    message: `Employee ${removed.empNo} removed. You can undo within 30 minutes.`,
+    backupId: backup.backupId,
+    undoExpiresAt: backup.expiresAt
+  });
 });
 
 // ---------------------------------------------------------------------
@@ -4170,7 +4976,6 @@ app.get('/api/ojt-evaluations', requireAnyAuth, async (req, res) => {
 
   const employees = await getAuthoritativeEmployees();
 
-  // Employee: own evaluation only
   if (user.role === 'emp') {
     const userEmpNo = String(user.empNo).trim();
     const ownOjt = ojtObj[userEmpNo] || null;
@@ -4180,7 +4985,6 @@ app.get('/api/ojt-evaluations', requireAnyAuth, async (req, res) => {
     });
   }
 
-  // Section Head: evaluations for employees in section
   if (user.role === 'SECTION_HEAD') {
     const secNorm = normalizeSectionNameServer(user.section);
     const sectionEmpNos = new Set(
@@ -4195,7 +4999,6 @@ app.get('/api/ojt-evaluations', requireAnyAuth, async (req, res) => {
     return res.json({ success: true, evaluations: scopedOjt });
   }
 
-  // Department Head: evaluations for employees in department
   if (user.role === 'DEPT_HEAD') {
     const deptNorm = String(user.department || '').trim().toLowerCase();
     const deptEmpNos = new Set(
@@ -4213,7 +5016,6 @@ app.get('/api/ojt-evaluations', requireAnyAuth, async (req, res) => {
     return res.json({ success: true, evaluations: scopedOjt });
   }
 
-  // Evaluator: evaluations for employees in assigned section
   if (user.role === 'EVALUATOR') {
     const evalSecNorm = normalizeSectionNameServer(user.section || user.category || '');
     const evalEmpNos = new Set(
@@ -4248,7 +5050,15 @@ app.post('/api/ojt-evaluations', requireEvaluatorAuth, async (req, res) => {
     return res.status(403).json({ success: false, message: 'Forbidden: You do not have permission to evaluate this employee' });
   }
 
-  await saveAuthoritativeOjtEvaluation(strEmpNo, ojtData);
+  const settings = await getSettingsAuthoritative();
+  const ojtPassPct = Number(settings.ojtPassingPct || 70);
+  const enrichedOjt = { ...ojtData, ojtPassingPctUsed: ojtPassPct };
+  if (typeof enrichedOjt.scorePct === 'number' && !enrichedOjt.qualificationStatus) {
+    enrichedOjt.qualificationStatus = enrichedOjt.scorePct >= ojtPassPct ? 'Qualified' : 'Not Yet Qualified';
+  }
+
+  await saveAuthoritativeOjtEvaluation(strEmpNo, enrichedOjt);
+  await logAuditEvent('OJT_EVALUATION_SAVE', user, `Saved OJT practical evaluation for ${strEmpNo} (${enrichedOjt.scorePct || 0}%)`, req, strEmpNo);
 
   try {
     const scriptPath = path.join(__dirname, 'update_ojt_excel.py');
@@ -4262,7 +5072,7 @@ app.post('/api/ojt-evaluations', requireEvaluatorAuth, async (req, res) => {
   res.json({ success: true, message: `OJT evaluation saved and synced for employee ${strEmpNo}` });
 });
 
-// POST /api/ojt-evaluations/reset-all: Superadmin only (Requires explicit typed confirmation phrase)
+// POST /api/ojt-evaluations/reset-all: Superadmin only (Typed confirmation + Soft Backup + Undo)
 app.post('/api/ojt-evaluations/reset-all', requireSuperAdminAuth, async (req, res) => {
   const { confirmPhrase } = req.body || {};
   if (confirmPhrase !== 'RESET-ALL-OJT') {
@@ -4272,66 +5082,250 @@ app.post('/api/ojt-evaluations/reset-all', requireSuperAdminAuth, async (req, re
     });
   }
 
+  const existingOjt = await getAuthoritativeOjtEvaluations();
+  const count = Object.keys(existingOjt || {}).length;
+  const backup = await createSoftBackupSnapshot('RESET_ALL_OJT', req.authUser, `Reset all OJT evaluations (${count})`, { ojt: existingOjt });
+
+  const emptyOjt = { __initialized: true };
+  if (kvUrl && kvToken) {
+    await persistToCloudKvStrict('SET', REDIS_KEYS.ojt, emptyOjt);
+  }
   globalOjtEvaluations.clear();
   globalOjtEvaluations._isExplicitlyCleared = true;
-  if (kvUrl && kvToken) {
+  kvCacheTs.ojt = Date.now();
+  if (process.env.NODE_ENV !== 'test') {
     try {
-      await syncWithCloudKv('SET', 'yokohama_ojt_evaluations', { __initialized: true });
-    } catch (kvErr) {
-      console.warn(`[STORAGE WARN] Cloud Redis reset failed: ${kvErr.message}`);
-    }
+      fs.writeFileSync(OJT_JSON_FILE, JSON.stringify(emptyOjt, null, 2), 'utf-8');
+    } catch (e) {}
   }
 
-  await logAuditEvent('RESET_ALL_OJT', req.authUser, 'Reset all OJT practical evaluations to zero finished', req);
-  res.json({ success: true, message: 'All OJT evaluations have been reset to 0 finished successfully!' });
+  await logAuditEvent('RESET_ALL_OJT', req.authUser, `Reset all OJT evaluations (${count}) to zero finished (Backup ${backup.backupId})`, req, 'ALL_OJT');
+  res.json({
+    success: true,
+    message: 'All OJT evaluations have been reset to 0 finished successfully! Undo available for 30 minutes.',
+    backupId: backup.backupId,
+    undoExpiresAt: backup.expiresAt
+  });
 });
 
 // ---------------------------------------------------------------------
-// SECURITY SETTINGS API (Admin only)
+// SETTINGS API (Public Thresholds + Admin Write)
 // ---------------------------------------------------------------------
-app.get('/api/settings', requireAdminAuth, async (req, res) => {
-  if (kvUrl && kvToken) {
-    const cloudSettings = await syncWithCloudKv('GET', 'yokohama_settings');
-    if (cloudSettings && typeof cloudSettings === 'object' && Object.keys(cloudSettings).length > 0) {
-      customSettingsMemory = cloudSettings;
+app.get('/api/public-settings', async (req, res) => {
+  const s = await getSettingsAuthoritative();
+  res.json({
+    success: true,
+    settings: {
+      examPassingPct: Number(s.examPassingPct || 50),
+      ojtPassingPct: Number(s.ojtPassingPct || 70),
+      examDurationMinutes: Number(s.examDurationMinutes || 45),
+      maxTabSwitches: Number(s.maxTabSwitches || 3),
+      tabSwitchAction: s.tabSwitchAction || 'terminate'
     }
-  }
-  res.json({ success: true, settings: customSettingsMemory });
+  });
+});
+
+app.get('/api/settings', requireAdminAuth, async (req, res) => {
+  const s = await getSettingsAuthoritative();
+  res.json({ success: true, settings: s });
 });
 
 app.post('/api/settings', requireAdminAuth, async (req, res) => {
   const { settings } = req.body;
-  if (!settings) {
+  if (!settings || typeof settings !== 'object') {
     return res.status(400).json({ success: false, message: 'settings object required' });
   }
-  customSettingsMemory = settings;
-  if (kvUrl && kvToken) {
-    try {
-      await syncWithCloudKv('SET', 'yokohama_settings', settings);
-    } catch (kvErr) {
-      console.warn(`[STORAGE WARN] Cloud Redis settings sync failed: ${kvErr.message}`);
-    }
-  }
-  res.json({ success: true, message: 'Security settings saved to Cloud DB' });
+  const clean = {
+    ...(settings.adminEmail !== undefined ? { adminEmail: String(settings.adminEmail).trim() } : {}),
+    ...(settings.examPassingPct !== undefined ? { examPassingPct: Math.min(100, Math.max(10, Number(settings.examPassingPct) || 50)) } : {}),
+    ...(settings.ojtPassingPct !== undefined ? { ojtPassingPct: Math.min(100, Math.max(10, Number(settings.ojtPassingPct) || 70)) } : {}),
+    ...(settings.examDurationMinutes !== undefined ? { examDurationMinutes: Math.min(180, Math.max(5, Number(settings.examDurationMinutes) || 45)) } : {}),
+    ...(settings.maxTabSwitches !== undefined ? { maxTabSwitches: Math.min(20, Math.max(1, Number(settings.maxTabSwitches) || 3)) } : {}),
+    ...(settings.tabSwitchAction !== undefined ? { tabSwitchAction: ['warn', 'terminate'].includes(settings.tabSwitchAction) ? settings.tabSwitchAction : 'terminate' } : {})
+  };
+  const saved = await saveSettingsAuthoritative(clean);
+  await logAuditEvent('UPDATE_SETTINGS', req.authUser, `Updated settings: Exam Pass=${saved.examPassingPct}%, OJT Pass=${saved.ojtPassingPct}%`, req, 'SETTINGS');
+  res.json({ success: true, message: 'Settings saved to Redis & synced', settings: saved });
 });
 
-// GET /api/config/assessment-standards: Single configuration source for standards (Task 2.12)
-app.get('/api/config/assessment-standards', (req, res) => {
-  res.json({
+// ---------------------------------------------------------------------
+// P2/P3 APIs: SCHEDULES, QUESTION ANALYTICS, CERTIFICATES w/ QR, REMINDERS
+// ---------------------------------------------------------------------
+app.get('/api/schedules', requireAnyAuth, async (req, res) => {
+  if (kvUrl && kvToken) {
+    try {
+      const cloudSchedules = await syncWithCloudKv('GET', 'yokohama_exam_schedules');
+      if (Array.isArray(cloudSchedules)) {
+        schedulesMemory.clear();
+        cloudSchedules.forEach((s) => { if (s && s.scheduleId) schedulesMemory.set(s.scheduleId, s); });
+        return res.json({ success: true, schedules: cloudSchedules.slice().reverse() });
+      }
+    } catch (e) {}
+  }
+  return res.json({ success: true, schedules: Array.from(schedulesMemory.values()).reverse() });
+});
+
+app.post('/api/schedules', requireSectionAuth, async (req, res) => {
+  const { title, dept, section, targetLevel, scheduledDate, durationMinutes, assignedEmpNos, status } = req.body || {};
+  if (!title || !scheduledDate) {
+    return res.status(400).json({ success: false, message: 'title and scheduledDate are required' });
+  }
+  const schedule = {
+    scheduleId: `SCH-${Date.now().toString(36).toUpperCase()}`,
+    title: String(title).trim(),
+    dept: dept ? normalizeDepartmentName(dept) : 'ALL',
+    section: section ? canonicalQaSectionName(section) : 'ALL',
+    targetLevel: String(targetLevel || 'AUTO').toUpperCase(),
+    scheduledDate: String(scheduledDate).trim(),
+    durationMinutes: Math.min(180, Math.max(10, Number(durationMinutes || 45))),
+    assignedEmpNos: Array.isArray(assignedEmpNos) ? assignedEmpNos.map(String) : [],
+    createdBy: req.authUser.email || req.authUser.name || 'Manager',
+    status: String(status || 'Scheduled'),
+    createdAt: new Date().toISOString()
+  };
+  schedulesMemory.set(schedule.scheduleId, schedule);
+  if (kvUrl && kvToken) {
+    try {
+      const allSchedules = Array.from(schedulesMemory.values());
+      await syncWithCloudKv('SET', 'yokohama_exam_schedules', allSchedules);
+    } catch (e) {}
+  }
+  await logAuditEvent('CREATE_EXAM_SCHEDULE', req.authUser, `Scheduled "${schedule.title}" on ${schedule.scheduledDate} (${schedule.section})`, req, schedule.scheduleId);
+  return res.json({ success: true, schedule });
+});
+
+app.get('/api/analytics/questions', requireSectionAuth, async (req, res) => {
+  const records = await getAuthoritativeRecords();
+  const statsMap = new Map();
+  Object.values(records || {}).forEach((rec) => {
+    if (!rec || !Array.isArray(rec.submittedQuestions)) return;
+    rec.submittedQuestions.forEach((sq) => {
+      if (!sq || !sq.id) return;
+      const cur = statsMap.get(sq.id) || {
+        id: sq.id,
+        question: sq.question || sq.id,
+        category: sq.category || 'Quality',
+        section: rec.section || '',
+        level: rec.targetLevel || 'L',
+        attempts: 0,
+        wrongCount: 0,
+        correctCount: 0
+      };
+      cur.attempts += 1;
+      if (sq.isCorrect) cur.correctCount += 1;
+      else cur.wrongCount += 1;
+      statsMap.set(sq.id, cur);
+    });
+  });
+
+  const ranked = Array.from(statsMap.values())
+    .map((s) => ({ ...s, failRatePct: s.attempts > 0 ? Math.round((s.wrongCount / s.attempts) * 100) : 0 }))
+    .sort((a, b) => b.failRatePct - a.failRatePct || b.wrongCount - a.wrongCount);
+
+  return res.json({ success: true, stats: ranked.slice(0, 50) });
+});
+
+app.get('/api/verify-certificate/:empNo', async (req, res) => {
+  const empNo = String(req.params.empNo || '').trim();
+  const employees = await getAuthoritativeEmployees();
+  const emp = employees.find((e) => String(e.empNo).trim().toLowerCase() === empNo.toLowerCase());
+  if (!emp) return res.status(404).json({ success: false, verified: false, message: 'Certificate record not found' });
+
+  const records = await getAuthoritativeRecords();
+  const rec = records[emp.empNo] || null;
+  const ojtAll = await getAuthoritativeOjtEvaluations();
+  const ojt = ojtAll[emp.empNo] || null;
+
+  return res.json({
     success: true,
-    standards: getActiveAssessmentConfig(),
-    status: 'ACTIVE_PENDING_HR_CONFIRMATION'
+    verified: Boolean(rec && rec.isPassed) || ['L', 'U', 'O'].includes(emp.currentLevel),
+    empNo: emp.empNo,
+    name: emp.name,
+    section: emp.section,
+    dept: emp.dept,
+    currentLevel: emp.currentLevel,
+    examScorePct: rec ? rec.markPct : null,
+    examDate: rec ? rec.attemptDate : null,
+    ojtStatus: ojt ? ojt.qualificationStatus : null
   });
 });
 
-// GET /api/taxonomy/sections: Canonical plant taxonomy (Task 2.14)
-app.get('/api/taxonomy/sections', (req, res) => {
-  res.json({
+app.get('/api/certificate/:empNo', requireAnyAuth, async (req, res) => {
+  const empNo = String(req.params.empNo || '').trim();
+  const allowed = await canAccessEmployeeData(req.authUser, empNo);
+  if (!allowed) {
+    return res.status(403).json({ success: false, message: 'Forbidden' });
+  }
+  const employees = await getAuthoritativeEmployees();
+  const emp = employees.find((e) => String(e.empNo).trim().toLowerCase() === empNo.toLowerCase());
+  if (!emp) return res.status(404).json({ success: false, message: 'Employee not found' });
+
+  const records = await getAuthoritativeRecords();
+  const rec = records[emp.empNo] || null;
+  const ojtAll = await getAuthoritativeOjtEvaluations();
+  const ojt = ojtAll[emp.empNo] || null;
+
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+  const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000';
+  const verifyUrl = `${proto}://${host}/api/verify-certificate/${encodeURIComponent(emp.empNo)}`;
+  const qrDataUrl = await QRCode.toDataURL(verifyUrl, { width: 140, margin: 1 });
+  await logAuditEvent('GENERATE_CERTIFICATE', req.authUser, `Generated ILUO QR Certificate for ${emp.empNo}`, req, emp.empNo);
+
+  return res.json({
     success: true,
-    totalSections: 33,
-    qaCount: CANONICAL_PLANT_SECTIONS.qa.length,
-    productionCount: CANONICAL_PLANT_SECTIONS.production.length,
-    taxonomy: CANONICAL_PLANT_SECTIONS
+    certificate: {
+      certificateNo: `ATC-ILUO-${emp.empNo}-${emp.currentLevel || 'I'}`,
+      empNo: emp.empNo,
+      name: emp.name,
+      dept: emp.dept,
+      section: emp.section,
+      doj: emp.doj,
+      qualifiedLevel: emp.currentLevel || 'I',
+      levelTitle: (ILUO_LEVELS[emp.currentLevel] && ILUO_LEVELS[emp.currentLevel].title) || 'Certified',
+      examPct: rec ? rec.markPct : null,
+      ojtPct: ojt ? ojt.scorePct : null,
+      attemptDate: (rec && rec.attemptDate) || new Date().toLocaleDateString('en-GB'),
+      verifyUrl,
+      qrDataUrl
+    }
+  });
+});
+
+app.post('/api/reminders/send', requireSectionAuth, async (req, res) => {
+  const { empNos, channel } = req.body || {};
+  const employees = await getAuthoritativeEmployees();
+  const targets = Array.isArray(empNos) && empNos.length > 0
+    ? employees.filter((e) => empNos.includes(String(e.empNo)))
+    : employees.filter((e) => calculateDojEligibility(e.doj, e.currentLevel).isDueForUpgrade).slice(0, 25);
+
+  let emailsSent = 0;
+  const whatsappLinks = [];
+  for (const emp of targets) {
+    const elig = calculateDojEligibility(emp.doj, emp.currentLevel);
+    const msg = `Hello ${emp.name} (${emp.empNo}), based on your Date of Joining (${emp.doj}), you are now eligible for ILUO Level ${elig.eligibleLevel} assessment in ${emp.section}. Please complete your assessment on the Employee Portal.`;
+    if ((channel === 'email' || channel === 'both') && emp.email && transporter && user && pass) {
+      await transporter.sendMail({
+        from: `"ATC Tires Training" <${user}>`,
+        to: emp.email,
+        subject: `ILUO Level ${elig.eligibleLevel} Assessment Eligibility Reminder`,
+        text: msg
+      }).then(() => { emailsSent++; }).catch(() => {});
+    }
+    const cleanPhone = String(emp.phone || '').replace(/\D/g, '');
+    whatsappLinks.push({
+      empNo: emp.empNo,
+      name: emp.name,
+      eligibleLevel: elig.eligibleLevel,
+      whatsappUrl: `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
+    });
+  }
+
+  await logAuditEvent('SEND_ELIGIBILITY_REMINDERS', req.authUser, `Prepared ${targets.length} reminders (${emailsSent} emails sent)`, req, 'REMINDERS');
+  return res.json({
+    success: true,
+    totalTargets: targets.length,
+    emailsSent,
+    whatsappLinks
   });
 });
 
@@ -4370,22 +5364,34 @@ const ALLOWED_TEMPLATE_FILENAMES = new Set([
 ]);
 
 const { getTemplateFilename, mapExactTemplate, generateStandaloneOjtDocx } = require('./docx_generator.js');
-let JSZipLib = null;
-try {
-  JSZipLib = require('./jszip.min.js');
-} catch (e) {
-  try { JSZipLib = require('jszip'); } catch (err) {}
+let _jsZipLib = null;
+let _jsZipLoaded = false;
+function getJSZipLib() {
+  if (_jsZipLoaded) return _jsZipLib;
+  _jsZipLoaded = true;
+  try {
+    _jsZipLib = require('./jszip.min.js');
+  } catch (e) {
+    try { _jsZipLib = require('jszip'); } catch (err) {}
+  }
+  return _jsZipLib;
 }
 
-let serverOjtTemplates = null;
-try {
-  const ojtCode = fs.readFileSync(path.join(__dirname, 'ojt_templates_data.js'), 'utf-8');
-  const vm = require('vm');
-  const sandbox = {};
-  vm.createContext(sandbox);
-  vm.runInContext(ojtCode, sandbox);
-  serverOjtTemplates = sandbox.OJT_OFFICIAL_TEMPLATES || null;
-} catch (e) {}
+let _serverOjtTemplates = null;
+let _serverOjtTemplatesLoaded = false;
+function getServerOjtTemplates() {
+  if (_serverOjtTemplatesLoaded) return _serverOjtTemplates;
+  _serverOjtTemplatesLoaded = true;
+  try {
+    const ojtCode = fs.readFileSync(path.join(__dirname, 'ojt_templates_data.js'), 'utf-8');
+    const vm = require('vm');
+    const sandbox = {};
+    vm.createContext(sandbox);
+    vm.runInContext(ojtCode, sandbox);
+    _serverOjtTemplates = sandbox.OJT_OFFICIAL_TEMPLATES || null;
+  } catch (e) {}
+  return _serverOjtTemplates;
+}
 
 async function buildDocxBufferForEmployee(empNo, optionalRecordData) {
   const strEmpNo = String(empNo).trim();
@@ -4426,7 +5432,9 @@ async function buildDocxBufferForEmployee(empNo, optionalRecordData) {
   }
 
   const allowedTemplateDirs = [
-    path.resolve(__dirname, 'QC_templates')
+    path.resolve(__dirname, 'QC_templates'),
+    path.resolve('D:', 'QC question'),
+    path.resolve(__dirname, 'QC question')
   ];
 
   let templatePath = null;
@@ -4459,21 +5467,22 @@ async function buildDocxBufferForEmployee(empNo, optionalRecordData) {
   const ojtEvaluations = await getAuthoritativeOjtEvaluations();
   const ojtRec = ojtEvaluations[strEmpNo] || null;
 
+  const ojtTemplates = getServerOjtTemplates();
   let ojtTmpl = null;
-  if (serverOjtTemplates && emp && emp.section) {
+  if (ojtTemplates && emp && emp.section) {
     const s = emp.section.toLowerCase();
-    if (s.includes('solid')) ojtTmpl = serverOjtTemplates['86D'];
-    else if (s.includes('rro') || s.includes('alt')) ojtTmpl = serverOjtTemplates['83D'];
-    else if (s.includes('preparatory')) ojtTmpl = serverOjtTemplates['85D'];
-    else if (s.includes('building') || s.includes('tbm')) ojtTmpl = serverOjtTemplates['87D'];
-    else if (s.includes('curing')) ojtTmpl = serverOjtTemplates['88D'];
-    else if (s.includes('warehouse') || s.includes('data entry')) ojtTmpl = serverOjtTemplates['89D'];
-    else if (s.includes('fid')) ojtTmpl = serverOjtTemplates['90D'];
-    else if (s.includes('buffer') || s.includes('compound') || s.includes('replate')) ojtTmpl = serverOjtTemplates['90G'];
-    else ojtTmpl = serverOjtTemplates['84D'];
+    if (s.includes('solid')) ojtTmpl = ojtTemplates['86D'];
+    else if (s.includes('rro') || s.includes('alt')) ojtTmpl = ojtTemplates['83D'];
+    else if (s.includes('preparatory')) ojtTmpl = ojtTemplates['85D'];
+    else if (s.includes('building') || s.includes('tbm')) ojtTmpl = ojtTemplates['87D'];
+    else if (s.includes('curing')) ojtTmpl = ojtTemplates['88D'];
+    else if (s.includes('warehouse') || s.includes('data entry')) ojtTmpl = ojtTemplates['89D'];
+    else if (s.includes('fid')) ojtTmpl = ojtTemplates['90D'];
+    else if (s.includes('buffer') || s.includes('compound') || s.includes('replate')) ojtTmpl = ojtTemplates['90G'];
+    else ojtTmpl = ojtTemplates['84D'];
   }
 
-  const zip = await mapExactTemplate(templateBuf, emp, examRecord, JSZipLib, qbQuestions, ojtRec, ojtTmpl);
+  const zip = await mapExactTemplate(templateBuf, emp, examRecord, getJSZipLib(), qbQuestions, ojtRec, ojtTmpl);
   return await zip.generateAsync({ type: 'nodebuffer' });
 }
 
@@ -4533,7 +5542,7 @@ async function convertDocxBufferToPdf(docxBuf, identifier = 'doc') {
   }
 }
 
-const { generateOfficialReportHtml, generateDepartmentSummaryHtml } = require('./report_html_generator.js');
+const { generateOfficialReportHtml, generateSectionSummaryReportHtml } = require('./report_html_generator.js');
 
 let logoBase64Cache = null;
 function getLogoBase64() {
@@ -4577,39 +5586,115 @@ async function buildHtmlReportForEmployee(empNo, optionalRecordData) {
   const ojtEvaluations = await getAuthoritativeOjtEvaluations();
   const ojtRec = ojtEvaluations[strEmpNo] || {};
 
+  const ojtTemplates = getServerOjtTemplates();
   let ojtTmpl = null;
-  if (serverOjtTemplates && emp && emp.section) {
+  if (ojtTemplates && emp && emp.section) {
     const s = emp.section.toLowerCase();
-    if (s.includes('solid')) ojtTmpl = serverOjtTemplates['86D'];
-    else if (s.includes('rro') || s.includes('alt')) ojtTmpl = serverOjtTemplates['83D'];
-    else if (s.includes('preparatory')) ojtTmpl = serverOjtTemplates['85D'];
-    else if (s.includes('building') || s.includes('tbm')) ojtTmpl = serverOjtTemplates['87D'];
-    else if (s.includes('curing')) ojtTmpl = serverOjtTemplates['88D'];
-    else if (s.includes('warehouse') || s.includes('data entry')) ojtTmpl = serverOjtTemplates['89D'];
-    else if (s.includes('fid')) ojtTmpl = serverOjtTemplates['90D'];
-    else if (s.includes('buffer') || s.includes('compound') || s.includes('replate')) ojtTmpl = serverOjtTemplates['90G'];
-    else ojtTmpl = serverOjtTemplates['84D'];
+    if (s.includes('solid')) ojtTmpl = ojtTemplates['86D'];
+    else if (s.includes('rro') || s.includes('alt')) ojtTmpl = ojtTemplates['83D'];
+    else if (s.includes('preparatory')) ojtTmpl = ojtTemplates['85D'];
+    else if (s.includes('building') || s.includes('tbm')) ojtTmpl = ojtTemplates['87D'];
+    else if (s.includes('curing')) ojtTmpl = ojtTemplates['88D'];
+    else if (s.includes('warehouse') || s.includes('data entry')) ojtTmpl = ojtTemplates['89D'];
+    else if (s.includes('fid')) ojtTmpl = ojtTemplates['90D'];
+    else if (s.includes('buffer') || s.includes('compound') || s.includes('replate')) ojtTmpl = ojtTemplates['90G'];
+    else ojtTmpl = ojtTemplates['84D'];
   }
 
   return generateOfficialReportHtml(emp, examRecord, qbQuestions, ojtRec, ojtTmpl, getLogoBase64());
 }
 
+const PDF_JOB_TIMEOUT_MS = 25000;
+const BROWSER_IDLE_CLOSE_MS = 30000;
+const CHROMIUM_LAUNCH_FLAGS = [
+  '--no-sandbox',
+  '--disable-setuid-sandbox',
+  '--disable-dev-shm-usage',
+  '--disable-gpu',
+  '--disable-extensions',
+  '--disable-background-networking',
+  '--renderer-process-limit=1',
+  '--no-zygote'
+];
+
 let browserInstance = null;
+let browserIdleTimer = null;
+let pdfRenderQueue = Promise.resolve();
+
+function scheduleBrowserIdleClose() {
+  if (browserIdleTimer) clearTimeout(browserIdleTimer);
+  browserIdleTimer = setTimeout(async () => {
+    browserIdleTimer = null;
+    await closeChromiumBrowser();
+  }, BROWSER_IDLE_CLOSE_MS);
+  if (typeof browserIdleTimer.unref === 'function') browserIdleTimer.unref();
+}
+
+async function closeChromiumBrowser() {
+  if (browserIdleTimer) {
+    clearTimeout(browserIdleTimer);
+    browserIdleTimer = null;
+  }
+  if (browserInstance) {
+    const toClose = browserInstance;
+    browserInstance = null;
+    const proc = typeof toClose.process === 'function' ? toClose.process() : null;
+    try {
+      await Promise.race([
+        toClose.close(),
+        new Promise((resolve) => setTimeout(resolve, 2500))
+      ]);
+    } catch (e) {}
+    if (proc && proc.pid && proc.exitCode === null && proc.signalCode === null) {
+      try { process.kill(proc.pid, 'SIGKILL'); } catch (e) {}
+      await Promise.race([
+        new Promise((resolve) => proc.once('exit', resolve)),
+        new Promise((resolve) => setTimeout(resolve, 500))
+      ]);
+    }
+  }
+}
+
 async function getChromiumBrowser() {
-  if (browserInstance && browserInstance.isConnected()) {
+  const isConnected = browserInstance && (typeof browserInstance.isConnected === 'function'
+    ? browserInstance.isConnected()
+    : Boolean(browserInstance.connected));
+  if (isConnected) {
+    scheduleBrowserIdleClose();
     return browserInstance;
   }
+  if (browserInstance) {
+    await closeChromiumBrowser();
+  }
   const puppeteer = require('puppeteer-core');
-  
-  if (process.env.VERCEL || process.platform === 'linux') {
+  const preferredExecPath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium';
+
+  if (preferredExecPath && fs.existsSync(preferredExecPath)) {
+    browserInstance = await puppeteer.launch({
+      executablePath: preferredExecPath,
+      headless: true,
+      args: CHROMIUM_LAUNCH_FLAGS,
+      ignoreHTTPSErrors: true,
+      handleSIGINT: false,
+      handleSIGTERM: false,
+      handleSIGHUP: false
+    });
+  } else if (process.env.VERCEL || process.platform === 'linux') {
     const chromiumPkg = require('@sparticuz/chromium');
     const chromium = chromiumPkg.default || chromiumPkg;
+    const launchArgs = Array.from(new Set([
+      ...(Array.isArray(chromium.args) ? chromium.args : []),
+      ...CHROMIUM_LAUNCH_FLAGS
+    ]));
     browserInstance = await puppeteer.launch({
-      args: chromium.args,
+      args: launchArgs,
       defaultViewport: chromium.defaultViewport,
       executablePath: await chromium.executablePath(),
       headless: chromium.headless,
-      ignoreHTTPSErrors: true
+      ignoreHTTPSErrors: true,
+      handleSIGINT: false,
+      handleSIGTERM: false,
+      handleSIGHUP: false
     });
   } else {
     const possiblePaths = [
@@ -4618,30 +5703,67 @@ async function getChromiumBrowser() {
       'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
       'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
     ];
-    let execPath = possiblePaths.find(p => fs.existsSync(p));
+    const execPath = possiblePaths.find(p => fs.existsSync(p));
     browserInstance = await puppeteer.launch({
       executablePath: execPath,
       headless: true,
-      args: ['--no-sandbox', '--disable-gpu']
+      args: CHROMIUM_LAUNCH_FLAGS,
+      handleSIGINT: false,
+      handleSIGTERM: false,
+      handleSIGHUP: false
     });
   }
+  scheduleBrowserIdleClose();
   return browserInstance;
 }
 
-async function renderHtmlToPdf(html) {
-  const browser = await getChromiumBrowser();
-  const page = await browser.newPage();
-  try {
-    await page.setContent(html, { waitUntil: 'load' });
-    const pdfBuf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '10mm', bottom: '10mm', left: '12mm', right: '12mm' }
+// Single-concurrency PDF queue prevents parallel Chromium tabs from exhausting 1 vCPU (1000m) / 1Gi RAM
+function renderHtmlToPdf(html) {
+  const run = async () => {
+    let page = null;
+    let timeoutId = null;
+    let timedOut = false;
+
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        timedOut = true;
+        reject(new Error(`PDF render timed out after ${PDF_JOB_TIMEOUT_MS}ms`));
+      }, PDF_JOB_TIMEOUT_MS);
+      if (typeof timeoutId.unref === 'function') timeoutId.unref();
     });
-    return pdfBuf;
-  } finally {
-    try { await page.close(); } catch(e){}
-  }
+
+    const jobPromise = (async () => {
+      const browser = await getChromiumBrowser();
+      page = await browser.newPage();
+      page.setDefaultTimeout(PDF_JOB_TIMEOUT_MS);
+      await page.setContent(html, { waitUntil: 'load', timeout: PDF_JOB_TIMEOUT_MS });
+      const pdfBuf = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: { top: '10mm', bottom: '10mm', left: '12mm', right: '12mm' },
+        timeout: PDF_JOB_TIMEOUT_MS
+      });
+      return Buffer.from(pdfBuf);
+    })();
+
+    try {
+      return await Promise.race([jobPromise, timeoutPromise]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (page) {
+        try { await page.close(); } catch (e) {}
+      }
+      if (timedOut) {
+        jobPromise.catch(() => {});
+        await closeChromiumBrowser();
+      } else {
+        scheduleBrowserIdleClose();
+      }
+    }
+  };
+  const next = pdfRenderQueue.then(run, run);
+  pdfRenderQueue = next.catch(() => {});
+  return next;
 }
 
 async function renderDynamicPdf(empNo, optionalRecordData) {
@@ -4674,6 +5796,7 @@ app.get('/api/employee-docx/:empNo', async (req, res) => {
 
   try {
     const docxBuf = await buildDocxBufferForEmployee(empNo);
+    await logAuditEvent('EXPORT_EMPLOYEE_DOCX', user, `Exported Assessment DOCX for ${empNo}`, req, empNo);
     const fileName = `ILUO_Report_${empNo}.docx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -4709,23 +5832,25 @@ app.get('/api/ojt-docx/:empNo', async (req, res) => {
     const ojtEvaluations = await getAuthoritativeOjtEvaluations();
     const ojtRec = ojtEvaluations[empNo] || null;
 
+    const ojtTemplates = getServerOjtTemplates();
     let ojtTmpl = null;
-    if (serverOjtTemplates && emp && emp.section) {
+    if (ojtTemplates && emp && emp.section) {
       const s = emp.section.toLowerCase();
-      if (s.includes('solid')) ojtTmpl = serverOjtTemplates['86D'];
-      else if (s.includes('rro') || s.includes('alt')) ojtTmpl = serverOjtTemplates['83D'];
-      else if (s.includes('preparatory')) ojtTmpl = serverOjtTemplates['85D'];
-      else if (s.includes('building') || s.includes('tbm')) ojtTmpl = serverOjtTemplates['87D'];
-      else if (s.includes('curing')) ojtTmpl = serverOjtTemplates['88D'];
-      else if (s.includes('warehouse') || s.includes('data entry')) ojtTmpl = serverOjtTemplates['89D'];
-      else if (s.includes('fid')) ojtTmpl = serverOjtTemplates['90D'];
-      else if (s.includes('buffer') || s.includes('compound') || s.includes('replate')) ojtTmpl = serverOjtTemplates['90G'];
-      else ojtTmpl = serverOjtTemplates['84D'];
+      if (s.includes('solid')) ojtTmpl = ojtTemplates['86D'];
+      else if (s.includes('rro') || s.includes('alt')) ojtTmpl = ojtTemplates['83D'];
+      else if (s.includes('preparatory')) ojtTmpl = ojtTemplates['85D'];
+      else if (s.includes('building') || s.includes('tbm')) ojtTmpl = ojtTemplates['87D'];
+      else if (s.includes('curing')) ojtTmpl = ojtTemplates['88D'];
+      else if (s.includes('warehouse') || s.includes('data entry')) ojtTmpl = ojtTemplates['89D'];
+      else if (s.includes('fid')) ojtTmpl = ojtTemplates['90D'];
+      else if (s.includes('buffer') || s.includes('compound') || s.includes('replate')) ojtTmpl = ojtTemplates['90G'];
+      else ojtTmpl = ojtTemplates['84D'];
     }
-    if (!ojtTmpl && serverOjtTemplates) ojtTmpl = serverOjtTemplates['87D'] || Object.values(serverOjtTemplates)[0];
+    if (!ojtTmpl && ojtTemplates) ojtTmpl = ojtTemplates['87D'] || Object.values(ojtTemplates)[0];
 
-    const zip = await generateStandaloneOjtDocx(emp, ojtTmpl, (ojtRec && ojtRec.scores) || {}, (ojtRec && ojtRec.wiChecks) || {}, ojtRec || {}, JSZipLib);
+    const zip = await generateStandaloneOjtDocx(emp, ojtTmpl, (ojtRec && ojtRec.scores) || {}, (ojtRec && ojtRec.wiChecks) || {}, ojtRec || {}, getJSZipLib());
     const buf = await zip.generateAsync({ type: 'nodebuffer' });
+    await logAuditEvent('EXPORT_OJT_DOCX', user, `Exported OJT DOCX for ${empNo}`, req, empNo);
     const cleanName = (emp.name || empNo).replace(/[^a-zA-Z0-9]/g, '_');
     const fileName = `OJT_${ojtTmpl ? ojtTmpl.id : 'Form'}_${empNo}_${cleanName}.docx`;
 
@@ -4761,6 +5886,7 @@ app.post('/api/generate-docx', async (req, res) => {
   try {
     // Read-only generation: recordData is used purely in-memory for document rendering
     const docxBuf = await buildDocxBufferForEmployee(strEmpNo, recordData);
+    await logAuditEvent('EXPORT_EMPLOYEE_DOCX', user, `Generated Assessment DOCX for ${strEmpNo}`, req, strEmpNo);
     const fileName = `ILUO_Report_${strEmpNo}.docx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -4794,6 +5920,7 @@ app.get('/api/generate-pdf/:empNo', async (req, res) => {
 
   try {
     const pdfBuf = await renderDynamicPdf(empNo);
+    await logAuditEvent('EXPORT_EMPLOYEE_PDF', user, `Exported Assessment PDF for ${empNo}`, req, empNo);
     const fileName = `ILUO_Report_${empNo}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -4831,6 +5958,7 @@ app.post('/api/generate-pdf', async (req, res) => {
 
   try {
     const pdfBuf = await renderDynamicPdf(strEmpNo, recordData);
+    await logAuditEvent('EXPORT_EMPLOYEE_PDF', user, `Generated Assessment PDF for ${strEmpNo}`, req, strEmpNo);
     const fileName = `ILUO_Report_${strEmpNo}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
@@ -4862,168 +5990,7 @@ app.get('/api/employee-report-html/:empNo', async (req, res) => {
     return res.send(html);
   } catch (err) {
     const status = err.statusCode || 500;
-    return res.status(status).send(`<h3>Error: ${err.message}</h3>`);
-  }
-});
-
-// Section Definitions for Department Summary Reporting
-const QA_SECTIONS_DEF = [
-  { id: 'warehouse', name: 'Warehouse QA', normName: 'warehouse qa', code: 'QA-WH', title: 'Warehouse QA', dept: 'QUALITY CONTROL' },
-  { id: 'final_finish', name: 'Final Finish QA', normName: 'final finish qa', code: 'QA-FF', title: 'Final Finish QA', dept: 'QUALITY CONTROL' },
-  { id: 'tire_building', name: 'Tire building QA', normName: 'tire building qa', code: 'QA-TB', title: 'Tire Building QA', dept: 'QUALITY CONTROL' },
-  { id: 'tire_curing', name: 'Tire curing QA', normName: 'tire curing qa', code: 'QA-TC', title: 'Tire Curing QA', dept: 'QUALITY CONTROL' },
-  { id: 'solid_tire', name: 'Solid tire QA', normName: 'solid tire qa', code: 'QA-ST', title: 'Solid Tire QA', dept: 'QUALITY CONTROL' },
-  { id: 'rro_alt', name: 'Final finish RRO & ALT QA', normName: 'final finish rro & alt qa', code: 'QA-RRO', title: 'Final Finish RRO & ALT QA', dept: 'QUALITY CONTROL' },
-  { id: 'preparatory', name: 'Preparatory QA', normName: 'preparatory qa', code: 'QA-PREP', title: 'Preparatory QA', dept: 'QUALITY CONTROL' },
-  { id: 'fid_inspector', name: 'FID Inspector QA', normName: 'fid inspector qa', code: 'QA-FD', title: 'FID Inspector QA', dept: 'QUALITY CONTROL' }
-];
-
-const PROD_SECTIONS_DEF = [
-  { id: 'prod_mixing', name: 'MIXING', normName: 'mixing', code: 'PR-MIX', title: 'Mixing', dept: 'PRODUCTION' },
-  { id: 'prod_4roll', name: '4 ROLL', normName: '4 roll', code: 'PR-4ROLL', title: '4 Roll Calender', dept: 'PRODUCTION' },
-  { id: 'prod_3roll_p2', name: '3 ROLL-P2', normName: '3 roll-p2', code: 'PR-3ROLL', title: '3 Roll Calender P2', dept: 'PRODUCTION' },
-  { id: 'prod_extruder', name: 'EXTRUDER', normName: 'extruder', code: 'PR-EXT', title: 'Extruder', dept: 'PRODUCTION' },
-  { id: 'prod_bead_winding', name: 'BEAD WINDING', normName: 'bead winding', code: 'PR-BEAD', title: 'Bead Winding', dept: 'PRODUCTION' },
-  { id: 'prod_steelastic', name: 'STEELASTIC', normName: 'steelastic', code: 'PR-STEL', title: 'Steelastic', dept: 'PRODUCTION' },
-  { id: 'prod_tyre_building_p1', name: 'TYRE BUILDING-P1', normName: 'tyre building-p1', code: 'PR-TB1', title: 'Tyre Building P1', dept: 'PRODUCTION' },
-  { id: 'prod_tyre_building_p2', name: 'TYRE BUILDING-P2', normName: 'tyre building-p2', code: 'PR-TB2', title: 'Tyre Building P2', dept: 'PRODUCTION' },
-  { id: 'prod_tyre_building_p3', name: 'TYRE BUILDING-P3', normName: 'tyre building-p3', code: 'PR-TB3', title: 'Tyre Building P3', dept: 'PRODUCTION' },
-  { id: 'prod_band_building_p1', name: 'BAND BUILDING-P1', normName: 'band building-p1', code: 'PR-BB1', title: 'Band Building P1', dept: 'PRODUCTION' },
-  { id: 'prod_band_building_p2', name: 'BAND BUILDING-P2', normName: 'band building-p2', code: 'PR-BB2', title: 'Band Building P2', dept: 'PRODUCTION' },
-  { id: 'prod_band_building_p3', name: 'BAND BUILDING-P3', normName: 'band building-p3', code: 'PR-BB3', title: 'Band Building P3', dept: 'PRODUCTION' },
-  { id: 'prod_bias_cutting_1', name: 'BIAS CUTTING-1', normName: 'bias cutting-1', code: 'PR-BIAS1', title: 'Bias Cutting 1', dept: 'PRODUCTION' },
-  { id: 'prod_bias_cutting_2', name: 'BIAS CUTTING-2', normName: 'bias cutting-2', code: 'PR-BIAS2', title: 'Bias Cutting 2', dept: 'PRODUCTION' },
-  { id: 'prod_bias_cutting_4', name: 'BIAS CUTTING-4', normName: 'bias cutting-4', code: 'PR-BIAS4', title: 'Bias Cutting 4', dept: 'PRODUCTION' },
-  { id: 'prod_bias_cutting_5', name: 'BIAS CUTTING-5', normName: 'bias cutting-5', code: 'PR-BIAS5', title: 'Bias Cutting 5', dept: 'PRODUCTION' },
-  { id: 'prod_auto_biascutter', name: 'AUTO BIASCUTTER', normName: 'auto biascutter', code: 'PR-AUTOB', title: 'Auto Bias Cutter', dept: 'PRODUCTION' },
-  { id: 'prod_slitting', name: 'SLITTING', normName: 'slitting', code: 'PR-SLIT', title: 'Slitting', dept: 'PRODUCTION' },
-  { id: 'prod_liner_dressing', name: 'LINER DRESSING', normName: 'liner dressing', code: 'PR-LINE', title: 'Liner Dressing', dept: 'PRODUCTION' },
-  { id: 'prod_salvage', name: 'SALVAGE', normName: 'salvage', code: 'PR-SALV', title: 'Salvage', dept: 'PRODUCTION' },
-  { id: 'prod_radial_marangoni', name: 'RADIAL MARANGONI', normName: 'radial marangoni', code: 'PR-RADM', title: 'Radial Marangoni', dept: 'PRODUCTION' },
-  { id: 'prod_bias_marangoni', name: 'BIAS MARANGONI&BESTRY', normName: 'bias marangoni&bestry', code: 'PR-BIASM', title: 'Bias Marangoni & Bestry', dept: 'PRODUCTION' },
-  { id: 'prod_yanthai', name: 'YANTHAI', normName: 'yanthai', code: 'PR-YAN', title: 'Yanthai', dept: 'PRODUCTION' },
-  { id: 'prod_solid_tyre', name: 'SOLID TYRE', normName: 'solid tyre', code: 'PR-ST', title: 'Solid Tyre Production', dept: 'PRODUCTION' },
-  { id: 'prod_tyre_curing', name: 'TYRE CURING', normName: 'tyre curing', code: 'PR-TC', title: 'Tyre Curing Production', dept: 'PRODUCTION' }
-];
-
-const ALL_SECTIONS_DEF = [...QA_SECTIONS_DEF, ...PROD_SECTIONS_DEF];
-
-// GET /api/reports/department-summary/:dept: Returns authoritative department summary JSON
-app.get('/api/reports/department-summary/:dept', async (req, res) => {
-  const user = await getAuthUser(req);
-  if (!user) {
-    return res.status(401).json({ success: false, message: 'Unauthorized: Authentication required' });
-  }
-
-  const role = (user.role || '').toUpperCase();
-  const rawDept = String(req.params.dept || 'PRODUCTION').toUpperCase().trim();
-
-  // Only admins or HODs can view department summaries
-  const isSuperOrAdmin = ['SUPERADMIN', 'ADMIN', 'HR_ADMIN'].includes(role) || user.roleClaim === 'hr_admin';
-  const isDeptHead = ['DEPT_HEAD', 'DEPT_HOD'].includes(role) || user.roleClaim === 'dept_head';
-
-  if (!isSuperOrAdmin && !isDeptHead) {
-    return res.status(403).json({ success: false, message: 'Forbidden: Insufficient privileges for department summary' });
-  }
-
-  try {
-    const employees = await getAuthoritativeEmployees();
-    const records = await getAuthoritativeRecords();
-    const ojtRecords = await getAuthoritativeOjtEvaluations();
-
-    let sections = ALL_SECTIONS_DEF;
-    if (rawDept === 'PRODUCTION' || rawDept.includes('PROD')) {
-      sections = PROD_SECTIONS_DEF;
-    } else if (rawDept === 'QUALITY CONTROL' || rawDept === 'QUALITY' || rawDept.includes('QUAL')) {
-      sections = QA_SECTIONS_DEF;
-    }
-
-    let deptEmps = employees;
-    if (rawDept === 'PRODUCTION' || rawDept.includes('PROD')) {
-      deptEmps = employees.filter(e => (e.dept || '').toUpperCase().includes('PROD'));
-    } else if (rawDept === 'QUALITY CONTROL' || rawDept === 'QUALITY' || rawDept.includes('QUAL')) {
-      deptEmps = employees.filter(e => (e.dept || '').toUpperCase().includes('QUAL'));
-    }
-
-    const total = deptEmps.length;
-    let examDone = 0, ojtDone = 0, bothDone = 0;
-    let countI = 0, countL = 0, countU = 0, countO = 0;
-
-    deptEmps.forEach(e => {
-      const rec = records[e.empNo];
-      const ojt = ojtRecords[e.empNo];
-      const hasExam = rec && rec.isCompleted;
-      const hasOjt = ojt && (ojt.totalScore !== undefined || ojt.scorePct !== undefined);
-      if (hasExam) examDone++;
-      if (hasOjt) ojtDone++;
-      if (hasExam && hasOjt) bothDone++;
-
-      const lvl = (e.currentLevel || 'I').toUpperCase();
-      if (lvl === 'I') countI++;
-      else if (lvl === 'L') countL++;
-      else if (lvl === 'U') countU++;
-      else if (lvl === 'O') countO++;
-    });
-
-    return res.json({
-      success: true,
-      department: rawDept,
-      totalHeadcount: total,
-      examDone,
-      ojtDone,
-      bothDone,
-      completionPct: total > 0 ? Math.round((bothDone / total) * 100) : 0,
-      competencyMix: { I: countI, L: countL, U: countU, O: countO },
-      sectionCount: sections.length
-    });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-// GET /api/reports/department-summary-html/:dept: Returns print-ready landscape HTML
-app.get('/api/reports/department-summary-html/:dept', async (req, res) => {
-  const user = await getAuthUser(req);
-  if (!user) {
-    return res.status(401).send('<h3>Unauthorized: Authentication required</h3>');
-  }
-
-  const role = (user.role || '').toUpperCase();
-  const rawDept = String(req.params.dept || 'PRODUCTION').toUpperCase().trim();
-
-  const isSuperOrAdmin = ['SUPERADMIN', 'ADMIN', 'HR_ADMIN'].includes(role) || user.roleClaim === 'hr_admin';
-  const isDeptHead = ['DEPT_HEAD', 'DEPT_HOD'].includes(role) || user.roleClaim === 'dept_head';
-
-  if (!isSuperOrAdmin && !isDeptHead) {
-    return res.status(403).send('<h3>Forbidden: Insufficient privileges for department summary</h3>');
-  }
-
-  try {
-    const employees = await getAuthoritativeEmployees();
-    const records = await getAuthoritativeRecords();
-    const ojtRecords = await getAuthoritativeOjtEvaluations();
-
-    let sections = ALL_SECTIONS_DEF;
-    if (rawDept === 'PRODUCTION' || rawDept.includes('PROD')) {
-      sections = PROD_SECTIONS_DEF;
-    } else if (rawDept === 'QUALITY CONTROL' || rawDept === 'QUALITY' || rawDept.includes('QUAL')) {
-      sections = QA_SECTIONS_DEF;
-    }
-
-    const html = generateDepartmentSummaryHtml({
-      dept: rawDept,
-      employees,
-      records,
-      ojtRecords,
-      sections,
-      logoBase64: getLogoBase64(),
-      shift: 'Shift 1 (06:00 - 14:00)'
-    });
-
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    return res.send(html);
-  } catch (err) {
-    return res.status(500).send(`<h3>Error generating department summary HTML: ${err.message}</h3>`);
+    return res.status(status).send(`<h3>Error: ${escapeHtml(err.message)}</h3>`);
   }
 });
 
@@ -5051,10 +6018,13 @@ app.post('/api/convert-docx-to-pdf', requireAnyAuth, express.raw({ type: ['appli
 // Protected Admin Stats
 app.get('/api/admin/dashboard-stats', requireAdminAuth, async (req, res) => {
   const employees = await getAuthoritativeEmployees();
+  const activeEmployees = employees.filter(e => !e.isLeft && e.status !== 'LEFT');
+  const leftEmployees = employees.length - activeEmployees.length;
   res.json({
     success: true,
     data: {
-      totalEmployees: employees.length,
+      totalEmployees: activeEmployees.length,
+      leftEmployees,
       admin: req.adminSession
     }
   });
@@ -5067,6 +6037,13 @@ app.use((err, req, res, next) => {
   }
   console.error('[SERVER ERROR]', err.message || err);
   const status = err.statusCode || err.status || 500;
+  if (err && err.exposeMessage) {
+    return res.status(status).json({
+      success: false,
+      code: err.code || 'STORAGE_ERROR',
+      message: err.message
+    });
+  }
   return res.status(status).json({
     success: false,
     message: 'An internal error occurred while processing your request. Please contact administrator.'
@@ -5079,15 +6056,35 @@ app.use((req, res) => {
     return res.status(404).json({ success: false, error: 'Not Found' });
   }
   if (isEmployeePortalRequest(req)) {
-    return res.sendFile(path.join(__dirname, 'employee.html'));
+    return res.sendFile(path.join(STATIC_DIR, 'employee.html'));
   }
-  res.sendFile(path.join(__dirname, 'index.html'));
+  return res.sendFile(path.join(STATIC_DIR, 'index.html'));
 });
 
 if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`🚀 Yokohama Admin Portal running at http://localhost:${PORT}`);
+  const httpServer = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Yokohama Admin Portal running at http://0.0.0.0:${PORT}`);
+    if (kvUrl && kvToken) {
+      setImmediate(() => {
+        scheduleUpstashStartupMigration(0);
+      });
+    }
   });
+  let shuttingDown = false;
+  const gracefulShutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    clearUpstashSeedRetryTimer();
+    const forceExit = setTimeout(() => process.exit(0), 5000);
+    if (typeof forceExit.unref === 'function') forceExit.unref();
+    try { await closeChromiumBrowser(); } catch (e) {}
+    httpServer.close(() => process.exit(0));
+    if (typeof httpServer.closeIdleConnections === 'function') {
+      httpServer.closeIdleConnections();
+    }
+  };
+  process.once('SIGTERM', gracefulShutdown);
+  process.once('SIGINT', gracefulShutdown);
 }
 
 app.buildDocxBufferForEmployee = buildDocxBufferForEmployee;
@@ -5096,6 +6093,12 @@ app.buildHtmlReportForEmployee = buildHtmlReportForEmployee;
 app.renderDynamicPdf = renderDynamicPdf;
 app.getAuthoritativeEmployees = getAuthoritativeEmployees;
 app.saveAuthoritativeEmployees = saveAuthoritativeEmployees;
+app.getAuthoritativeRecords = getAuthoritativeRecords;
+app.saveAllAuthoritativeRecords = saveAllAuthoritativeRecords;
+app.getAuthoritativeQuestions = getAuthoritativeQuestions;
+app.getAuthoritativeOjtEvaluations = getAuthoritativeOjtEvaluations;
+app.saveAllAuthoritativeOjtEvaluations = saveAllAuthoritativeOjtEvaluations;
+app.ensureUpstashInitialSeed = ensureUpstashInitialSeed;
 app.isRateKeyLocked = isRateKeyLocked;
 app.recordRateFailureOnKey = recordRateFailureOnKey;
 app.clearRateAccountSuccess = clearRateAccountSuccess;
@@ -5110,9 +6113,7 @@ app.setKvWriteForbidden = (val) => {
 app.getKvWriteForbidden = () => isKvWriteForbidden;
 app.LUA_ATOMIC_RATE_LIMIT = LUA_ATOMIC_RATE_LIMIT;
 
-app._sanitizeFormulaInjection = sanitizeFormulaInjection;
-app._calculateEligibleLevel = calculateEligibleLevel;
-app._getActiveAssessmentConfig = getActiveAssessmentConfig;
-app._CANONICAL_PLANT_SECTIONS = CANONICAL_PLANT_SECTIONS;
+app.buildSectionSummaryReportData = buildSectionSummaryReportData;
+
 module.exports = app;
 

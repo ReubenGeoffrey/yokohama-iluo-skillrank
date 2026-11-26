@@ -95,3 +95,39 @@ test('GET /api/admin/audit-logs returns recorded security audit events', async (
   assert.ok(data.logs[0].action);
   assert.ok(data.logs[0].timestamp);
 });
+
+test('POST /api/records/reset-department resets department exam count with undo snapshot', async () => {
+  // Login as Quality Control HOD
+  const qcLogin = await fetch(`${baseUrl}/api/auth/dept/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ department: 'QUALITY CONTROL', password: 'hod123' })
+  });
+  assert.strictEqual(qcLogin.status, 200);
+  const qcToken = (await qcLogin.json()).token;
+
+  // QC HOD can reset QUALITY CONTROL
+  const resetRes = await fetch(`${baseUrl}/api/records/reset-department`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-dept-token': qcToken
+    },
+    body: JSON.stringify({ department: 'QUALITY CONTROL' })
+  });
+  assert.strictEqual(resetRes.status, 200);
+  const resetData = await resetRes.json();
+  assert.strictEqual(resetData.success, true);
+  assert.ok(resetData.backupId, 'Backup ID must be generated');
+
+  // QC HOD cannot reset PRODUCTION (403 Forbidden)
+  const prodResetRes = await fetch(`${baseUrl}/api/records/reset-department`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-dept-token': qcToken
+    },
+    body: JSON.stringify({ department: 'PRODUCTION' })
+  });
+  assert.strictEqual(prodResetRes.status, 403);
+});

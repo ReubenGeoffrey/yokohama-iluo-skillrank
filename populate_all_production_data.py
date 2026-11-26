@@ -158,38 +158,33 @@ with open('data.js', 'w', encoding='utf-8') as f:
     f.write(new_data_js)
 print('Updated data.js with all 1,462 employees.')
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 # 4. Update custom_employees.json
-with open(os.path.join(BASE_DIR, 'custom_employees.json'), 'w', encoding='utf-8') as f:
+with open('custom_employees.json', 'w', encoding='utf-8') as f:
     json.dump(all_employees, f, indent=2, ensure_ascii=False)
 print('Updated custom_employees.json with all 1,462 employees.')
 
 # 5. Merge assessment records
 records = {}
-rec_backup = os.path.join(BASE_DIR, 'assessment_records_backup_236.json')
-if os.path.exists(rec_backup):
-    with open(rec_backup, encoding='utf-8') as f:
+if os.path.exists('assessment_records_backup_236.json'):
+    with open('assessment_records_backup_236.json', encoding='utf-8') as f:
         records.update(json.load(f))
-rec_primary = os.path.join(BASE_DIR, 'assessment_records.json')
-if os.path.exists(rec_primary):
-    with open(rec_primary, encoding='utf-8') as f:
+if os.path.exists('assessment_records.json'):
+    with open('assessment_records.json', encoding='utf-8') as f:
         records.update(json.load(f))
 
 print(f'Existing QA records: {len(records)}')
 records.update(prod_records)
 print(f'Merged total assessment records: {len(records)}')
 
-with open(os.path.join(BASE_DIR, 'assessment_records.json'), 'w', encoding='utf-8') as f:
+with open('assessment_records.json', 'w', encoding='utf-8') as f:
     json.dump(records, f, indent=2, ensure_ascii=False)
 print('Saved assessment_records.json.')
 
 # 6. Merge OJT evaluations
 ojt_records = {}
-ojt_path = os.path.join(BASE_DIR, 'ojt_evaluations.json')
-if os.path.exists(ojt_path):
+if os.path.exists('ojt_evaluations.json'):
     try:
-        with open(ojt_path, encoding='utf-8') as f:
+        with open('ojt_evaluations.json', encoding='utf-8') as f:
             ojt_records = json.load(f)
     except Exception:
         pass
@@ -197,7 +192,7 @@ if os.path.exists(ojt_path):
 ojt_records.update(prod_ojt)
 print(f'Merged total OJT records: {len(ojt_records)}')
 
-with open(os.path.join(BASE_DIR, 'ojt_evaluations.json'), 'w', encoding='utf-8') as f:
+with open('ojt_evaluations.json', 'w', encoding='utf-8') as f:
     json.dump(ojt_records, f, indent=2, ensure_ascii=False)
 print('Saved ojt_evaluations.json.')
 
@@ -212,6 +207,6 @@ seed_js_content = f"""// Master Assessment Records - Contains all 1,462 Employee
 }})(typeof window !== 'undefined' ? window : global);
 """
 
-with open(os.path.join(BASE_DIR, 'seed_data.js'), 'w', encoding='utf-8') as f:
+with open('seed_data.js', 'w', encoding='utf-8') as f:
     f.write(seed_js_content)
 print('Saved seed_data.js with full master records.')

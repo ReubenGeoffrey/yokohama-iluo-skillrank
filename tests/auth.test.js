@@ -99,32 +99,30 @@ test('POST /api/auth/dept/login succeeds with valid credentials for PRODUCTION',
   assert.strictEqual(data.user.department, 'PRODUCTION');
 });
 
-test('POST /api/auth/employee/login rejects default password and succeeds after secure setup', async () => {
-  // 1. Default password '1234' is rejected
-  const defaultRes = await fetch(`${baseUrl}/api/auth/employee/login`, {
+test('POST /api/auth/employee/login authenticates directly with Employee Number as username and default password', async () => {
+  // 1. Incorrect password '1234' is rejected
+  const wrongRes = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ empNo: 'LN0039', password: '1234' })
   });
-  assert.strictEqual(defaultRes.status, 401);
-  const defaultData = await defaultRes.json();
-  assert.strictEqual(defaultData.success, false);
+  assert.strictEqual(wrongRes.status, 401);
+  const wrongData = await wrongRes.json();
+  assert.strictEqual(wrongData.success, false);
 
-  // 2. Setup password with DOJ
+  // 2. Removed DOJ password setup endpoint returns 404
   const setupRes = await fetch(`${baseUrl}/api/auth/employee/setup-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ empNo: 'LN0039', doj: '2023-12-13', newPassword: 'Emp@Secure2026!' })
   });
-  assert.strictEqual(setupRes.status, 200);
-  const setupData = await setupRes.json();
-  assert.strictEqual(setupData.success, true);
+  assert.strictEqual(setupRes.status, 404);
 
-  // 3. Login with newly configured secure password
+  // 3. Direct login with Employee Number as both username and default password succeeds
   const res = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: 'LN0039', password: 'Emp@Secure2026!' })
+    body: JSON.stringify({ empNo: 'LN0039', password: 'LN0039' })
   });
   assert.strictEqual(res.status, 200);
   const data = await res.json();
@@ -132,36 +130,19 @@ test('POST /api/auth/employee/login rejects default password and succeeds after 
   assert.strictEqual(data.employee.empNo, 'LN0039');
   assert.strictEqual(data.employee.role, 'emp');
 
-  // 4. Invalid employee
+  // 4. Case-insensitive Employee Number login succeeds
+  const lowerRes = await fetch(`${baseUrl}/api/auth/employee/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'ln0039', password: 'ln0039' })
+  });
+  assert.strictEqual(lowerRes.status, 200);
+
+  // 5. Invalid employee is rejected
   const resBad = await fetch(`${baseUrl}/api/auth/employee/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ empNo: 'NONEXISTENT999', password: 'Emp@Secure2026!' })
+    body: JSON.stringify({ empNo: 'NONEXISTENT999', password: 'NONEXISTENT999' })
   });
   assert.strictEqual(resBad.status, 401);
-});
-
-test('POST /api/auth/admin/login accepts default password admin123 in production when REJECT_DEFAULT_PASSWORDS is not true', async () => {
-  const originalEnv = process.env.NODE_ENV;
-  const originalAdminPass = process.env.ADMIN_PASSWORD;
-  const originalReject = process.env.REJECT_DEFAULT_PASSWORDS;
-  process.env.NODE_ENV = 'production';
-  delete process.env.ADMIN_PASSWORD;
-  delete process.env.REJECT_DEFAULT_PASSWORDS;
-
-  try {
-    const res = await fetch(`${baseUrl}/api/auth/admin/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'admin', password: 'admin123' })
-    });
-    assert.strictEqual(res.status, 200, `Must accept default admin123, got ${res.status}`);
-    const data = await res.json();
-    assert.strictEqual(data.success, true);
-    assert.ok(data.token, 'Must return session token');
-  } finally {
-    process.env.NODE_ENV = originalEnv;
-    if (originalAdminPass !== undefined) process.env.ADMIN_PASSWORD = originalAdminPass;
-    if (originalReject !== undefined) process.env.REJECT_DEFAULT_PASSWORDS = originalReject;
-  }
 });
