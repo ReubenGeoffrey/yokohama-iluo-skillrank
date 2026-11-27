@@ -296,22 +296,3 @@ test('STAFF RBAC 5: Aligned table columns and full Edit API (username, name, ema
   });
   assert.strictEqual(disabledLogin.status, 401);
 });
-
-test('STAGING 6: Google AI Studio / Cloud Run staging artifacts keep secrets isolated and serve clean container config', () => {
-  const dockerfile = fs.readFileSync(path.join(ROOT, 'Dockerfile'), 'utf8');
-  const stagingYaml = fs.readFileSync(path.join(ROOT, 'service.staging.yaml'), 'utf8');
-  const stagingEnvEx = fs.readFileSync(path.join(ROOT, '.env.staging.example'), 'utf8');
-  const deployScript = fs.readFileSync(path.join(ROOT, 'deploy-cloudrun.sh'), 'utf8');
-  const gitignore = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
-  const dockerignore = fs.readFileSync(path.join(ROOT, '.dockerignore'), 'utf8');
-  const metadata = JSON.parse(fs.readFileSync(path.join(ROOT, 'metadata.json'), 'utf8'));
-
-  assert.strictEqual(metadata.name, 'ILUO Skill Assessment Portal');
-  assert.ok(dockerfile.includes('ENV PORT=8080') && dockerfile.includes('RUN node build.js'));
-  assert.ok(stagingYaml.includes('name: iluo-skill-portal-staging'));
-  assert.ok(stagingYaml.includes('name: iluo-staging-redis-url') && stagingYaml.includes('name: iluo-staging-redis-token'));
-  assert.ok(stagingEnvEx.includes('FAIL_CLOSED_STORAGE=true') && !stagingEnvEx.includes('https://noble-') && !stagingEnvEx.includes('upstash.io/'));
-  assert.ok(deployScript.includes('DEPLOY_ENV') && deployScript.includes('iluo-staging') && deployScript.includes('--source .'));
-  assert.ok(gitignore.includes('.env*') && gitignore.includes('audit_logs*.json') && gitignore.includes('!.env.staging.example'));
-  assert.ok(dockerignore.includes('.env*') && dockerignore.includes('dist'));
-});

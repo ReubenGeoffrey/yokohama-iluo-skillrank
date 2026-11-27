@@ -45,7 +45,6 @@ dump_u.txt
 .vercel
 .env*
 !.env.example
-!.env.staging.example
 dist/
 
 archive_pregen_pdfs/

@@ -32,49 +32,15 @@ The repository already includes `vercel.json` configured for both portals and CS
 
 ---
 
-## Option B: Google Cloud Run Staging Test (Isolated Database — Recommended Test Setup)
+## Option B: Deploy to Google Cloud Run (1000m / 1 vCPU, 1 GiB RAM, `port 8080`)
 
-Always test on a **separate Upstash Redis database** and separate Cloud Run service (`iluo-skill-portal-staging`) so production data on `yokohama-iluo-portal.vercel.app` is untouched.
+Requires a GCP project with **active Billing enabled** and permissions to use Cloud Run, Artifact Registry, and Secret Manager.
 
-### Step 1: Create an Isolated Staging Redis Database
-1. Open [Upstash Console](https://console.upstash.com/) and click **Create Database** (e.g. `iluo-staging-db`).
-2. Copy the new staging **REST URL** (`UPSTASH_REDIS_REST_URL`) and **Read-Write REST Token** (`UPSTASH_REDIS_REST_TOKEN`).
+> **1 vCPU (`1000m`) Profile:** Both `deploy-cloudrun.sh` and `service.yaml` pin container limits strictly to `cpu: 1000m` (`1 vCPU`), `memory: 1Gi`, `containerConcurrency: 40`, `UV_THREADPOOL_SIZE=2`, and `PORT=8080` so the service stays comfortably under a `1500m` project ceiling.
 
-### Step 2: Run Automated Staging Deploy (Cloud Shell or Local Bash)
-From inside the project directory (see `.env.staging.example` and `service.staging.yaml`):
+### 1. Run the Automated Deployment Script
 
-```bash
-DEPLOY_ENV=staging GCP_PROJECT_ID=your-billing-enabled-project bash deploy-cloudrun.sh
-```
-
-What `DEPLOY_ENV=staging` does automatically:
-1. Creates isolated GCP secrets prefixed with `iluo-staging-*` (`iluo-staging-session-secret`, `iluo-staging-redis-url`, `iluo-staging-redis-token`, `iluo-staging-admin-password`).
-2. Sets `FAIL_CLOSED_STORAGE=true` and `FAIL_CLOSED_AUTH=true` so staging refuses to silently fall back if Redis secrets are wrong.
-3. Builds from `Dockerfile` (using local `docker` if available, or `gcloud run deploy --source .` directly in Google Cloud Shell) and deploys `iluo-skill-portal-staging` (`1 vCPU`, `1 GiB` RAM, port `8080`).
-
----
-
-## Option C: Google AI Studio Full-Stack Build Setup (With Isolated Staging DB)
-
-> **Important:** Because `server.js` runs Express REST endpoints, authentication, and Redis persistence, AI Studio must run the **Full-Stack Node runtime** (`node server.js`), not a browser-only static HTML preview.
-
-1. **Push Safely to GitHub:**
-   - Initialize/push this directory to a GitHub repo. `.gitignore` already excludes `.env`, `.env.local`, `audit_logs*.json`, `custom_*.json`, `assessment_records*.json`, `ojt_evaluations*.json`, and `dist/`.
-2. **Import into Google AI Studio (`aistudio.google.com`):**
-   - Open **Build** -> click **+** -> **Import from GitHub** and select your repository (`metadata.json` is already included).
-3. **Add Isolated Staging Secrets in AI Studio:**
-   - Refer to `.env.staging.example` and configure server-side secrets for your **staging** Upstash DB (`UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `SESSION_SECRET`, `ADMIN_PASSWORD`, `NODE_ENV=production`, `PORT=8080`). Never reuse production Redis keys in test prompts/workspaces.
-4. **Deploy to Cloud Run from AI Studio / Verify Health:**
-   - Check `GET https://<STAGING_URL>/api/health` -> verify `"provider": "upstash-redis"`, `"connected": true`, `"writable": true`.
-   - Open **HR Login -> Database** in the portal sidebar to verify staging keystore initialization (`Seeded` & live ping).
-
----
-
-## Option D: Production Cloud Run Deploy (1000m / 1 vCPU, 1 GiB RAM, `port 8080`)
-
-Requires a GCP project with **active Billing enabled** and permissions to use Cloud Run, Artifact Registry, Secret Manager, and Cloud Build.
-
-> **1 vCPU (`1000m`) Profile:** `deploy-cloudrun.sh`, `service.yaml`, and `service.staging.yaml` pin container limits strictly to `cpu: 1000m` (`1 vCPU`), `memory: 1Gi`, `containerConcurrency: 40`, `UV_THREADPOOL_SIZE=2`, and `PORT=8080` so the service stays comfortably under a `1500m` project ceiling.
+From inside the project directory (containing `Dockerfile`, `service.yaml`, and `package.json`):
 
 ```bash
 GCP_PROJECT_ID=your-billing-enabled-project bash deploy-cloudrun.sh
